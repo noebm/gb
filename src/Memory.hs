@@ -14,6 +14,8 @@ import Data.Word
 import Data.Bits
 import qualified Data.ByteString as B
 
+import MMIO
+
 import Numeric
 
 data Memory = Memory
@@ -21,6 +23,7 @@ data Memory = Memory
   , _videoRAM :: B.ByteString
   , _internalRAM :: B.ByteString
   , _zeroRAM :: B.ByteString -- includes interrupt register...
+  , _mmio :: MMIO
   }
 
 makeLenses ''Memory
@@ -32,6 +35,7 @@ memory cart =
   , _videoRAM = B.replicate 0x2000 0x00
   , _internalRAM = B.replicate 0x2000 0x00
   , _zeroRAM = B.replicate 0x80 0x00
+  , _mmio = defaultMMIO
   }
 
 memoryBootRom :: IO Memory
@@ -46,87 +50,49 @@ accessMemory addr
   -- cartridge access
   | addr < 0x8000 = use (cartridge . singular (ix (fromIntegral addr)))
   -- video ram
-  | 0x8000 <= addr && addr < 0xA000 = use (videoRAM    . singular (ix (fromIntegral $ addr .&. 0x1FFF)))
+  | 0x8000 <= addr && addr < 0xA000 = do
+    io <- use mmio
+    if canAccessVRAM io
+      then use (videoRAM    . singular (ix (fromIntegral $ addr .&. 0x1FFF)))
+      else return 0xFF
   | 0xA000 <= addr && addr < 0xC000 = error "access to external ram"
   -- internal ram (D000 switchable for cgb)
   | 0xC000 <= addr && addr < 0xE000 = use (internalRAM . singular (ix (fromIntegral $ addr .&. 0x1FFF)))
   -- echo ram
   | 0xE000 <= addr && addr < 0xFE00 = use (internalRAM . singular (ix (fromIntegral $ addr .&. 0x1FFF)))
-  | 0xFE00 <= addr && addr < 0xFEA0 = error "access to OAM"
-  | 0xFF00 <= addr && addr < 0xFF80 = accessMMIO addr
+  -- OAM
+  | 0xFE00 <= addr && addr < 0xFEA0 = do
+    io <- use mmio
+    if canAccessVRAM io
+      then error "access to OAM"
+      else return 0xFF
+  | 0xFF00 <= addr && addr < 0xFF80 = do
+      io <- use mmio
+      (w , io') <- runStateT (accessMMIO addr) io
+      assign mmio io'
+      return w
   | 0xFF80 <= addr {- && addr < 0xFFFF -} = use (zeroRAM     . singular (ix (fromIntegral $ addr .&. 0x7F)))
   | otherwise = error $ "access to " ++ showHex addr ""
 
 writeMemory :: MonadState Memory m => Word16 -> Word8 -> m ()
 writeMemory addr
   | addr < 0x8000 = assign (cartridge . singular (ix (fromIntegral addr)))
-  | 0x8000 <= addr && addr < 0xA000 = assign (videoRAM . singular (ix (fromIntegral $ addr .&. 0x1FFF)))
+  | 0x8000 <= addr && addr < 0xA000 = \w -> do
+    io <- use mmio
+    when (canAccessVRAM io) $ assign (videoRAM . singular (ix (fromIntegral $ addr .&. 0x1FFF))) w
   | 0xA000 <= addr && addr < 0xC000 = error "write to external ram"
   | 0xC000 <= addr && addr < 0xE000 = assign (internalRAM . singular (ix (fromIntegral $ addr .&. 0x1FFF)))
   | 0xE000 <= addr && addr < 0xFE00 = assign (internalRAM . singular (ix (fromIntegral $ addr .&. 0x1FFF)))
-  | 0xFE00 <= addr && addr < 0xFEA0 = error "write to OAM"
-  | 0xFF00 <= addr && addr < 0xFF80 = writeMMIO addr
+  | 0xFE00 <= addr && addr < 0xFEA0 = \_ -> do
+      io <- use mmio
+      when (canAccessVRAM io) $ error "write to OAM"
+  | 0xFF00 <= addr && addr < 0xFF80 = \w -> do
+      io <- use mmio
+      io' <- execStateT (writeMMIO addr w) io
+      assign mmio io'
   | 0xFF80 <= addr {- && addr < 0xFFFF -} = assign (zeroRAM     . singular (ix (fromIntegral $ addr .&. 0x7F)))
   | otherwise = const (error $ "write to " ++ showHex addr "")
 
 emptyRom :: Word8 -> B.ByteString
 emptyRom = B.replicate 0x8000
 
-data Timer
-data Graphics
-data Audio
-data Joypad
-
-{-
-data SweepDirection = SweepUp | SweepDown
-
-data Sweep = Sweep
-  { sweepTime :: Word8 -- ^ sweep time in k / 128 Hz with k in range [7..0]
-  , sweepDirection :: SweepDirection
-  , sweepShiftNumber :: Word8 -- ^ scaling number in range [7..0]
-  }
-
-data SoundChannel1 = SoundChannel1
-  { sweep :: Maybe Sweep
-  }
-
-getSweep :: Word8 -> Maybe Sweep
-getSweep w =
-  if sweept == 0x00
-  then Nothing
-  else Just $ Sweep
-       { sweepTime = sweept
-       , sweepDirection = if w `testBit` 3 then SweepDown else SweepUp
-       , sweepShiftNumber = w .&. 0x07
-       }
-  where sweept = (w `shiftR` 4) .&. 0x07
-
-writeSweep :: Maybe Sweep -> Word8
-writeSweep Nothing = 0x00
-writeSweep (Just x)
-  =   (sweepTime x `shiftL` 4)
-  .|. (case sweepDirection x of SweepDown -> 0x08 ; SweepUp -> 0x00)
-  .|. sweepShiftNumber x
-
-applySweep :: Fractional a => Sweep -> a -> a
-applySweep s x
-  | SweepUp <- sweepDirection s = x * (1 + factor)
-  | otherwise                   = x * (1 - factor)
-  where factor = 1 / 2^ sweepShiftNumber s
--}
-
-data MMIO = MMIO
-  { timer :: Timer
-  , graphics :: Graphics
-  , audio :: Audio
-  , joypad :: Joypad
-  }
-
-accessMMIO :: Monad m => Word16 -> m Word8
-accessMMIO addr
-  -- no sound
-  | 0xFF10 <= addr && addr <= 0xFF26 = return 0
-  | otherwise = error "mmio not implemented"
-
-writeMMIO :: Monad m => Word16 -> Word8 -> m ()
-writeMMIO addr w = return ()
