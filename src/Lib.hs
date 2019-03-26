@@ -6,6 +6,7 @@ where
 
 import Control.Lens
 import Control.Monad.State
+import Text.Printf
 
 import MonadEmulator
 import Instruction
@@ -49,7 +50,7 @@ interpret enablePrinting = do
   b <- immediate8
   advCycles =<< instruction b
   when enablePrinting $ do
-    liftIO $ putStrLn $ "Instruction: " ++ hexbyte b
+    liftIO $ putStrLn $ "Instruction: " ++ printf "0x%02x" b
     liftIO . print =<< use cpuState
   interpret enablePrinting
 
