@@ -23,7 +23,9 @@ makeLenses ''GBState
 accessMemory :: MonadState GBState m => Word16 -> m Word8
 accessMemory addr = do
   m <- use memory
-  M.accessMemory addr `evalStateT` m
+  (w , m') <- M.accessMemory addr `runStateT` m
+  assign memory m'
+  return w
 
 writeMemory :: MonadState GBState m => Word16 -> Word8 -> m ()
 writeMemory addr w = do
