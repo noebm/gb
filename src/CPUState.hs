@@ -27,7 +27,7 @@ data CPUState = CPUState
 
 instance Show CPUState where
   show (CPUState pc sp a f b c d e h l) =
-    printf "PC: %4x, SP: %4x, A: %2x, F: %2x, B: %2x, C: %2x, D: %2x, E: %2x, H: %2x, L: %2x" pc sp a f b c d e h l
+    printf "PC: %04x, SP: %04x, A: %02x, F: %02x, B: %02x, C: %02x, D: %02x, E: %02x, H: %02x, L: %02x" pc sp a f b c d e h l
 
 newCPUState :: CPUState
 newCPUState = CPUState 0 0 0 0 0 0 0 0 0 0
