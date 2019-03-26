@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, FlexibleContexts #-}
+{-# LANGUAGE TemplateHaskell, FlexibleContexts, NoMonomorphismRestriction #-}
 module GBState where
 
 import Control.Monad.State
@@ -14,7 +14,6 @@ data GBState = GBState
   , _memory :: M.Memory
   , _timer :: Word
   }
-  deriving (Show)
 
 newGBState :: M.Memory -> GBState
 newGBState m = GBState newCPUState m 0
@@ -22,7 +21,12 @@ newGBState m = GBState newCPUState m 0
 makeLenses ''GBState
 
 accessMemory :: MonadState GBState m => Word16 -> m Word8
-accessMemory addr = use (memory.singular (ix (fromIntegral addr)))
+accessMemory addr = do
+  m <- use memory
+  M.accessMemory addr `evalStateT` m
 
 writeMemory :: MonadState GBState m => Word16 -> Word8 -> m ()
-writeMemory addr = assign (memory.singular (ix (fromIntegral addr)))
+writeMemory addr w = do
+  m <- use memory
+  m' <- M.writeMemory addr w `execStateT` m
+  assign memory m'

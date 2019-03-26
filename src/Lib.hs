@@ -12,13 +12,13 @@ import Instruction
 
 import CPUState
 import GBState
-import Memory
+import Memory (memoryBootRom)
 
 newtype GBT m a = GBT (StateT GBState m a)
   deriving (Functor, Applicative, Monad, MonadState GBState, MonadIO)
 
 runGB :: Monad m => GBT m a -> GBState -> m a
-runGB (GBT act) s = evalStateT act s
+runGB (GBT act) = evalStateT act
 
 instance Monad m => MonadEmulator (GBT m) where
   -- store8 :: LoadStore8 -> Word8 -> m ()
@@ -44,14 +44,24 @@ instance Monad m => MonadEmulator (GBT m) where
   getCycles = use timer
 
 
+interpret :: MonadIO m => Bool -> GBT m ()
+interpret enablePrinting = do
+  b <- immediate8
+  advCycles =<< instruction b
+  when enablePrinting $ do
+    liftIO $ putStrLn $ "Instruction: " ++ hexbyte b
+    liftIO . print =<< use cpuState
+  interpret enablePrinting
+
 someFunc :: IO ()
 someFunc = do
   rom <- memoryBootRom
   let s = newGBState rom
   (`runGB` s) $ do
-    forM_ [1..5] $ \ k -> do
-      b <- immediate8
-      liftIO . putStrLn $ "Instruction: " ++ hexbyte b
-      advCycles =<< instruction b
-      liftIO . print =<< use cpuState
+    interpret True
+    -- forM_ [1..5] $ \ k -> do
+    --   b <- immediate8
+    --   liftIO . putStrLn $ "Instruction: " ++ hexbyte b
+    --   advCycles =<< instruction b
+    --   liftIO . print =<< use cpuState
   return ()
