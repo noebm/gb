@@ -94,53 +94,6 @@ logicOp b op flagChange = do
   modifyFlags $ flagChange (a , a') value
   return $ timingSource8 reg
 
-{-
-getReg8 :: (HasRegisters c) => Reg8 -> Lens' c Word8
-getReg8 A = regA
-getReg8 B = regB
-getReg8 C = regC
-getReg8 D = regD
-getReg8 E = regE
-getReg8 H = regH
-getReg8 L = regL
-
-getSource8 :: (MonadState s m, HasRegisters s, MemoryRanges s)
-           => Source8 -> m Word8
-getSource8 (Source8 r) = use (registers.getReg8 r)
-getSource8 PointerHL = use (registers.regHL) >>= readMem . memory
-
-writeSource8 :: (MonadState s m, HasRegisters s, MemoryRanges s)
-             => Source8 -> Word8 -> m ()
-writeSource8 (Source8 r) v = registers.getReg8 r .= v
-writeSource8 PointerHL v   = do
-  ptr <- use (registers.regHL)
-  case writeMem (memory ptr) of
-    Just write -> write v
-    Nothing -> error $ "writeSource8: " ++ hexushort ptr ++ " is not writable"
-
-modifySource8 :: (MonadState s m, HasRegisters s, MemoryRanges s)
-              => Source8 -> (Word8 -> Word8) -> m Word8
-modifySource8 s f = do
-  value <- f <$> getSource8 s
-  writeSource8 s value
-  return value
-
-{- Source16 -}
-selectSource16 :: Word8 -> Source16
-selectSource16 b
-  | b .&. 0x30 == 0x00 = Source16 BC
-  | b .&. 0x30 == 0x10 = Source16 DE
-  | b .&. 0x30 == 0x20 = Source16 HL
-  | b .&. 0x30 == 0x30 = Source16 SP
-  | otherwise = error "selectSource16: no known register"
-
-getReg16 :: (HasRegisters c) => Reg16 -> Lens' c Word16
-getReg16 BC = regBC
-getReg16 DE = regDE
-getReg16 HL = regHL
-getReg16 SP = stackPointer
--}
-
 selectStack16 :: Word8 -> Reg16
 selectStack16 b
   | b .&. 0x30 == 0x00 = BC
@@ -158,6 +111,7 @@ selectStack16 b
 
 {- SourcePtr -}
 
+selectSourcePtr :: Word8 -> SourcePtr
 selectSourcePtr b
   | b .&. 0x30 == 0x00 = PtrBC
   | b .&. 0x30 == 0x10 = PtrDE
@@ -165,6 +119,7 @@ selectSourcePtr b
   | b .&. 0x30 == 0x30 = PtrHLd
   | otherwise = error $ "selectSourcePtr: " ++ hexbyte b
 
+getSourcePtr :: MonadEmulator m => SourcePtr -> m Word16
 getSourcePtr PtrBC  = load16 (Register16 BC)
 getSourcePtr PtrDE  = load16 (Register16 DE)
 getSourcePtr PtrHLi = do
