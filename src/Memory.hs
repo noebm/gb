@@ -26,6 +26,7 @@ data Memory = Memory
   , _videoRAM    :: Vector Word8 -- B.ByteString
   , _internalRAM :: Vector Word8 -- B.ByteString
   , _zeroRAM     :: Vector Word8 -- includes interrupt register...
+  , _oam         :: Vector Word8
   , _mmio :: MMIO
   }
 
@@ -38,6 +39,7 @@ memory cart =
   , _videoRAM = V.replicate 0x2000 0x00
   , _internalRAM = V.replicate 0x2000 0x00
   , _zeroRAM = V.replicate 0x80 0x00
+  , _oam = V.replicate 0xA0 0x00
   , _mmio = defaultMMIO
   }
 
@@ -67,7 +69,7 @@ accessMemory addr
   | 0xFE00 <= addr && addr < 0xFEA0 = do
     io <- use mmio
     if canAccessOAM io
-      then error "access to OAM"
+      then use (oam .singular (ix (fromIntegral $ addr .&. 0x9F))) -- error "access to OAM"
       else return 0xFF
   | 0xFF00 <= addr && addr < 0xFF80 = do
       io <- use mmio
@@ -86,9 +88,9 @@ writeMemory addr
   | 0xA000 <= addr && addr < 0xC000 = error "write to external ram"
   | 0xC000 <= addr && addr < 0xE000 = assign (internalRAM . singular (ix (fromIntegral $ addr .&. 0x1FFF)))
   | 0xE000 <= addr && addr < 0xFE00 = assign (internalRAM . singular (ix (fromIntegral $ addr .&. 0x1FFF)))
-  | 0xFE00 <= addr && addr < 0xFEA0 = \_ -> do
+  | 0xFE00 <= addr && addr < 0xFEA0 = \w -> do
       io <- use mmio
-      when (canAccessOAM io) $ error "write to OAM"
+      when (canAccessOAM io) $ assign (oam .singular (ix (fromIntegral $ addr .&. 0x9F))) w
   | 0xFF00 <= addr && addr < 0xFF80 = \w -> do
       io <- use mmio
       io' <- execStateT (writeMMIO addr w) io

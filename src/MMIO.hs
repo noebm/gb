@@ -67,7 +67,7 @@ applySweep s x
 --   updateScreen :: m ()
 
 data MMIO = MMIO
-  { _mmioData :: B.ByteString
+  { _mmioData :: V.Vector Word8
   , _dotClock :: Word
   }
 
@@ -75,9 +75,15 @@ makeLenses ''MMIO
 
 defaultMMIO :: MMIO
 defaultMMIO = MMIO
-  { _mmioData = B.replicate 0x80 0x00
+  { _mmioData = V.replicate 0x80 0x00
   , _dotClock = 0
   }
+
+interruptRequest :: Lens' MMIO Word8
+interruptRequest = mmioData . singular (ix 0x0F)
+
+statRequest :: Lens' MMIO Bool
+statRequest = interruptRequest . bitAt 1
 
 -- gpuMode :: MMIO -> Word8
 -- gpuMode mmio = (mmioData mmio `B.index` 0x41) .&. 0x3
@@ -141,9 +147,9 @@ checkLY = do
   lineCompare <- use lyc
   let cond = line == lineCompare
   statLY .= cond
-  lyInterrupt <- use statILY
-  -- when (lyInterupt && cond) {- raise interrupt! -}
-  return ()
+  lyInterruptEnabled <- use statILY
+  {- raise interrupt! -}
+  when (lyInterruptEnabled && cond) $ statRequest .= True
 
 accessMMIO :: MonadState MMIO m => Word16 -> m Word8
 accessMMIO addr
@@ -204,3 +210,4 @@ updateGPU dt = do
       when (l > 153) $ do
         statMode .= OAMSearch
         ly .= 0
+  -- checkLY
