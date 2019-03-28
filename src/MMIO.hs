@@ -1,14 +1,15 @@
 {-# LANGUAGE FlexibleContexts, TemplateHaskell #-}
 module MMIO
-  ( writeMMIO
-  , accessMMIO
-  , MMIO
-  , defaultMMIO
-  , canAccessVRAM
-  , canAccessOAM
-  , updateGPU
-  )
+--   ( writeMMIO
+--   , accessMMIO
+--   , MMIO
+--   , defaultMMIO
+--   , canAccessVRAM
+--   , canAccessOAM
+--   , updateGPU
+--   )
 where
+import Control.Monad.IO.Class
 
 import qualified Data.ByteString as B
 import qualified Data.Vector.Unboxed as V
@@ -164,13 +165,13 @@ accessMMIO addr
 writeMMIO :: MonadState MMIO m => Word16 -> Word8 -> m ()
 writeMMIO addr w
   -- mode bits are read only
-  | addr .&. 0x7F == 0x41 = do
-      w' <- use (mmioData . singular (ix 0x41))
-      assign (mmioData . singular (ix 0x41)) ((0xFA .&. w) .|. (0x5 .&. w'))
+  | addr == 0xFF41 = do
+      w' <- use (mmioData . singular (ix addr'))
+      assign (mmioData . singular (ix addr')) ((0xFA .&. w) .|. (0x5 .&. w'))
   -- ly clears on write
-  | addr .&. 0x7F == 0x44 = assign (mmioData . singular (ix $ fromIntegral addr .&. 0x7F)) 0
-  | otherwise = assign (mmioData . singular (ix $ fromIntegral addr .&. 0x7F)) w
-
+  | addr == 0xFF44 = assign (mmioData . singular (ix addr')) 0
+  | otherwise = assign (mmioData . singular (ix addr')) w
+  where addr' = fromIntegral $ addr .&. 0x7F
 canAccessOAM :: MMIO -> Bool
 canAccessOAM = views statMode (\s -> not $ s == OAMSearch || s == Transfer)
 
@@ -182,7 +183,7 @@ canAccessVRAM = views statMode (/= Transfer)
 canAccessCGBPalette :: MMIO -> Bool
 canAccessCGBPalette = canAccessVRAM
 
-updateGPU :: ({- MonadGPU m, -} MonadState MMIO m) => Word -> m () -- (Maybe GPUInstruction)
+updateGPU :: ({- MonadGPU m, -} MonadIO m, MonadState MMIO m) => Word -> m ()
 updateGPU dt = do
   t <- dotClock <+= dt
   let next clocktime act = do
@@ -193,21 +194,31 @@ updateGPU dt = do
         return cond
   mode <- use statMode
   case mode of
-    OAMSearch -> void $ next 80 (statMode .= Transfer)
+    OAMSearch -> do
+      liftIO $ putStrLn "OAMSearch"
+      void $ next 80 (statMode .= Transfer)
+      -- return False
     Transfer -> do
+      liftIO $ putStrLn "Transfer"
       _f <- next 172 (statMode .= HBlank)
       return ()
+      -- return True
       -- when f updateLine
     HBlank -> do
+      liftIO $ putStrLn "HBLank"
       f <- next 204 $ ly += 1
       when f $ do
         l <- use ly
         statMode .= if l == 143 then VBlank else OAMSearch
+      -- return False
         -- when (l == 143) updateScreen
 
-    VBlank -> void $ next 456 $ do
-      l <- ly <+= 1
-      when (l > 153) $ do
-        statMode .= OAMSearch
-        ly .= 0
+    VBlank -> do
+      -- liftIO $ putStrLn "VBLank"
+      void $ next 456 $ do
+        l <- ly <+= 1
+        when (l > 153) $ do
+          statMode .= OAMSearch
+          ly .= 0
+      -- return False
   -- checkLY

@@ -1,11 +1,11 @@
 {-# LANGUAGE FlexibleContexts, TemplateHaskell #-}
 module Memory
-  ( Memory
-  , mmio
-  , memoryBootRom
-  , accessMemory
-  , writeMemory
-  )
+  -- ( Memory
+  -- , mmio
+  -- , memoryBootRom
+  -- , accessMemory
+  -- , writeMemory
+  -- )
 where
 
 import Control.Monad.State
