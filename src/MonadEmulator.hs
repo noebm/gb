@@ -30,7 +30,13 @@ class Monad m => MonadEmulator m where
 
   -- timing
   advCycles :: Word -> m ()
-  getCycles :: m Word
+  resetCycles :: m Word
+
+getCycles :: MonadEmulator m => m Word
+getCycles = do
+  t <- resetCycles
+  advCycles t
+  return t
 
 word16 :: Iso' (Word8, Word8) Word16
 word16 = iso

@@ -57,7 +57,8 @@ instance Monad m => MonadEmulator (GBT m) where
     -- reset timer after some reasonable amount of time
     let pow24 = 16777216 -- 2 ** 24
     timer %= \t -> if t >= pow24 then t - pow24 else t
-  getCycles = use timer
+  resetCycles = timer <<.= 0
+  -- getCycles = use timer
 
 colour' :: Word8 -> Int -> Word8
 colour' palette sel =
