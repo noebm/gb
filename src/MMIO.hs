@@ -1,21 +1,28 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, TemplateHaskell #-}
 module MMIO
   ( writeMMIO
   , accessMMIO
   , MMIO
   , defaultMMIO
   , canAccessVRAM
+  , canAccessOAM
+  , updateGPU
   )
 where
 
+import qualified Data.ByteString as B
+import qualified Data.Vector.Unboxed as V
 import Data.Word
 import Data.Bits
+import Data.Bits.Lens
 
+import Control.Lens
 import Control.Monad.State
+import Control.Monad
 
-data Timer
-data Audio
-data Joypad
+-- data Timer
+-- data Audio
+-- data Joypad
 
 {-
 data SweepDirection = SweepUp | SweepDown
@@ -55,37 +62,145 @@ applySweep s x
   where factor = 1 / 2^ sweepShiftNumber s
 -}
 
+-- class Monad m => MonadGPU m where
+--   updateLine :: m ()
+--   updateScreen :: m ()
+
 data MMIO = MMIO
-  { timer :: Timer
-  , display :: Display
-  , audio :: Audio
-  , joypad :: Joypad
+  { _mmioData :: B.ByteString
+  , _dotClock :: Word
   }
 
+makeLenses ''MMIO
+
 defaultMMIO :: MMIO
-defaultMMIO = MMIO {}
+defaultMMIO = MMIO
+  { _mmioData = B.replicate 0x80 0x00
+  , _dotClock = 0
+  }
+
+-- gpuMode :: MMIO -> Word8
+-- gpuMode mmio = (mmioData mmio `B.index` 0x41) .&. 0x3
+
+data GPUMode = OAMSearch | Transfer | HBlank | VBlank
+  deriving Eq
+
+{- R/W except for 2..0 bits of stat -}
+lcdc, stat :: Lens' MMIO Word8
+lcdc = mmioData . singular (ix 0x40)
+stat = mmioData . singular (ix 0x41)
+
+{- R/W -}
+scx, scy :: Lens' MMIO Word8
+scy = mmioData . singular (ix 0x42)
+scx = mmioData . singular (ix 0x43)
+
+{- read only -}
+ly :: Lens' MMIO Word8
+ly = mmioData .singular (ix 0x44)
+
+lyc :: Lens' MMIO Word8
+lyc = mmioData . singular (ix 0x45)
+
+wy, wx :: Lens' MMIO Word8
+wy = mmioData . singular (ix 0x4A)
+-- offset by 7 (i.e. wx = 7 corresponds to corner)
+wx = mmioData . singular (ix 0x4B)
+
+{- R/W interrupt enable flags -}
+statILY, statIOAM, statIVBLANK, statIHBLANK :: Lens' MMIO Bool
+statILY = stat . bitAt 6
+statIOAM = stat . bitAt 5
+statIVBLANK = stat . bitAt 4
+statIHBLANK = stat . bitAt 3
+
+{- R - lyc == ly compare -}
+statLY :: Lens' MMIO Bool
+statLY = stat . bitAt 2
+
+{- R - mode -}
+statMode :: Lens' MMIO GPUMode
+statMode = mmioData . singular (ix 0x41) . lens get' setter
+   where
+     get' x = case x .&. 0x3 of
+       0 -> HBlank
+       1 -> VBlank
+       2 -> OAMSearch
+       3 -> Transfer
+       _ -> error "impossible"
+
+     setter s x = (s .&. 0xFC) .|. case x of
+       HBlank    -> 0
+       VBlank    -> 1
+       OAMSearch -> 2
+       Transfer  -> 3
+
+checkLY :: MonadState MMIO m => m ()
+checkLY = do
+  line  <- use ly
+  lineCompare <- use lyc
+  let cond = line == lineCompare
+  statLY .= cond
+  lyInterrupt <- use statILY
+  -- when (lyInterupt && cond) {- raise interrupt! -}
+  return ()
 
 accessMMIO :: MonadState MMIO m => Word16 -> m Word8
 accessMMIO addr
-  -- no sound
-  | 0xFF10 <= addr && addr <= 0xFF26 = return 0
+  -- timer
+  | 0xFF04 <= addr && addr <= 0xFF07 = return 0
+  -- audio
+  | 0xFF10 <= addr && addr <= 0xFF3F = return 0
+  -- lcd controller
+  | 0xFF40 <= addr && addr <= 0xFF6B = use (mmioData . singular (ix $ fromIntegral addr .&. 0x7F))
   | otherwise = error "mmio not implemented"
 
 writeMMIO :: MonadState MMIO m => Word16 -> Word8 -> m ()
-writeMMIO addr w = return ()
+writeMMIO addr w
+  -- mode bits are read only
+  | addr .&. 0x7F == 0x41 = do
+      w' <- use (mmioData . singular (ix 0x41))
+      assign (mmioData . singular (ix 0x41)) ((0xFA .&. w) .|. (0x5 .&. w'))
+  -- ly clears on write
+  | addr .&. 0x7F == 0x44 = assign (mmioData . singular (ix $ fromIntegral addr .&. 0x7F)) 0
+  | otherwise = assign (mmioData . singular (ix $ fromIntegral addr .&. 0x7F)) w
 
-data Display = Display
-  { controlRegister :: Word8 -- 0xFF40
-  , statusRegister :: Word8 -- 0xFF41
-  , scrollX :: Word8 -- 0xFF42
-  , scrollY :: Word8 -- 0xFF43
-  , yCoord :: Word8 -- 0xFF44
-  , yCompare :: Word8 -- 0xFF45
-  }
+canAccessOAM :: MMIO -> Bool
+canAccessOAM = views statMode (\s -> not $ s == OAMSearch || s == Transfer)
 
+-- also cannot access palette data
 canAccessVRAM :: MMIO -> Bool
-canAccessVRAM dpy = True
+canAccessVRAM = views statMode (/= Transfer)
 
--- accessDisplay
+-- 0xFF69 & 0xFF6B
+canAccessCGBPalette :: MMIO -> Bool
+canAccessCGBPalette = canAccessVRAM
 
+updateGPU :: ({- MonadGPU m, -} MonadState MMIO m) => Word -> m () -- (Maybe GPUInstruction)
+updateGPU dt = do
+  t <- dotClock <+= dt
+  let next clocktime act = do
+        let cond = t >= clocktime
+        when cond $ do
+          dotClock -= clocktime
+          act
+        return cond
+  mode <- use statMode
+  case mode of
+    OAMSearch -> void $ next 80 (statMode .= Transfer)
+    Transfer -> do
+      _f <- next 172 (statMode .= HBlank)
+      return ()
+      -- when f updateLine
+    HBlank -> do
+      f <- next 204 $ ly += 1
+      when f $ do
+        l <- use ly
+        statMode .= if l == 143 then VBlank else OAMSearch
+        -- when (l == 143) updateScreen
 
+    VBlank -> void $ next 456 $ do
+      l <- ly <+= 1
+      when (l > 153) $ do
+        statMode .= OAMSearch
+        ly .= 0
