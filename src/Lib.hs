@@ -8,6 +8,7 @@ import Control.Lens
 import Control.Monad.State
 import Text.Printf
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Builder as Build
 
 import Data.Traversable
 
@@ -110,8 +111,8 @@ genPixelRow = do
     return [255,c,c,c]
   -- return ()
 
-interpret :: MonadIO m => Bool -> Word -> B.ByteString -> GBT m ()
-interpret enablePrinting t bytes = do
+interpret :: MonadIO m => Bool -> Word -> Build.Builder -> GBT m ()
+interpret enablePrinting t bs = do
   b <- immediate8
   advCycles =<< instruction b
 
@@ -121,27 +122,22 @@ interpret enablePrinting t bytes = do
   m <- use $ memory.mmio
   (f , m') <- (`runStateT` m) $ do
     updateGPU dt
-    -- ly += 1
-  -- (updateGPU dt) m
   assign (memory.mmio) m'
 
-  let bytes' = B.empty
-  -- bytes' <- if f
-  --   then do
-  --   dbytes <- genPixelRow
-  --   let bytes' = bytes <> dbytes
-  --   if (B.length bytes' == 160 * 144 * 4)
-  --     then do
-  --     renderGraphics bytes' =<< use graphics
-  --     return B.empty
-  --     else return bytes'
-  --   else
-  --   return bytes
+  bytes' <- case f of
+    Nothing -> return bs
+    Just DrawLine -> do
+      dbytes <- genPixelRow
+      return $ bs <> Build.byteString dbytes
+    Just DrawImage -> do
+      let bytes = Build.toLazyByteString bs
+      renderGraphics bytes =<< use graphics
+      return mempty
 
   when enablePrinting $ do
     pc <- use $ cpuState.regPC
     if pc == 0xe9 then error "at 0xe9" else return ()
-    liftIO $ putStrLn $ printf "Instruction: 0x%02x / PC: 0x%04x" b pc
+    -- liftIO $ putStrLn $ printf "Instruction: 0x%02x / PC: 0x%04x" b pc
     -- l <- use $ memory.mmio.ly
     -- liftIO $ putStrLn $ printf "Linenumber %d" l
     -- ly <- use memory.mmio.ly
@@ -155,5 +151,5 @@ someFunc = do
   let bs = B.replicate (160 * 144 * 4) (0x88)
   (`runGB` s) $ do
     memory.mmio.statMode .= HBlank
-    interpret True 0 B.empty
+    interpret True 0 mempty
   return ()

@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Graphics where
 
-import qualified Data.ByteString as B
-import Data.ByteString (ByteString)
+import qualified Data.ByteString.Lazy as B
+import Data.ByteString.Lazy (ByteString)
 
 -- import qualified Data.Vector.Unboxed as V
 -- import Data.Vector.Unboxed (Vector)
@@ -34,9 +34,12 @@ renderImage rend text = copy rend text Nothing Nothing
 
 renderGraphics :: MonadIO m => ByteString -> GraphicsContext -> m ()
 renderGraphics bytes ctx = do
-  when (B.length bytes /= 160 * 144 * 4) $ error "invalid imagedata"
+  liftIO $ putStrLn $ "writing image of size" ++ show (B.length bytes)
+  
+  -- when (B.length bytes == 160 * 144 * 4) $ do
+    -- error "invalid imagedata"
   let rowByteCount = 160 * 4
-  image' <- updateTexture (image ctx) Nothing bytes rowByteCount
+  image' <- updateTexture (image ctx) Nothing (B.toStrict bytes) rowByteCount
   clear (renderer ctx)
   copy (renderer ctx) image' Nothing Nothing
   present (renderer ctx)

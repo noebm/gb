@@ -21,52 +21,6 @@ import Control.Lens
 import Control.Monad.State
 import Control.Monad
 
--- data Timer
--- data Audio
--- data Joypad
-
-{-
-data SweepDirection = SweepUp | SweepDown
-
-data Sweep = Sweep
-  { sweepTime :: Word8 -- ^ sweep time in k / 128 Hz with k in range [7..0]
-  , sweepDirection :: SweepDirection
-  , sweepShiftNumber :: Word8 -- ^ scaling number in range [7..0]
-  }
-
-data SoundChannel1 = SoundChannel1
-  { sweep :: Maybe Sweep
-  }
-
-getSweep :: Word8 -> Maybe Sweep
-getSweep w =
-  if sweept == 0x00
-  then Nothing
-  else Just $ Sweep
-       { sweepTime = sweept
-       , sweepDirection = if w `testBit` 3 then SweepDown else SweepUp
-       , sweepShiftNumber = w .&. 0x07
-       }
-  where sweept = (w `shiftR` 4) .&. 0x07
-
-writeSweep :: Maybe Sweep -> Word8
-writeSweep Nothing = 0x00
-writeSweep (Just x)
-  =   (sweepTime x `shiftL` 4)
-  .|. (case sweepDirection x of SweepDown -> 0x08 ; SweepUp -> 0x00)
-  .|. sweepShiftNumber x
-
-applySweep :: Fractional a => Sweep -> a -> a
-applySweep s x
-  | SweepUp <- sweepDirection s = x * (1 + factor)
-  | otherwise                   = x * (1 - factor)
-  where factor = 1 / 2^ sweepShiftNumber s
--}
-
--- class Monad m => MonadGPU m where
---   updateLine :: m ()
---   updateScreen :: m ()
-
 data MMIO = MMIO
   { _mmioData :: V.Vector Word8
   , _dotClock :: Word
@@ -183,42 +137,26 @@ canAccessVRAM = views statMode (/= Transfer)
 canAccessCGBPalette :: MMIO -> Bool
 canAccessCGBPalette = canAccessVRAM
 
-updateGPU :: ({- MonadGPU m, -} MonadIO m, MonadState MMIO m) => Word -> m ()
+updateGPU' :: Word -> Word8 -> GPUMode -> (Word, Word8, Maybe GPUMode)
+updateGPU' t l mode = case mode of
+  OAMSearch -> update 80 (\t' -> (t' , l, Just Transfer))
+  Transfer -> update 172 (\t' -> (t' , l, Just HBlank))
+  HBlank -> update 204   (\t' -> (t' , l+1, Just $ if l == 142 then VBlank else OAMSearch))
+  VBlank -> update 456 (\t' -> if l > 153 then (t' , 0, Just OAMSearch) else (t', l + 1, Nothing))
+  where update clocktime f = if t >= clocktime then f (t - clocktime) else (t, l, Nothing)
+
+data DrawInstruction = DrawLine | DrawImage
+
+updateGPU :: (MonadState MMIO m) => Word -> m (Maybe DrawInstruction)
 updateGPU dt = do
   t <- dotClock <+= dt
-  let next clocktime act = do
-        let cond = t >= clocktime
-        when cond $ do
-          dotClock -= clocktime
-          act
-        return cond
   mode <- use statMode
-  case mode of
-    OAMSearch -> do
-      liftIO $ putStrLn "OAMSearch"
-      void $ next 80 (statMode .= Transfer)
-      -- return False
-    Transfer -> do
-      liftIO $ putStrLn "Transfer"
-      _f <- next 172 (statMode .= HBlank)
-      return ()
-      -- return True
-      -- when f updateLine
-    HBlank -> do
-      liftIO $ putStrLn "HBLank"
-      f <- next 204 $ ly += 1
-      when f $ do
-        l <- use ly
-        statMode .= if l == 143 then VBlank else OAMSearch
-      -- return False
-        -- when (l == 143) updateScreen
-
-    VBlank -> do
-      -- liftIO $ putStrLn "VBLank"
-      void $ next 456 $ do
-        l <- ly <+= 1
-        when (l > 153) $ do
-          statMode .= OAMSearch
-          ly .= 0
-      -- return False
-  -- checkLY
+  l <- use ly
+  let (t', l', mode') = updateGPU' t l mode
+  dotClock .= t'
+  ly .= l'
+  forM_ mode' (assign statMode)
+  return $ case True of
+    _ | mode' == Just HBlank && mode == Transfer -> Just DrawLine
+      | mode' == Just VBlank && mode == HBlank   -> Just DrawImage
+      | otherwise -> Nothing
