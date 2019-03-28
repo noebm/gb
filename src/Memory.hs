@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts, TemplateHaskell #-}
 module Memory
   ( Memory
+  , mmio
   , memoryBootRom
   , accessMemory
   , writeMemory
@@ -13,6 +14,7 @@ import Control.Lens
 import Data.Word
 import Data.Bits
 import qualified Data.ByteString as B
+-- import qualified Data.Vector.Unboxed as V
 
 import MMIO
 
@@ -63,7 +65,7 @@ accessMemory addr
   -- OAM
   | 0xFE00 <= addr && addr < 0xFEA0 = do
     io <- use mmio
-    if canAccessVRAM io
+    if canAccessOAM io
       then error "access to OAM"
       else return 0xFF
   | 0xFF00 <= addr && addr < 0xFF80 = do
@@ -85,7 +87,7 @@ writeMemory addr
   | 0xE000 <= addr && addr < 0xFE00 = assign (internalRAM . singular (ix (fromIntegral $ addr .&. 0x1FFF)))
   | 0xFE00 <= addr && addr < 0xFEA0 = \_ -> do
       io <- use mmio
-      when (canAccessVRAM io) $ error "write to OAM"
+      when (canAccessOAM io) $ error "write to OAM"
   | 0xFF00 <= addr && addr < 0xFF80 = \w -> do
       io <- use mmio
       io' <- execStateT (writeMMIO addr w) io
