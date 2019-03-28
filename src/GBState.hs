@@ -3,9 +3,13 @@ module GBState where
 
 import Control.Monad.State
 import Control.Lens
+import Control.Monad.IO.Class
 
 import Data.Word
 import CPUState
+import Graphics
+import SDL.Video.Renderer
+import SDL.Video
 
 import qualified Memory as M
 
@@ -13,10 +17,13 @@ data GBState = GBState
   { _cpuState :: !CPUState
   , _memory :: M.Memory
   , _timer :: !Word
+  , _graphics :: GraphicsContext
   }
 
-newGBState :: M.Memory -> GBState
-newGBState m = GBState newCPUState m 0
+newGBState :: MonadIO m => M.Memory -> m GBState
+newGBState m = do
+  x <- initializeGraphics
+  return $ GBState newCPUState m 0 x
 
 makeLenses ''GBState
 

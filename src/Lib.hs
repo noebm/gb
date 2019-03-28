@@ -7,6 +7,9 @@ where
 import Control.Lens
 import Control.Monad.State
 import Text.Printf
+import qualified Data.ByteString as B
+
+import SDL.Video.Renderer
 
 import MonadEmulator
 import Instruction
@@ -15,6 +18,7 @@ import CPUState
 import GBState
 import Memory (memoryBootRom, mmio)
 import MMIO
+import Graphics (renderGraphics)
 
 newtype GBT m a = GBT (StateT GBState m a)
   deriving (Functor, Applicative, Monad, MonadState GBState, MonadIO)
@@ -61,8 +65,8 @@ interpret enablePrinting t = do
   assign (memory.mmio) m'
   when enablePrinting $ do
     pc <- use $ cpuState.regPC
-    -- liftIO $ putStrLn $ printf "Instruction: 0x%02x / PC: 0x%04x" b pc
     if pc == 0xe9 then error "at 0xe9" else return ()
+    -- liftIO $ putStrLn $ printf "Instruction: 0x%02x / PC: 0x%04x" b pc
     -- ly <- use memory.mmio.ly
     -- liftIO . print =<< use cpuState
   interpret enablePrinting t'
@@ -70,12 +74,9 @@ interpret enablePrinting t = do
 someFunc :: IO ()
 someFunc = do
   rom <- memoryBootRom
-  let s = newGBState rom
+  s <- newGBState rom
+  let bs = B.replicate (160 * 144 * 4) (0x88)
+  renderGraphics bs (_graphics s)
   (`runGB` s) $ do
     interpret True 0
-    -- forM_ [1..5] $ \ k -> do
-    --   b <- immediate8
-    --   liftIO . putStrLn $ "Instruction: " ++ hexbyte b
-    --   advCycles =<< instruction b
-    --   liftIO . print =<< use cpuState
   return ()
