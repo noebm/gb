@@ -13,7 +13,8 @@ import Instruction
 
 import CPUState
 import GBState
-import Memory (memoryBootRom)
+import Memory (memoryBootRom, mmio)
+import MMIO
 
 newtype GBT m a = GBT (StateT GBState m a)
   deriving (Functor, Applicative, Monad, MonadState GBState, MonadIO)
@@ -41,25 +42,37 @@ instance Monad m => MonadEmulator (GBT m) where
     hw <- load8 (Addr8 $ addr + 1)
     return $ (hw , lw) ^. word16
 
-  advCycles dt = timer += dt
+  advCycles dt = do
+    timer += dt
+    -- reset timer after some reasonable amount of time
+    let pow24 = 16777216 -- 2 ** 24
+    timer %= \t -> if t >= pow24 then t - pow24 else t
   getCycles = use timer
 
 
-interpret :: MonadIO m => Bool -> GBT m ()
-interpret enablePrinting = do
+interpret :: MonadIO m => Bool -> Word -> GBT m ()
+interpret enablePrinting t = do
   b <- immediate8
   advCycles =<< instruction b
+  t' <- getCycles
+  let dt = t - t'
+  m <- use $ memory.mmio
+  m' <- execStateT (updateGPU dt) m
+  assign (memory.mmio) m'
   when enablePrinting $ do
-    liftIO $ putStrLn $ "Instruction: " ++ printf "0x%02x" b
-    liftIO . print =<< use cpuState
-  interpret enablePrinting
+    pc <- use $ cpuState.regPC
+    -- liftIO $ putStrLn $ printf "Instruction: 0x%02x / PC: 0x%04x" b pc
+    if pc == 0xe9 then error "at 0xe9" else return ()
+    -- ly <- use memory.mmio.ly
+    -- liftIO . print =<< use cpuState
+  interpret enablePrinting t'
 
 someFunc :: IO ()
 someFunc = do
   rom <- memoryBootRom
   let s = newGBState rom
   (`runGB` s) $ do
-    interpret True
+    interpret True 0
     -- forM_ [1..5] $ \ k -> do
     --   b <- immediate8
     --   liftIO . putStrLn $ "Instruction: " ++ hexbyte b
