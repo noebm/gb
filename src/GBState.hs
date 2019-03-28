@@ -10,7 +10,7 @@ import CPUState
 import qualified Memory as M
 
 data GBState = GBState
-  { _cpuState :: CPUState
+  { _cpuState :: !CPUState
   , _memory :: M.Memory
   , _timer :: !Word
   }

@@ -12,17 +12,17 @@ import MonadEmulator
 
 data CPUState = CPUState
   -- special registers
-  { _regPC :: Word16 -- program counter
-  , _regSP :: Word16 -- stack pointer
+  { _regPC :: !Word16 -- program counter
+  , _regSP :: !Word16 -- stack pointer
   -- normal registers
-  , _regA :: Word8
-  , _regF :: Word8 -- flags
-  , _regB :: Word8
-  , _regC :: Word8
-  , _regD :: Word8
-  , _regE :: Word8
-  , _regH :: Word8
-  , _regL :: Word8
+  , _regA :: !Word8
+  , _regF :: !Word8 -- flags
+  , _regB :: !Word8
+  , _regC :: !Word8
+  , _regD :: !Word8
+  , _regE :: !Word8
+  , _regH :: !Word8
+  , _regL :: !Word8
   } deriving (Eq)
 
 instance Show CPUState where
