@@ -60,3 +60,8 @@ getRomBank c idx = do
   let banksize = 0x4000
   guard (idx < cartridgeRomBanks c || idx < 2)
   return $ B.take banksize $ B.drop (fromIntegral (idx - 1) * banksize) (cartridgeData c)
+
+memoryBootRom :: IO ByteString
+memoryBootRom = do
+  let bootStrapName = "DMG_ROM.bin"
+  B.readFile $ "./" ++ bootStrapName

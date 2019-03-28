@@ -4,6 +4,76 @@
 module Lib
 where
 
+import qualified Data.ByteString.Builder as Build
+import qualified Data.ByteString as B
+import qualified Data.Vector.Unboxed.Mutable as V
+
+import Text.Printf
+
+import Control.Monad.IO.Class
+import Control.Monad
+
+import MonadEmulator
+import GB
+import Instruction
+import Cartridge
+import Memory.MMIO
+
+interpret :: (MonadEmulator m, MonadIO m) => Bool -> Build.Builder -> m ()
+interpret enablePrinting bs = do
+
+  pc <- load16 (Register16 PC)
+  when (pc == 0xe9) $ error "at 0xe9"
+  when (pc >  0xff) $ error "something happened"
+
+  regs <- showRegisters
+  b <- immediate8
+  when enablePrinting $ do
+    -- liftIO $ putStrLn $ printf "Instruction: 0x%02x / PC: 0x%04x" b pc
+    liftIO $ putStrLn regs
+    liftIO $ putStrLn $ printf "Instruction: 0x%02x" b
+
+  -- when (pc > 0x0b) $ void $ liftIO getLine
+  advCycles =<< instruction b
+
+  -- updateGPU
+
+  -- m <- use $ memory.mmio
+  -- (f , m') <- (`runStateT` m) $ do
+  --   updateGPU dt
+  -- assign (memory.mmio) m'
+
+  -- bytes' <- case f of
+  --   Nothing -> return bs
+  --   Just DrawLine -> do
+  --     dbytes <- genPixelRow
+  --     return $ bs <> Build.byteString dbytes
+  --   Just DrawImage -> do
+  --     let bytes = Build.toLazyByteString bs
+  --     renderGraphics bytes =<< use graphics
+  --     return mempty
+
+    -- l <- use $ memory.mmio.ly
+    -- liftIO $ putStrLn $ printf "Linenumber %d" l
+    -- ly <- use memory.mmio.ly
+    -- liftIO . print =<< use cpuState
+
+  -- interpret enablePrinting t' bytes'
+  interpret enablePrinting bs
+
+someFunc :: IO ()
+someFunc = do
+  rom <- memoryBootRom
+  runGB $ do
+    -- copy boot rom to memory
+    mem <- unsafeMemory
+    liftIO $ forM_ [0..B.length rom - 1] $ \idx ->
+      V.write mem idx (rom `B.index` idx)
+
+    interpret True mempty
+
+
+{-
 import Control.Lens
 import Control.Monad.State
 import Text.Printf
@@ -112,45 +182,4 @@ genPixelRow = do
     return [255,c,c,c]
   -- return ()
 
-interpret :: MonadIO m => Bool -> Word -> Build.Builder -> GBT m ()
-interpret enablePrinting t bs = do
-  b <- immediate8
-  advCycles =<< instruction b
-
-  t' <- getCycles
-  let dt = t' - t
-
-  m <- use $ memory.mmio
-  (f , m') <- (`runStateT` m) $ do
-    updateGPU dt
-  assign (memory.mmio) m'
-
-  bytes' <- case f of
-    Nothing -> return bs
-    Just DrawLine -> do
-      dbytes <- genPixelRow
-      return $ bs <> Build.byteString dbytes
-    Just DrawImage -> do
-      let bytes = Build.toLazyByteString bs
-      renderGraphics bytes =<< use graphics
-      return mempty
-
-  when enablePrinting $ do
-    pc <- use $ cpuState.regPC
-    if pc == 0xe9 then error "at 0xe9" else return ()
-    -- liftIO $ putStrLn $ printf "Instruction: 0x%02x / PC: 0x%04x" b pc
-    -- l <- use $ memory.mmio.ly
-    -- liftIO $ putStrLn $ printf "Linenumber %d" l
-    -- ly <- use memory.mmio.ly
-    -- liftIO . print =<< use cpuState
-  interpret enablePrinting t' bytes'
-
-someFunc :: IO ()
-someFunc = do
-  rom <- memoryBootRom
-  s <- newGBState rom
-  let bs = B.replicate (160 * 144 * 4) (0x88)
-  (`runGB` s) $ do
-    memory.mmio.statMode .= HBlank
-    interpret True 0 mempty
-  return ()
+-}
