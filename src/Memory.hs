@@ -14,17 +14,18 @@ import Control.Lens
 import Data.Word
 import Data.Bits
 import qualified Data.ByteString as B
--- import qualified Data.Vector.Unboxed as V
+import qualified Data.Vector.Unboxed as V
+import Data.Vector.Unboxed (Vector)
 
 import MMIO
 
 import Numeric
 
 data Memory = Memory
-  { _cartridge :: B.ByteString
-  , _videoRAM :: B.ByteString
-  , _internalRAM :: B.ByteString
-  , _zeroRAM :: B.ByteString -- includes interrupt register...
+  { _cartridge   :: B.ByteString
+  , _videoRAM    :: Vector Word8 -- B.ByteString
+  , _internalRAM :: Vector Word8 -- B.ByteString
+  , _zeroRAM     :: Vector Word8 -- includes interrupt register...
   , _mmio :: MMIO
   }
 
@@ -34,9 +35,9 @@ memory :: B.ByteString -> Memory
 memory cart =
   Memory
   { _cartridge = cart
-  , _videoRAM = B.replicate 0x2000 0x00
-  , _internalRAM = B.replicate 0x2000 0x00
-  , _zeroRAM = B.replicate 0x80 0x00
+  , _videoRAM = V.replicate 0x2000 0x00
+  , _internalRAM = V.replicate 0x2000 0x00
+  , _zeroRAM = V.replicate 0x80 0x00
   , _mmio = defaultMMIO
   }
 
