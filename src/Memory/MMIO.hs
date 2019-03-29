@@ -5,6 +5,7 @@ import Control.Monad
 import Data.Foldable
 import Data.Bits
 import Data.Word
+import Data.Int
 
 import MonadEmulator
 
@@ -63,9 +64,35 @@ Bit2  Sprite size                             | 8x16          | 8x8
 Bit1  Color #0 transparency in the window     | SOLID         | TRANSPARENT
 Bit0  Background display
 -}
-lcdEnable :: MonadEmulator m => m Bool
-lcdEnable = (`testBit` 7) <$> load8 control
+data LCDConfig = LCDConfig
+  -- { windowTileTableAddr :: Word8 -> m Word16
+  -- , windowEnabled :: Bool
+  { backgroundTileIndex :: Word8 -> Word8 -> LoadStore8
+  , backgroundEnabled :: Bool
+  , tileAddr :: Word8 -> Word16
+  -- , spriteSize :: Word8
+  -- , transparency :: Bool
+  }
 
+lcdConfig :: MonadEmulator m => m (Maybe LCDConfig)
+lcdConfig = do
+  c <- load8 control
+  return $ do
+    guard (c `testBit` 7)
+    return $ LCDConfig
+      { backgroundTileIndex = \y x -> do
+          let bgrdTableIndex = fromIntegral (x `div` 8) + 32 * fromIntegral (y `div` 8)
+          let bgrdTableBase = if c `testBit` 3 then 0x9C00 else 0x9800
+          Addr8 $ bgrdTableBase + bgrdTableIndex
+      , backgroundEnabled = c `testBit` 0
+      , tileAddr = if c `testBit` 4
+        then \idx -> 0x8000 + fromIntegral idx `shiftL` 4
+        else \idx -> 0x8800 + fromIntegral (idx + 128) `shiftL` 4
+      -- , spriteSize = if c `testBit` 2 then 16 else 8
+      -- , transparency = c `testBit` 1
+      }
+
+{-
 windowTileTableAddBase :: MonadEmulator m => m Word16
 windowTileTableAddBase = do
   wndMode <- (`testBit` 6) <$> load8 control
@@ -73,27 +100,6 @@ windowTileTableAddBase = do
 
 windowDisplay :: MonadEmulator m => m Bool
 windowDisplay = (`testBit` 5) <$> load8 control
-
-backgroundTileTableAddrBase :: MonadEmulator m => m Word16
-backgroundTileTableAddrBase = do
-  bgMode <- (`testBit` 3) <$> load8 control
-  return $ if bgMode then 0x9C00 else 0x9800
-
-backgroundDisplay :: MonadEmulator m => m Bool
-backgroundDisplay = (`testBit` 0) <$> load8 control
-
-tilePatternTableAddrBase :: MonadEmulator m => m Word16
-tilePatternTableAddrBase = do
-  patternMode <- (`testBit` 4) <$> load8 control
-  return $ if patternMode then 0x8000 else 0x8800
-
-tilePatternAddr :: MonadEmulator m => m (Word8 -> Word16)
-tilePatternAddr = do
-  patternMode <- (`testBit` 4) <$> load8 control
-  let tileSize = 16
-  return $ if patternMode
-    then \w -> 0x8000 + tileSize * fromIntegral w
-    else \w -> 0x8800 + tileSize * (fromIntegral w + 128)
 
 -- sprite display?
 -- colorZeroTransparent :: MonadEmulator m => m Bool
@@ -103,3 +109,4 @@ spriteSize :: MonadEmulator m => m Word8
 spriteSize = do
   spriteMode <- (`testBit` 2) <$> load8 control
   return $ if spriteMode then 16 else 8
+-}

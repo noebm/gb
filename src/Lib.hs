@@ -19,6 +19,7 @@ import Text.Printf
 
 import Control.Monad.IO.Class
 import Control.Monad
+import Data.Maybe
 
 import Graphics
 import MonadEmulator
@@ -28,11 +29,12 @@ import Cartridge
 import Memory.MMIO
 import Memory.OAM
 
+
 interpret :: (MonadEmulator m, MonadIO m) => Bool -> GraphicsContext -> Build.Builder -> m Build.Builder
 interpret enablePrinting gfx bs = do
-  pc <- load16 (Register16 PC)
-  when (pc == 0xe9) $ return () -- error "at 0xe9"
-  when (pc >  0xff) $ error "something happened"
+  -- pc <- load16 (Register16 PC)
+  -- when (pc == 0xe9) $ return () -- error "at 0xe9"
+  -- when (pc >  0xff) $ error "something happened"
 
   regs <- showRegisters
   b <- immediate8
@@ -43,9 +45,9 @@ interpret enablePrinting gfx bs = do
 
   -- when (pc > 0x0b) $ void $ liftIO getLine
   advCycles =<< instruction b
+  lcd <- lcdConfig
 
-  lcd <- lcdEnable
-  if lcd then do
+  if isJust lcd then do
     gpuInstr <- updateGPU
     case gpuInstr of
       Nothing -> return bs
@@ -80,7 +82,7 @@ someFunc = do
       V.write mem idx (rom `B.index` idx)
 
     gfx <- initializeGraphics
-    let g b = g =<< interpret True gfx b
+    let g b = g =<< interpret False gfx b
     let f b = do
           -- pc <- load16 (Register16 PC)
           -- unless (pc == 0x62) $ do
@@ -118,25 +120,17 @@ bgPalette = do
 
 drawLineBackground :: (MonadIO m, MonadEmulator m) => m (Word8 -> Word8 -> m Word8)
 drawLineBackground = do
-  -- backgroundEnabled <- backgroundDisplay
-  -- when backgroundEnabled $ do
-    sx <- load8 scrollX
-    sy <- load8 scrollY
-    liftIO $ putStrLn $ printf "sx: %02x sy: %02x" sx sy
-    -- let tileRowSize = 8
-    -- let yScale = 144 `div` tileSize -- 9
-    -- let bgrdScrollOffset = fromIntegral sx `div` tileRowSize + fromIntegral sy * yScale
-
-    bgrdBaseTableBase <- backgroundTileTableAddrBase
-    tileAddrMode      <- tilePatternAddr
-    bgrdPal           <- bgPalette
-    return $ \y x -> do
-      let y' = y + sy
-      let x' = x + sx
-      let bgrdTableIndex = fromIntegral (x' `div` 8) + 32 * fromIntegral (y' `div` 8)
-      tileIndex <- load8 $ Addr8 $ bgrdBaseTableBase + bgrdTableIndex
-      -- liftIO $ putStrLn $ printf "x: %02x y: %02x table: %04x index: %02x" x' y' (bgrdBaseTableBase + bgrdTableIndex) tileIndex
-      bgrdPal <$> tile (tileAddrMode tileIndex) y' x'
+  lcdconf <- lcdConfig
+  bgrdPal <- bgPalette
+  case lcdconf of
+    Just lcd -> return $ \y x -> do
+      sy <- load8 scrollY
+      sx <- load8 scrollX
+      let y' = sy + y
+      let x' = sx + x
+      idx <- load8 $ backgroundTileIndex lcd y' x'
+      bgrdPal <$> tile (tileAddr lcd idx) y' x'
+    Nothing -> return $ \_ _ -> undefined
 
 genPixelRow' :: (MonadIO m, MonadEmulator m) => m Build.Builder
 genPixelRow' = do
