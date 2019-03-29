@@ -17,6 +17,11 @@ import Data.Bits
 
 import Text.Printf
 
+import SDL.Video hiding (paletteColor)
+import SDL.Vect
+import Foreign.Ptr
+import Foreign.Storable
+
 import Control.Monad.IO.Class
 import Control.Monad
 import Data.Maybe
@@ -30,8 +35,8 @@ import Memory.MMIO
 import Memory.OAM
 
 
-interpret :: (MonadEmulator m, MonadIO m) => Bool -> GraphicsContext -> Build.Builder -> m Build.Builder
-interpret enablePrinting gfx bs = do
+interpret :: (MonadEmulator m, MonadIO m) => Bool -> GraphicsContext -> m ()
+interpret enablePrinting gfx = do
   -- pc <- load16 (Register16 PC)
   -- when (pc == 0xe9) $ return () -- error "at 0xe9"
   -- when (pc >  0xff) $ error "something happened"
@@ -50,16 +55,10 @@ interpret enablePrinting gfx bs = do
   if isJust lcd then do
     gpuInstr <- updateGPU
     case gpuInstr of
-      Nothing -> return bs
-      Just DrawLine -> do
-        dbytes <- genPixelRow'
-        return $ bs <> dbytes
-      Just DrawImage -> do
-        let bytes = Build.toLazyByteString bs
-        renderGraphics bytes gfx
-        -- genPixelRow
-        return mempty
-    else return bs
+      Just DrawLine -> genPixelRow (image gfx)
+      Just DrawImage -> renderGraphics gfx
+      _ -> return ()
+  else return ()
 
 disableBootRom :: MonadEmulator m => m Bool
 disableBootRom = (`testBit` 0) <$> load8 (Addr8 0xFF50)
@@ -81,16 +80,16 @@ someFunc = do
     liftIO $ forM_ [0..B.length rom - 1] $ \idx ->
       V.write mem idx (rom `B.index` idx)
 
-    gfx <- initializeGraphics
-    let g b = g =<< interpret False gfx b
-    let f b = do
+    let g fx = interpret False fx >> g fx
+    let f fx = do
           -- pc <- load16 (Register16 PC)
           -- unless (pc == 0x62) $ do
-            b' <- interpret False gfx b
+            interpret False fx
             bootflag <- disableBootRom
-            when bootflag (writeCartridge cart >> g b')
-            f b'
-    f mempty
+            when bootflag (writeCartridge cart >> g fx)
+            f fx
+    gfx <- initializeGraphics
+    f gfx
 
 
 paletteColor :: Word8 -> Word8 -> Word8
@@ -105,10 +104,10 @@ paletteColor pal sel =
 -- | Given the address of the tile and x / y pixel coordinates,
 -- find the palette index of the pixel.
 tile :: MonadEmulator m => Word16 -> (Word8 -> Word8 -> m Word8)
-tile tileAddr y x = do
+tile tileAddress y x = do
   let yOffset = fromIntegral (y .&. 7) * 2 -- every line contains 2 bytes
-  b0 <- load8 (Addr8 $ tileAddr + yOffset)
-  b1 <- load8 (Addr8 $ tileAddr + yOffset + 1)
+  b0 <- load8 (Addr8 $ tileAddress + yOffset)
+  b1 <- load8 (Addr8 $ tileAddress + yOffset + 1)
   let xOffset = fromIntegral (x .&. 7)
   let paletteSelect = fromIntegral $ 2 * fromEnum (b1 `testBit` xOffset) .|. fromEnum (b0 `testBit` xOffset)
   return paletteSelect
@@ -121,62 +120,30 @@ bgPalette = do
 drawLineBackground :: (MonadIO m, MonadEmulator m) => m (Word8 -> Word8 -> m Word8)
 drawLineBackground = do
   lcdconf <- lcdConfig
-  bgrdPal <- bgPalette
   case lcdconf of
-    Just lcd -> return $ \y x -> do
+    Just lcd -> do
+      bgrdPal <- bgPalette
       sy <- load8 scrollY
       sx <- load8 scrollX
-      let y' = sy + y
-      let x' = sx + x
-      idx <- load8 $ backgroundTileIndex lcd y' x'
-      bgrdPal <$> tile (tileAddr lcd idx) y' x'
+      return $ \y x -> do
+        let y' = sy + y
+        let x' = sx + x
+        idx <- load8 $ backgroundTileIndex lcd y' x'
+        bgrdPal <$> tile (tileAddr lcd idx) y' x'
     Nothing -> return $ \_ _ -> undefined
 
-genPixelRow' :: (MonadIO m, MonadEmulator m) => m Build.Builder
-genPixelRow' = do
+genPixelRow :: (MonadIO m, MonadEmulator m) => Texture -> m ()
+genPixelRow im = do
   fBgrd <- drawLineBackground
   y <- load8 currentLine
-  fmap mconcat $ for [0..159] $ \x -> do
+  (ptr', _) <- lockTexture im (Just $ fmap fromIntegral $ Rectangle (P $ V2 0 y) (V2 160 1))
+  let ptr = castPtr ptr' :: Ptr Word8
+  forM_ [0..159] $ \x -> do
     c <- fBgrd y x
-    return $ mconcat $ fmap Build.word8 [c,c,c,255]
-
-{-
-genPixelRow :: MonadEmulator m => m Build.Builder
-genPixelRow = do
-  sx <- load8 scrollX
-  sy <- load8 scrollY
-  winx <- (\x -> x - 7) <$> load8 windowX
-  winy <- load8 windowY
-
-  winEnabled <- (`testBit` 5) <$> load8 control
-  -- winEnabled <- use $ memory.mmio.lcdc.bitAt 5
-  line <- load8 currentLine -- use $ memory.mmio.ly
-  let useWindow = winEnabled && winy <= line
-  bgAddrBase <- do
-    objTile     <- (`testBit` 3) <$> load8 control
-    windowTile  <- (`testBit` 6) <$> load8 control
-    return $ if (useWindow && windowTile) || (not useWindow && objTile)
-      then 0x9C00
-      else 0x9800
-  tileSelect <- (`testBit` 4) <$> load8 control
-
-  let y = if useWindow then line - winy else sy - line
-  let tileRow = fromIntegral (y `div` 8) * 320
-
-  fmap mconcat $ for [0..159] $ \pixel -> do
-    let x = if useWindow && pixel >= winx then pixel - winx else pixel + sx
-    let tileCol = fromIntegral x `div` 8
-    let tileAddr = Addr8 $ bgAddrBase + tileRow + tileCol
-
-    tileLoc <- tileLocation tileSelect <$> load8 tileAddr
-      -- uses (memory . videoRAM . singular (ix $ fromIntegral $ tileAddr .&. 0x1FFF)) (tileLocation tileMode)
-    let line' = fromIntegral $ (y .&. 0x7) * 2
-    b0 <- load8 (Addr8 $ tileLoc + line')
-    b1 <- load8 (Addr8 $ tileLoc + line' + 1)
-    let colourNumber = 2 * fromEnum ((b1 `testBit` colour) `shiftL` 1) + fromEnum (b0 `testBit` colour) -- :: Int
-          where colour = negate (fromIntegral (x `mod` 8) - 7) :: Int
-    -- c <- uses (memory.mmio.mmioData.singular (ix 0x47)) (\pal -> colour' pal colourNumber)
-    c <- (\pal -> paletteColor pal colourNumber) <$> load8 backgroundPalette
-    return $ mconcat $ fmap Build.word8 [255,c,c,c]
-  -- return ()
--}
+    let idx = 4 * fromIntegral x
+    liftIO $ do
+      poke (ptr `plusPtr` idx)       c
+      poke (ptr `plusPtr` (idx + 1)) c
+      poke (ptr `plusPtr` (idx + 2)) c
+      poke (ptr `plusPtr` (idx + 3)) (255 :: Word8)
+  unlockTexture im
