@@ -562,6 +562,15 @@ instruction b
       compare n
       return 8
 
+  | b == 0xC3 = do
+      jump =<< ushort
+      return 16
+
+  -- disable interrupts
+  | b == 0xF3 = do
+      store8 (Addr8 0xFFFF) 0x00
+      return 4
+
   | otherwise = do
       pc <- load16 (Register16 PC)
       error $ "instruction " ++ hexbyte b ++ " not implemented at " ++ hexushort (pc - 1)
