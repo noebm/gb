@@ -47,14 +47,14 @@ runGB (GBT x) = do
 
 
 reg8index :: Reg8 -> Int
-reg8index A = 0
-reg8index F = 1
-reg8index B = 2
-reg8index C = 3
-reg8index D = 4
-reg8index E = 5
-reg8index H = 6
-reg8index L = 7
+reg8index A = 1
+reg8index F = 0
+reg8index B = 3
+reg8index C = 2
+reg8index D = 5
+reg8index E = 4
+reg8index H = 7
+reg8index L = 6
 
 reg16index :: Reg16 -> Int
 reg16index AF = 0
@@ -84,8 +84,8 @@ instance MonadIO m => MonadEmulator (GB m) where
     liftIO $ do
       let idx = ls16ToIndex ls
       let (h , l) = w ^. from word16
-      V.write addrspace idx h
-      V.write addrspace (idx + 1) l
+      V.write addrspace idx l
+      V.write addrspace (idx + 1) h
 
   load8 ls = GBT $ do
     addrspace <- asks addressSpace
@@ -94,8 +94,8 @@ instance MonadIO m => MonadEmulator (GB m) where
     addrspace <- asks addressSpace
     liftIO $ do
       let idx = ls16ToIndex ls
-      h <- V.read addrspace idx
-      l <- V.read addrspace (idx + 1)
+      l <- V.read addrspace idx
+      h <- V.read addrspace (idx + 1)
       return $ (h , l) ^. word16
 
   advCycles dt = GBT $ do
