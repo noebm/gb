@@ -4,13 +4,10 @@
 module Lib
 where
 
-import qualified Data.ByteString.Builder as Build
 import qualified Data.ByteString as B
 import qualified Data.Vector.Unboxed.Mutable as V
 
-import Data.List (transpose)
 import Data.Foldable
-import Data.Traversable
 import Data.Word
 import Data.Int
 import Data.Bits
@@ -18,7 +15,7 @@ import Data.Bits
 import Text.Printf
 
 import SDL.Video hiding (paletteColor)
-import SDL.Vect
+import SDL.Vect hiding (rotate)
 import Foreign.Ptr
 import Foreign.Storable
 
@@ -37,10 +34,6 @@ import Memory.OAM
 
 interpret :: (MonadEmulator m, MonadIO m) => Bool -> GraphicsContext -> m ()
 interpret enablePrinting gfx = do
-  -- pc <- load16 (Register16 PC)
-  -- when (pc == 0xe9) $ return () -- error "at 0xe9"
-  -- when (pc >  0xff) $ error "something happened"
-
   regs <- showRegisters
   b <- immediate8
   when enablePrinting $ do
@@ -91,7 +84,6 @@ someFunc = do
     gfx <- initializeGraphics
     f gfx
 
-
 paletteColor :: Word8 -> Word8 -> Word8
 paletteColor pal sel =
   case (pal `shiftR` fromIntegral (2 * sel)) .&. 3 of
@@ -108,14 +100,14 @@ tile tileAddress y x = do
   let yOffset = fromIntegral (y .&. 7) * 2 -- every line contains 2 bytes
   b0 <- load8 (Addr8 $ tileAddress + yOffset)
   b1 <- load8 (Addr8 $ tileAddress + yOffset + 1)
-  let xOffset = fromIntegral (x .&. 7)
+  let xOffset = fromIntegral (complement x .&. 7)
   let paletteSelect = fromIntegral $ 2 * fromEnum (b1 `testBit` xOffset) .|. fromEnum (b0 `testBit` xOffset)
   return paletteSelect
 
 bgPalette :: MonadEmulator m => m (Word8 -> Word8)
 bgPalette = do
   pal <- load8 backgroundPalette
-  return $ \w -> paletteColor pal w
+  return $ paletteColor pal
 
 drawLineBackground :: (MonadIO m, MonadEmulator m) => m (Word8 -> Word8 -> m Word8)
 drawLineBackground = do
@@ -136,7 +128,7 @@ genPixelRow :: (MonadIO m, MonadEmulator m) => Texture -> m ()
 genPixelRow im = do
   fBgrd <- drawLineBackground
   y <- load8 currentLine
-  (ptr', _) <- lockTexture im (Just $ fmap fromIntegral $ Rectangle (P $ V2 0 y) (V2 160 1))
+  (ptr', _) <- lockTexture im (Just $ fromIntegral <$> Rectangle (P $ V2 0 y) (V2 160 1))
   let ptr = castPtr ptr' :: Ptr Word8
   forM_ [0..159] $ \x -> do
     c <- fBgrd y x
