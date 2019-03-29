@@ -104,4 +104,8 @@ instance MonadIO m => MonadEmulator (GB m) where
 
   resetCycles = GBT $ do
     c <- asks clock
-    liftIO $ stToIO $ readSTRef c
+    liftIO $ stToIO $ do
+      v <- readSTRef c
+      writeSTRef c 0
+      return v
+

@@ -237,12 +237,11 @@ extendedInstruction b
     in setInstruction nbit (selectSource8 b)
   | otherwise = error $ "extendedInstruction " ++ hexbyte b ++ " not implemented"
 
-jumpRelByFlag :: MonadEmulator m => (Bool -> Bool) -> Lens' Word8 Bool -> m Word
-jumpRelByFlag g flg = do
+jumpRelByFlag :: MonadEmulator m => (Word8 -> Bool) -> m Word
+jumpRelByFlag g = do
   relAddr <- int8
   f <- load8 (Register8 F)
-  let z = f ^. flg
-  if g z
+  if g f
     then 12 <$ jumpRelative relAddr
     else return 8
 
@@ -252,7 +251,7 @@ incFlags value = do
     & flagZ .~ (value == 0)
     & flagN .~ False
     -- has a carry when the result has all zeros for bits <= 3
-    & flagH .~ not (any (value `testBit`) [0..3])
+    -- & flagH .~ not (any (value `testBit`) [0..3])
 
 decFlags value = do
   f <- load8 (Register8 F)
@@ -260,12 +259,11 @@ decFlags value = do
     & flagZ .~ (value == 0)
     & flagN .~ False
     -- has a carry when the result has all zeros for bits <= 3
-    & flagH .~ all (value `testBit`) [0..3]
+    -- & flagH .~ all (value `testBit`) [0..3]
 
 compare n = do
   a <- load8 (Register8 A)
-  f <- load8 (Register8 F)
-  store8 (Register8 F) $ f
+  modifyFlags $ \f -> f
     & flagZ .~ (a == n)
     & flagN .~ True
     & flagH .~ (a .&. 0x0F < n .&. 0x0F)
@@ -301,9 +299,9 @@ instruction b
   -- 0x01 stop
   | b == 0x01 = error "stop"
   -- 0x02 jr nz
-  | b == 0x20 = jumpRelByFlag not flagZ
+  | b == 0x20 = jumpRelByFlag (views flagZ not)
   -- 0x03 jr nc
-  | b == 0x30 = jumpRelByFlag not flagC
+  | b == 0x30 = jumpRelByFlag (views flagC not)
 
   -- [ 0x01 - 0x31 ] ld ?? , d16
   | b .&. 0x0F == 0x01 && b .&. 0xF0 <= 0x30 = do
@@ -371,8 +369,8 @@ instruction b
   | b == 0x18 = do
       jumpRelative =<< int8
       return 12
-  | b == 0x28 = jumpRelByFlag id flagZ
-  | b == 0x38 = jumpRelByFlag id flagC
+  | b == 0x28 = jumpRelByFlag (view flagZ)
+  | b == 0x38 = jumpRelByFlag (view flagC)
 
   | b .&. 0x0F == 0x09 && b .&. 0xF0 <= 0x30 = do
       error "add hl"

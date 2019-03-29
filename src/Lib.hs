@@ -8,22 +8,30 @@ import qualified Data.ByteString.Builder as Build
 import qualified Data.ByteString as B
 import qualified Data.Vector.Unboxed.Mutable as V
 
+import Data.List (transpose)
+import Data.Foldable
+import Data.Traversable
+import Data.Word
+import Data.Int
+import Data.Bits
+
 import Text.Printf
 
 import Control.Monad.IO.Class
 import Control.Monad
 
+import Graphics
 import MonadEmulator
 import GB
 import Instruction
 import Cartridge
 import Memory.MMIO
+import Memory.OAM
 
-interpret :: (MonadEmulator m, MonadIO m) => Bool -> Build.Builder -> m ()
-interpret enablePrinting bs = do
-
+interpret :: (MonadEmulator m, MonadIO m) => Bool -> GraphicsContext -> Build.Builder -> m Build.Builder
+interpret enablePrinting gfx bs = do
   pc <- load16 (Register16 PC)
-  when (pc == 0xe9) $ error "at 0xe9"
+  when (pc == 0xe9) $ return () -- error "at 0xe9"
   when (pc >  0xff) $ error "something happened"
 
   regs <- showRegisters
@@ -36,103 +44,90 @@ interpret enablePrinting bs = do
   -- when (pc > 0x0b) $ void $ liftIO getLine
   advCycles =<< instruction b
 
-  -- updateGPU
-
-  -- m <- use $ memory.mmio
-  -- (f , m') <- (`runStateT` m) $ do
-  --   updateGPU dt
-  -- assign (memory.mmio) m'
-
-  -- bytes' <- case f of
-  --   Nothing -> return bs
-  --   Just DrawLine -> do
-  --     dbytes <- genPixelRow
-  --     return $ bs <> Build.byteString dbytes
-  --   Just DrawImage -> do
-  --     let bytes = Build.toLazyByteString bs
-  --     renderGraphics bytes =<< use graphics
-  --     return mempty
-
-    -- l <- use $ memory.mmio.ly
-    -- liftIO $ putStrLn $ printf "Linenumber %d" l
-    -- ly <- use memory.mmio.ly
-    -- liftIO . print =<< use cpuState
+  lcd <- lcdEnable
+  if lcd then do
+    gpuInstr <- updateGPU
+    case gpuInstr of
+      Nothing -> return bs
+      Just DrawLine -> do
+        dbytes <- genPixelRow'
+        return $ bs <> dbytes
+      Just DrawImage -> do
+        let bytes = Build.toLazyByteString bs
+        renderGraphics bytes gfx
+        -- genPixelRow
+        return mempty
+    else return bs
 
   -- interpret enablePrinting t' bytes'
-  interpret enablePrinting bs
+  -- interpret enablePrinting gfx bs'
+
+disableBootRom :: MonadEmulator m => m Bool
+disableBootRom = (`testBit` 0) <$> load8 (Addr8 0xFF50)
+
+-- not quite correct (only works for games without mbc)
+writeCartridge cart = do
+  mem <- unsafeMemory
+  liftIO $ forM_ [0..B.length (cartridgeData cart) - 1] $ \idx ->
+    V.write mem idx (cartridgeData cart `B.index` idx)
 
 someFunc :: IO ()
 someFunc = do
   rom <- memoryBootRom
+  Just cart <- loadCartridge "./Tetris.gb"
   runGB $ do
+    writeCartridge cart
     -- copy boot rom to memory
     mem <- unsafeMemory
     liftIO $ forM_ [0..B.length rom - 1] $ \idx ->
       V.write mem idx (rom `B.index` idx)
+    -- liftIO $ do
+    --   print $ rom `B.index` 0x62
+    --   print =<< V.read mem 0x62
 
-    interpret True mempty
+    gfx <- initializeGraphics
+    let g b = g =<< interpret True gfx b
+    let f b = do
+          -- pc <- load16 (Register16 PC)
+          -- unless (pc == 0x62) $ do
+            b' <- interpret False gfx b
+            bootflag <- disableBootRom
+            when bootflag (writeCartridge cart >> g b')
+            f b'
+    f mempty
 
+-- dumpVRAM mem = liftIO $ do
+--   x <- forM [0x8000..0x9FFF] $ V.read mem
+--   print x
 
-{-
-import Control.Lens
-import Control.Monad.State
-import Text.Printf
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Builder as Build
+clearRegisters :: MonadEmulator m => m ()
+clearRegisters = do
+  forM_ [A,F,B,C,D,E,H,L] $ \r -> store8 (Register8 r) 0x00
+  forM_ [PC,SP] $ \r -> store16 (Register16 r) 0x0000
 
-import Data.Traversable
-
-import SDL.Video.Renderer
-import Data.Int
-import Data.Word
-import Data.Bits
-import Data.Bits.Lens
-
-import MonadEmulator
-import Instruction
-
-import CPUState
-import GBState
-import Memory (memoryBootRom, mmio, videoRAM)
-import MMIO
-import Graphics (renderGraphics)
-
-newtype GBT m a = GBT (StateT GBState m a)
-  deriving (Functor, Applicative, Monad, MonadState GBState, MonadIO)
-
-runGB :: Monad m => GBT m a -> GBState -> m a
-runGB (GBT act) = evalStateT act
-
-instance Monad m => MonadEmulator (GBT m) where
-  store8 (Register8 r) = assign (cpuState.reg8lens r)
-  store8 (Addr8 addr)  = writeMemory addr
-
-  load8 (Register8 r) = use (cpuState.reg8lens r)
-  load8 (Addr8 addr)  = accessMemory addr
-
-  store16 (Register16 r) dw = assign (cpuState.reg16lens r) dw
-  store16 (Addr16 addr) dw = do
-    let (hw , lw) = dw ^. from word16
-    store8 (Addr8 addr) lw
-    store8 (Addr8 $ addr + 1) hw
-
-  load16 (Register16 r) = use (cpuState.reg16lens r)
-  load16 (Addr16 addr) = do
-    lw <- load8 (Addr8 addr)
-    hw <- load8 (Addr8 $ addr + 1)
-    return $ (hw , lw) ^. word16
-
-  advCycles dt = do
-    timer += dt
-    -- reset timer after some reasonable amount of time
-    let pow24 = 16777216 -- 2 ** 24
-    timer %= \t -> if t >= pow24 then t - pow24 else t
-  resetCycles = timer <<.= 0
-  -- getCycles = use timer
+testRegisters :: (MonadEmulator m, MonadIO m) => m ()
+testRegisters = do
+  forM_ [A,F,B,C,D,E,H,L] $ \r -> do
+    store8 (Register8 r) 0xFF
+    liftIO . putStrLn =<< showRegisters
+    store8 (Register8 r) 0x00
+  forM_ [AF,BC,DE,HL,PC,SP] $ \r -> do
+    store16 (Register16 r) 0xFF00
+    liftIO . putStrLn =<< showRegisters
+    store16 (Register16 r) 0x0000
 
 colour' :: Word8 -> Int -> Word8
 colour' palette sel =
-  case (palette `shiftR` (2 * sel)) .&. 3 of
+  case (palette `shiftR` (2 * (4 - sel))) .&. 3 of
+    0 -> 255
+    1 -> 192
+    2 -> 96
+    3 -> 0
+    _ -> error "impossible"
+
+paletteColor :: Word8 -> Word8 -> Word8
+paletteColor pal sel =
+  case (pal `shiftR` fromIntegral (2 * (4 - sel))) .&. 3 of
     0 -> 255
     1 -> 192
     2 -> 96
@@ -141,45 +136,90 @@ colour' palette sel =
 
 -- location from start of videoRAM
 tileLocation :: Bool -> Word8 -> Word16
-tileLocation True  w = 0x00 + 16 * (fromIntegral w + 128)
-tileLocation False w = fromIntegral $ 0x800 + 16 * (fromIntegral w :: Int16)
+tileLocation True  w = 0x8000 + 16 * (fromIntegral w + 128)
+tileLocation False w = fromIntegral $ 0x8800 + 16 * (fromIntegral w :: Int32)
 
 -- getTile :: Word16 -> 
 
-genPixelRow :: MonadIO m => GBT m B.ByteString
-genPixelRow = do
-  sx <- use $ memory.mmio.scx
-  sy <- use $ memory.mmio.scy
-  winx <- uses (memory.mmio.wx) (\x -> x - 7)
-  winy <- use $ memory.mmio.wy
+tile :: MonadEmulator m => Word16 -> (Word8 -> Word8 -> m Word8)
+tile tileAddr y x = do
+  let yOffset = fromIntegral (y .&. 7) * 2 -- every line contains 2 bytes
+  b0 <- load8 (Addr8 $ tileAddr + yOffset)
+  b1 <- load8 (Addr8 $ tileAddr + yOffset + 1)
+  let xOffset = fromIntegral (x .&. 7)
+  let paletteSelect = fromIntegral $ 2 * fromEnum (b1 `testBit` xOffset) .|. fromEnum (b0 `testBit` xOffset)
+  return paletteSelect
 
-  winEnabled <- use $ memory.mmio.lcdc.bitAt 5
-  line <- use $ memory.mmio.ly
+bgPalette :: MonadEmulator m => m (Word8 -> Word8)
+bgPalette = do
+  pal <- load8 backgroundPalette
+  return $ \w -> paletteColor pal w
+
+drawLineBackground :: (MonadIO m, MonadEmulator m) => m (Word8 -> Word8 -> m Word8)
+drawLineBackground = do
+  -- backgroundEnabled <- backgroundDisplay
+  -- when backgroundEnabled $ do
+    sx <- load8 scrollX
+    sy <- load8 scrollY
+    liftIO $ putStrLn $ printf "sx: %02x sy: %02x" sx sy
+    -- let tileRowSize = 8
+    -- let yScale = 144 `div` tileSize -- 9
+    -- let bgrdScrollOffset = fromIntegral sx `div` tileRowSize + fromIntegral sy * yScale
+
+    bgrdBaseTableBase <- backgroundTileTableAddrBase
+    tileAddrMode      <- tilePatternAddr
+    bgrdPal           <- bgPalette
+    return $ \y x -> do
+      let y' = y + sy
+      let x' = x + sx
+      let bgrdTableIndex = fromIntegral (x' `div` 8) + 32 * fromIntegral (y' `div` 8)
+      tileIndex <- load8 $ Addr8 $ bgrdBaseTableBase + bgrdTableIndex
+      -- liftIO $ putStrLn $ printf "x: %02x y: %02x table: %04x index: %02x" x' y' (bgrdBaseTableBase + bgrdTableIndex) tileIndex
+      bgrdPal <$> tile (tileAddrMode tileIndex) y x
+
+genPixelRow' :: (MonadIO m, MonadEmulator m) => m Build.Builder
+genPixelRow' = do
+  fBgrd <- drawLineBackground
+  y <- load8 currentLine
+  fmap mconcat $ for [0..159] $ \x -> do
+    c <- fBgrd y x
+    return $ mconcat $ fmap Build.word8 [255,c,c,c]
+
+genPixelRow :: MonadEmulator m => m Build.Builder
+genPixelRow = do
+  sx <- load8 scrollX
+  sy <- load8 scrollY
+  winx <- (\x -> x - 7) <$> load8 windowX
+  winy <- load8 windowY
+
+  winEnabled <- (`testBit` 5) <$> load8 control
+  -- winEnabled <- use $ memory.mmio.lcdc.bitAt 5
+  line <- load8 currentLine -- use $ memory.mmio.ly
   let useWindow = winEnabled && winy <= line
   bgAddrBase <- do
-    a <- use $ memory.mmio.lcdc.bitAt 3
-    b <- use $ memory.mmio.lcdc.bitAt 6
-    return $ if (useWindow && b) || (not useWindow && a)
+    objTile     <- (`testBit` 3) <$> load8 control
+    windowTile  <- (`testBit` 6) <$> load8 control
+    return $ if (useWindow && windowTile) || (not useWindow && objTile)
       then 0x9C00
-      else 0x9800 -- :: Word16
-  tileMode <- use $ memory.mmio.lcdc.bitAt 4
+      else 0x9800
+  tileSelect <- (`testBit` 4) <$> load8 control
 
   let y = if useWindow then line - winy else sy - line
-  let tileRow = fromIntegral (y `div` 8) * 32
+  let tileRow = fromIntegral (y `div` 8) * 320
 
-  fmap (B.pack . concat) $ for [0..159] $ \pixel -> do
+  fmap mconcat $ for [0..159] $ \pixel -> do
     let x = if useWindow && pixel >= winx then pixel - winx else pixel + sx
     let tileCol = fromIntegral x `div` 8
-    let tileAddr = bgAddrBase + tileRow + tileCol :: Word16
+    let tileAddr = Addr8 $ bgAddrBase + tileRow + tileCol
 
-    tileLoc <- uses (memory . videoRAM . singular (ix $ fromIntegral $ tileAddr .&. 0x1FFF)) (tileLocation tileMode)
+    tileLoc <- tileLocation tileSelect <$> load8 tileAddr
+      -- uses (memory . videoRAM . singular (ix $ fromIntegral $ tileAddr .&. 0x1FFF)) (tileLocation tileMode)
     let line' = fromIntegral $ (y .&. 0x7) * 2
-    b0 <- use $ memory.videoRAM . singular (ix $ fromIntegral $ (tileLoc + line') .&. 0x1FFF)
-    b1 <- use $ memory.videoRAM . singular (ix $ fromIntegral $ (tileLoc + line' + 1) .&. 0x1FFF)
-    let colourNumber = 2 * fromEnum ((b1 ^. bitAt colour) `shiftL` 1) + fromEnum (b0 ^. bitAt colour) :: Int
-          where colour = fromIntegral $ - (fromIntegral (x `mod` 8) - 7) :: Int
-    c <- uses (memory.mmio.mmioData.singular (ix 0x47)) (\pal -> colour' pal colourNumber)
-    return [255,c,c,c]
+    b0 <- load8 (Addr8 $ tileLoc + line')
+    b1 <- load8 (Addr8 $ tileLoc + line' + 1)
+    let colourNumber = 2 * fromEnum ((b1 `testBit` colour) `shiftL` 1) + fromEnum (b0 `testBit` colour) :: Int
+          where colour = negate (fromIntegral (x `mod` 8) - 7) :: Int
+    -- c <- uses (memory.mmio.mmioData.singular (ix 0x47)) (\pal -> colour' pal colourNumber)
+    c <- (\pal -> colour' pal colourNumber) <$> load8 backgroundPalette
+    return $ mconcat $ fmap Build.word8 [255,c,c,c]
   -- return ()
-
--}

@@ -8,6 +8,7 @@ module Memory
   -- )
 where
 
+{-
 import Control.Monad.State
 import Control.Lens
 
@@ -42,13 +43,6 @@ memory cart =
   , _oam = V.replicate 0xA0 0x00
   , _mmio = defaultMMIO
   }
-
-memoryBootRom :: IO Memory
-memoryBootRom = do
-  let bootStrapName = "DMG_ROM.bin"
-  b0 <- B.readFile $ "./" ++ bootStrapName
-  let b1 = emptyRom 0x00
-  return $ memory $ b0 <> B.drop (B.length b0) b1
 
 accessMemory :: MonadState Memory m => Word16 -> m Word8
 accessMemory addr
@@ -101,3 +95,4 @@ writeMemory addr
 emptyRom :: Word8 -> B.ByteString
 emptyRom = B.replicate 0x8000
 
+-}

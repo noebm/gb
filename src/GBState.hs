@@ -1,6 +1,7 @@
 {-# LANGUAGE TemplateHaskell, FlexibleContexts, NoMonomorphismRestriction #-}
 module GBState where
 
+{-
 import Control.Monad.State
 import Control.Lens
 import Control.Monad.IO.Class
@@ -39,3 +40,5 @@ writeMemory addr w = do
   m <- use memory
   m' <- M.writeMemory addr w `execStateT` m
   assign memory m'
+
+-}
