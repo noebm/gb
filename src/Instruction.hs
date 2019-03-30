@@ -1,4 +1,3 @@
-{-# LANGUAGE RankNTypes #-}
 module Instruction
   (
     instruction
@@ -20,10 +19,10 @@ import Memory.Accessible
 -- import qualified MonadEmulator as X
 
 -- | decompose byte to xxyyyzzz
-instructionByteCodeDecompose :: Word8 -> (Word8, Word8, Word8)
-instructionByteCodeDecompose b =
-  ((b `shiftR` 5) .&. 0x3, (b `shiftR` 3) .&. 0x7, b .&. 0x7)
-{-# INLINE instructionByteCodeDecompose #-}
+byteCodeDecompose :: Word8 -> (Word8, Word8, Word8)
+byteCodeDecompose b =
+  ((b `shiftR` 6) .&. 0x3, (b `shiftR` 3) .&. 0x7, b .&. 0x7)
+{-# INLINE byteCodeDecompose #-}
 
 data Source8 = Source8 Reg8 | PointerHL
   deriving (Show, Eq)
@@ -209,7 +208,6 @@ rl x = do
   rotateFlags x' c'
   return x'
 
-
 extendedInstruction :: MonadEmulator m => Word8 -> m Word
 extendedInstruction b = case x of
   0 -> case y of
@@ -218,16 +216,17 @@ extendedInstruction b = case x of
     2 -> withSource rl
     3 -> withSource rr
     _ -> error "extended instruction not implemented"
-  1 -> bitInstruction (fromIntegral y) source
-  2 -> resetInstruction (fromIntegral y) source
-  3 -> setInstruction (fromIntegral y) source
+  1 -> bitInstruction bit' reg
+  2 -> resetInstruction bit' reg
+  3 -> setInstruction bit' reg
   _ -> error "impossible"
   where
-  (x,y,z) = instructionByteCodeDecompose b
+  (x,y,z) = byteCodeDecompose b
+  bit' = fromIntegral y
   withSource f = do
-    getSource8 source >>= f >>= writeSource8 source
-    return (timingSource8 source * 2)
-  source = case z of
+    getSource8 reg >>= f >>= writeSource8 reg
+    return instrTime
+  reg = case z of
     0 -> Source8 B
     1 -> Source8 C
     2 -> Source8 D
@@ -237,6 +236,9 @@ extendedInstruction b = case x of
     6 -> PointerHL
     7 -> Source8 A
     _ -> error "impossible"
+  instrTime
+    | z == 6    = 16
+    | otherwise = 8
 
 jumpRelByFlag :: MonadEmulator m => (Word8 -> Bool) -> m Word
 jumpRelByFlag g = do
@@ -294,284 +296,282 @@ sub value = do
 
 -- instruction :: (MonadState s m, HasRegisters s, HasRom s) => Word8 -> m Timing
 instruction :: MonadEmulator m => Word8 -> m Word
-instruction b
-  -- 0x00 nop
-  | b == 0x00 = return 4
-  -- 0x01 stop
-  | b == 0x01 = error "stop"
-  -- 0x02 jr nz
-  | b == 0x20 = jumpRelByFlag (views flagZ not)
-  -- 0x03 jr nc
-  | b == 0x30 = jumpRelByFlag (views flagC not)
+instruction b = case x of
+    -- 0x00 nop
+  0 | b == 0x00 -> return 4
+    -- 0x01 stop
+    | b == 0x01 -> error "stop"
+    -- 0x02 jr nz
+    | b == 0x20 -> jumpRelByFlag (views flagZ not)
+    -- 0x03 jr nc
+    | b == 0x30 -> jumpRelByFlag (views flagC not)
 
-  -- [ 0x01 - 0x31 ] ld ?? , d16
-  | b .&. 0x0F == 0x01 && b .&. 0xF0 <= 0x30 = do
-      d16 <- ushort
-      let s = selectSource16 b
-      writeSource16 s d16
-      return 12
+    -- [ 0x01 - 0x31 ] ld ?? , d16
+    | b .&. 0x0F == 0x01 && b .&. 0xF0 <= 0x30 -> do
+        d16 <- ushort
+        let s = selectSource16 b
+        writeSource16 s d16
+        return 12
 
-  -- [ 0x02 - 0x32 ] ld (??), A
-  | b .&. 0x0F == 0x02 && b .&. 0xF0 <= 0x30 = do
-      addr <- getSourcePtr (selectSourcePtr b)
-      store8 (Addr8 addr) =<< load8 (Register8 A)
-      return 8
+    -- [ 0x02 - 0x32 ] ld (??), A
+    | b .&. 0x0F == 0x02 && b .&. 0xF0 <= 0x30 -> do
+        addr <- getSourcePtr (selectSourcePtr b)
+        store8 (Addr8 addr) =<< load8 (Register8 A)
+        return 8
 
-  -- [ 0x03 - 0x33 ] inc ??
-  | b .&. 0x0F == 0x03 && b .&. 0xF0 <= 0x30 = do
-      modifySource16 (selectSource16 b) (+1)
-      return 8
+    -- [ 0x03 - 0x33 ] inc ??
+    | b .&. 0x0F == 0x03 && b .&. 0xF0 <= 0x30 -> do
+        modifySource16 (selectSource16 b) (+1)
+        return 8
 
-  -- inc
-  | b .&. 0x0F == 0x04 && b .&. 0xF0 <= 0x30 = do
+    -- inc
+    | b .&. 0x0F == 0x04 && b .&. 0xF0 <= 0x30 -> do
+        let toReg   = selectSource8 $ b `div` 8
+        r <- getSource8 toReg
+        let n = r + 1
+        writeSource8 toReg n
+        incFlags n
+        return $ if toReg == PointerHL
+          then 12
+          else 4
+
+    -- dec
+    | b .&. 0x0F == 0x05 && b .&. 0xF0 <= 0x30 -> do
+        let toReg   = selectSource8 $ b `div` 8
+        r <- getSource8 toReg
+        let n = r - 1
+        writeSource8 toReg n
+        decFlags n
+        return $ if toReg == PointerHL
+          then 12
+          else 4
+
+    -- ld
+    | b .&. 0x0F == 0x06 && b .&. 0xF0 <= 0x30 -> do
+        let toReg   = selectSource8 $ b `div` 8
+        -- error $ show toReg
+        writeSource8 toReg =<< byte
+        return $ 4 + timingSource8 toReg
+
+    -- rlca
+    | b == 0x07 -> do
+        let r = Register8 A
+        store8 r =<< rlc =<< load8 r
+        return 4
+    -- rla
+    | b == 0x17 -> do
+        let r = Register8 A
+        store8 r =<< rl =<< load8 r
+        return 4
+    | b == 0x27 -> error "daa"
+    | b == 0x37 -> error "scf"
+
+    | b == 0x08 -> error "ld a16"
+
+    -- jr
+    | b == 0x18 -> do
+        jumpRelative =<< int8
+        return 12
+    | b == 0x28 -> jumpRelByFlag (view flagZ)
+    | b == 0x38 -> jumpRelByFlag (view flagC)
+
+    | b .&. 0x0F == 0x09 && b .&. 0xF0 <= 0x30 -> do
+        error "add hl"
+
+    -- [ 0x0a - 0x3a ] ld a , (??)
+    | b .&. 0x0F == 0x0A && b .&. 0xF0 <= 0x30 -> do
+        let toReg = selectSourcePtr b
+        store8 (Register8 A) =<< load8 . Addr8 =<< getSourcePtr toReg
+        return 8
+
+    | b .&. 0x0F == 0x0B && b .&. 0xF0 <= 0x30 -> do
+        error "dec ??"
+
+    -- [ 0x0e - 0x3e ] inc ?
+    | b .&. 0x0F == 0x0C && b .&. 0xF0 <= 0x30 -> do
+        let toReg   = selectSource8 $ b `div` 8
+        n <- (+1) <$> getSource8 toReg
+        writeSource8 toReg n
+        f <- load8 (Register8 F)
+        store8 (Register8 F) $ f
+          & flagZ .~ (n == 0)
+          & flagN .~ False
+          -- has a carry when the result has all zeros for bits <= 3
+          & flagH .~ not (any (n `testBit`) [0..3])
+        return 4
+
+    -- [ 0x0e - 0x3e ] dec ?
+    | b .&. 0x0F == 0x0D && b .&. 0xF0 <= 0x30 -> do
+        let toReg   = selectSource8 $ b `div` 8
+        n <- (\k -> k - 1) <$> getSource8 toReg
+        writeSource8 toReg n
+        f <- load8 (Register8 F)
+        store8 (Register8 F) $ f
+          & flagZ .~ (n == 0)
+          & flagN .~ True
+          -- has a carry when the result has all zeros for bits <= 3
+          & flagH .~ all (n `testBit`) [0..3]
+
+        return 4
+
+    -- [ 0x0e - 0x3e ] ld ? , d8
+    | b .&. 0x0F == 0x0E && b .&. 0xF0 <= 0x30 -> do
       let toReg   = selectSource8 $ b `div` 8
-      r <- getSource8 toReg
-      let n = r + 1
-      writeSource8 toReg n
-      incFlags n
-      return $ if toReg == PointerHL
-        then 12
-        else 4
-
-  -- dec
-  | b .&. 0x0F == 0x05 && b .&. 0xF0 <= 0x30 = do
-      let toReg   = selectSource8 $ b `div` 8
-      r <- getSource8 toReg
-      let n = r - 1
-      writeSource8 toReg n
-      decFlags n
-      return $ if toReg == PointerHL
-        then 12
-        else 4
-
-  -- ld
-  | b .&. 0x0F == 0x06 && b .&. 0xF0 <= 0x30 = do
-      let toReg   = selectSource8 $ b `div` 8
-      -- error $ show toReg
       writeSource8 toReg =<< byte
-      return $ 4 + timingSource8 toReg
-
-  -- rlca
-  | b == 0x07 = do
-      let r = Register8 A
-      store8 r =<< rlc =<< load8 r
-      return 4
-  -- rla
-  | b == 0x17 = do
-      let r = Register8 A
-      store8 r =<< rl =<< load8 r
-      return 4
-  | b == 0x27 = error "daa"
-  | b == 0x37 = error "scf"
-
-  | b == 0x08 = error "ld a16"
-
-  -- jr
-  | b == 0x18 = do
-      jumpRelative =<< int8
-      return 12
-  | b == 0x28 = jumpRelByFlag (view flagZ)
-  | b == 0x38 = jumpRelByFlag (view flagC)
-
-  | b .&. 0x0F == 0x09 && b .&. 0xF0 <= 0x30 = do
-      error "add hl"
-
-  -- [ 0x0a - 0x3a ] ld a , (??)
-  | b .&. 0x0F == 0x0A && b .&. 0xF0 <= 0x30 = do
-      let toReg = selectSourcePtr b
-      store8 (Register8 A) =<< load8 . Addr8 =<< getSourcePtr toReg
+      -- should only be a normal register
       return 8
 
-  | b .&. 0x0F == 0x0B && b .&. 0xF0 <= 0x30 = do
-      error "dec ??"
-
-  -- [ 0x0e - 0x3e ] inc ?
-  | b .&. 0x0F == 0x0C && b .&. 0xF0 <= 0x30 = do
-      let toReg   = selectSource8 $ b `div` 8
-      n <- (+1) <$> getSource8 toReg
-      writeSource8 toReg n
-      f <- load8 (Register8 F)
-      store8 (Register8 F) $ f
-        & flagZ .~ (n == 0)
-        & flagN .~ False
-        -- has a carry when the result has all zeros for bits <= 3
-        & flagH .~ not (any (n `testBit`) [0..3])
-      return 4
-
-  -- [ 0x0e - 0x3e ] dec ?
-  | b .&. 0x0F == 0x0D && b .&. 0xF0 <= 0x30 = do
-      let toReg   = selectSource8 $ b `div` 8
-      n <- (\k -> k - 1) <$> getSource8 toReg
-      writeSource8 toReg n
-      f <- load8 (Register8 F)
-      store8 (Register8 F) $ f
-        & flagZ .~ (n == 0)
-        & flagN .~ True
-        -- has a carry when the result has all zeros for bits <= 3
-        & flagH .~ all (n `testBit`) [0..3]
-
-      return 4
-
-  -- [ 0x0e - 0x3e ] ld ? , d8
-  | b .&. 0x0F == 0x0E && b .&. 0xF0 <= 0x30 = do
-    let toReg   = selectSource8 $ b `div` 8
-    writeSource8 toReg =<< byte
-    -- should only be a normal register
-    return 8
-
-  | b == 0x0F = do
-      let r = Register8 A
-      store8 r =<< rrc =<< load8 r
-      return 4
-    -- error "rrca"
-  | b == 0x1F = do
-      let r = Register8 A
-      store8 r =<< rr =<< load8 r
-      return 4
-  | b == 0x2F = error "cpl"
-  | b == 0x3F = error "ccf"
+    | b == 0x0F -> do
+        let r = Register8 A
+        store8 r =<< rrc =<< load8 r
+        return 4
+      -- error "rrca"
+    | b == 0x1F -> do
+        let r = Register8 A
+        store8 r =<< rr =<< load8 r
+        return 4
+    | b == 0x2F -> error "cpl"
+    | b == 0x3F -> error "ccf"
 
   -- [ 0x40 - 0x7F ] ld ?, ?
-  | b >= 0x40 && b < 0x80 && b /= 0x76 = do
-      let toReg   = selectSource8 $ (b - 0x40) `div` 8
-      let fromReg = selectSource8   b
-      writeSource8 toReg =<< getSource8 fromReg
-      return $ max (timingSource8 toReg) (timingSource8 fromReg)
+  1 -> if b == 0x76 then error "halt"
+      else do
+        writeSource8 (reg y) =<< getSource8 (reg z)
+        return $ max (regtime y) (regtime z)
 
-  | b == 0x76 = error "halt"
+    -- add
+  2 -> case y of
+    0 -> arith add
+    -- adc XXX might overflow
+    1 -> arithCarry add
+    -- sub
+    2 -> arith sub
+    -- sbc XXX might overflow
+    3 -> arithCarry sub
 
-  -- add
-  | b .&. 0xF0 == 0x80 && b .&. 0x0F < 0x08 = do
-      let reg = selectSource8 b
-      add =<< getSource8 reg
-      return $ timingSource8 reg
-  -- adc XXX might overflow
-  | b .&. 0xF0 == 0x80 && b .&. 0x0F >= 0x08 = do
-      let reg = selectSource8 b
-      value <- getSource8 reg
-      c <- view flagC <$> load8 (Register8 F)
-      -- c <- use (registers.flagC)
-      let value' = value + if c then 1 else 0
-      add value'
-      return $ timingSource8 reg
-  -- sub
-  | b .&. 0xF0 == 0x90 && b .&. 0x0F < 0x08 = do
-      let reg = selectSource8 b
-      sub =<< getSource8 reg
-      return $ timingSource8 reg
-  -- sbc XXX might overflow
-  | b .&. 0xF0 == 0x90 && b .&. 0x0F < 0x08 = do
-      let reg = selectSource8 b
-      value <- getSource8 reg
-      c <- view flagC <$> load8 (Register8 F)
-      let value' = value + if c then 1 else 0
-      sub value'
-      return $ timingSource8 reg
+    -- and
+    4 -> logicOp b (.&.) $ \(_a , a') _value x -> x
+          & flagZ .~ (a' == 0)
+          & flagN .~ False
+          & flagH .~ True
+          & flagC .~ False
 
-  -- and
-  | b .&. 0xF0 == 0xA0 && b .&. 0x0F < 0x08 = do
-      logicOp b (.&.) $ \(_a , a') _value x -> x
-        & flagZ .~ (a' == 0)
-        & flagN .~ False
-        & flagH .~ True
-        & flagC .~ False
+    -- xor
+    5 -> logicOp b xor $ \(_a , a') _value x -> x
+          & flagZ .~ (a' == 0)
+          & flagN .~ False
+          & flagH .~ False
+          & flagC .~ False
 
-  -- xor
-  | b .&. 0xF0 == 0xA0 && b .&. 0x0F >= 0x08 = do
-      logicOp b xor $ \(_a , a') _value x -> x
-        & flagZ .~ (a' == 0)
-        & flagN .~ False
-        & flagH .~ False
-        & flagC .~ False
+    -- [ 0xb0 - 0xb7 ] or
+    6 -> logicOp b (.|.) $ \(_a , a') _value x -> x
+          & flagZ .~ (a' == 0)
+          & flagN .~ False
+          & flagH .~ False
+          & flagC .~ False
 
-  -- [ 0xb0 - 0xb7 ] or
-  | b .&. 0xF0 == 0xB0 && b .&. 0x0F < 0x08 = do
-      logicOp b (.|.) $ \(_a , a') _value x -> x
-        & flagZ .~ (a' == 0)
-        & flagN .~ False
-        & flagH .~ False
-        & flagC .~ False
+    -- [ 0xb8 - 0xbf ] cp
+    7 -> arith compare
+    _ -> error "impossible"
 
-  -- [ 0xb8 - 0xbf ] cp
-  | b .&. 0xF0 == 0xB0 && b .&. 0x0F >= 0x08 = do
-      let reg = selectSource8 b
-      n <- getSource8 reg
-      compare n
-      return $ timingSource8 reg
+  3 | b == 0xC0 -> error "ret nz"
+    | b == 0xD0 -> error "ret nc"
 
-  | b == 0xC0 = error "ret nz"
-  | b == 0xD0 = error "ret nc"
+    | b == 0xE0 -> do
+        n <- byte
+        let addr = (0xFF , n) ^. word16
+        store8 (Addr8 addr) =<< load8 (Register8 A)
+        return 12
 
-  | b == 0xE0 = do
-      n <- byte
-      let addr = (0xFF , n) ^. word16
-      store8 (Addr8 addr) =<< load8 (Register8 A)
-      return 12
+    | b == 0xF0 -> do
+        n <- byte
+        let addr = (0xFF , n) ^. word16
+        store8 (Register8 A) =<< load8 (Addr8 addr)
+        return 12
 
-  | b == 0xF0 = do
-      n <- byte
-      let addr = (0xFF , n) ^. word16
-      store8 (Register8 A) =<< load8 (Addr8 addr)
-      return 12
+    | b .&. 0x0F == 0x01 && b .&. 0xF0 >= 0xC0 -> do
+        store16 (Register16 $ selectStack16 b) =<< pop
+        return 12
 
-  | b .&. 0x0F == 0x01 && b .&. 0xF0 >= 0xC0 = do
-      store16 (Register16 $ selectStack16 b) =<< pop
-      return 12
+    | b == 0xe2 -> do
+        a <- load8 (Register8 A)
+        c <- load8 (Register8 C)
+        let addr = (0xFF , c) ^. word16
+        store8 (Addr8 addr) a
+        return 8
 
-  | b == 0xe2 = do
-      a <- load8 (Register8 A)
-      c <- load8 (Register8 C)
-      let addr = (0xFF , c) ^. word16
-      store8 (Addr8 addr) a
-      return 8
+    | b == 0xf2 -> do
+        c <- load8 (Register8 C)
+        let addr = (0xFF , c) ^. word16
+        store8 (Register8 A) =<< load8 (Addr8 addr)
+        return 8
 
-  | b == 0xf2 = do
-      c <- load8 (Register8 C)
-      let addr = (0xFF , c) ^. word16
-      store8 (Register8 A) =<< load8 (Addr8 addr)
-      return 8
+    | b .&. 0x0F == 0x05 && b .&. 0xF0 >= 0xc0 -> do
+        push =<< load16 (Register16 $ selectStack16 b)
+        return 16
 
-  | b .&. 0x0F == 0x05 && b .&. 0xF0 >= 0xc0 = do
-      push =<< load16 (Register16 $ selectStack16 b)
-      return 16
+    -- ret
+    | b == 0xc9 -> do
+        ret
+        return 16
 
-  -- ret
-  | b == 0xc9 = do
-      ret
-      return 16
+    | b == 0xea -> do
+        addr <- ushort
+        store8 (Addr8 addr) =<< load8 (Register8 A)
+        return 16
 
-  | b == 0xea = do
-      addr <- ushort
-      store8 (Addr8 addr) =<< load8 (Register8 A)
-      return 16
+    | b == 0xfa -> do
+        addr <- ushort
+        store8 (Register8 A) =<< load8 (Addr8 addr)
+        return 16
 
-  | b == 0xfa = do
-      addr <- ushort
-      store8 (Register8 A) =<< load8 (Addr8 addr)
-      return 16
-
-  -- 0xcb instruction
-  | b == 0xcb = extendedInstruction =<< byte
-  -- call
-  | b == 0xcd = do
-      call =<< ushort
-      return 24
+    -- 0xcb instruction
+    | b == 0xcb -> extendedInstruction =<< byte
+    -- call
+    | b == 0xcd -> do
+        call =<< ushort
+        return 24
 
 
-  | b == 0xFE = do
-      n <- byte
-      compare n
-      return 8
+    | b == 0xFE -> do
+        n <- byte
+        compare n
+        return 8
 
-  | b == 0xC3 = do
-      jump =<< ushort
-      return 16
+    | b == 0xC3 -> do
+        jump =<< ushort
+        return 16
 
-  -- disable interrupts
-  | b == 0xF3 = do
-      store8 (Addr8 0xFFFF) 0x00
-      return 4
+    -- disable interrupts
+    | b == 0xF3 -> do
+        store8 (Addr8 0xFFFF) 0x00
+        return 4
 
-  | otherwise = do
-      pc <- load16 (Register16 PC)
-      error $ "instruction " ++ hexbyte b ++ " not implemented at " ++ hexushort (pc - 1)
+  _ -> do
+        pc <- load16 (Register16 PC)
+        error $ "instruction " ++ hexbyte b ++ " not implemented at " ++ hexushort (pc - 1)
+  where
+  (x,y,z) = byteCodeDecompose b
+  reg w = case w of
+    0 -> Source8 B
+    1 -> Source8 C
+    2 -> Source8 D
+    3 -> Source8 E
+    4 -> Source8 H
+    5 -> Source8 L
+    6 -> PointerHL
+    7 -> Source8 A
+    _ -> error "impossible"
+
+  regtime w = if w == 6 then 8 else 4
+
+  arith f = do
+    f =<< getSource8 (reg z)
+    return $ regtime z
+
+  arithCarry f = do
+    value <- getSource8 (reg z)
+    c <- view flagC <$> load8 (Register8 F)
+    let value' = value + if c then 1 else 0
+    f value'
+    return $ regtime z
