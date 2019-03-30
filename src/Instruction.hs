@@ -1,5 +1,9 @@
 {-# LANGUAGE RankNTypes #-}
-module Instruction where
+module Instruction
+  (
+    instruction
+  )
+where
 
 import Prelude hiding (compare)
 import Numeric
@@ -15,10 +19,16 @@ import Memory.Accessible
 -- import MonadEmulator hiding (load8,load16,store8,store16)
 -- import qualified MonadEmulator as X
 
+-- | decompose byte to xxyyyzzz
+instructionByteCodeDecompose :: Word8 -> (Word8, Word8, Word8)
+instructionByteCodeDecompose b =
+  ((b `shiftR` 5) .&. 0x3, (b `shiftR` 3) .&. 0x7, b .&. 0x7)
+{-# INLINE instructionByteCodeDecompose #-}
+
 data Source8 = Source8 Reg8 | PointerHL
   deriving (Show, Eq)
 
-data Source16 = Source16 Reg16
+newtype Source16 = Source16 Reg16
   deriving (Show, Eq)
 
 data SourcePtr = PtrBC | PtrDE | PtrHLi | PtrHLd
@@ -199,46 +209,34 @@ rl x = do
   rotateFlags x' c'
   return x'
 
--- extendedInstruction :: (MonadState s m, HasRegisters s, HasRom s, MemoryRanges s) => Word8 -> m Timing
-extendedInstruction b
-  -- rlc
-  | b < 0x08              = do
-      let s = selectSource8 b
-      getSource8 s >>= rlc >>= writeSource8 s
-      return $ timingSource8 s * 2
-  -- rrc
-  | b >= 0x08 && b < 0x10 = do
-      let s = selectSource8 b
-      getSource8 s >>= rrc >>= writeSource8 s
-      return $ timingSource8 s * 2
 
-  -- rl
-  | b >= 0x10 && b < 0x18 = do
-      let s = selectSource8 b
-      getSource8 s >>= rl >>= writeSource8 s
-      return $ timingSource8 s * 2
-  -- rr
-  | b >= 0x18 && b < 0x20 = do
-      let s = selectSource8 b
-      getSource8 s >>= rr >>= writeSource8 s
-      return $ timingSource8 s * 2
-
-  | b >= 0x20 && b < 0x28 = error "sla"
-  | b >= 0x28 && b < 0x30 = error "sra"
-
-  | b >= 0x30 && b < 0x38 = error "swap"
-  | b >= 0x38 && b < 0x40 = error "srl"
-
-  | b >= 0x40 && b < 0x80 =
-    let nbit = fromIntegral $ (b - 0x40) `div` 8
-    in bitInstruction nbit (selectSource8 b)
-  | b >= 0x80 && b < 0xC0 =
-    let nbit = fromIntegral $ (b - 0x80) `div` 8
-    in resetInstruction nbit (selectSource8 b)
-  | b >= 0xC0 =
-    let nbit = fromIntegral $ (b - 0xC0) `div` 8
-    in setInstruction nbit (selectSource8 b)
-  | otherwise = error $ "extendedInstruction " ++ hexbyte b ++ " not implemented"
+extendedInstruction :: MonadEmulator m => Word8 -> m Word
+extendedInstruction b = case x of
+  0 -> case y of
+    0 -> withSource rlc
+    1 -> withSource rrc
+    2 -> withSource rl
+    3 -> withSource rr
+    _ -> error "extended instruction not implemented"
+  1 -> bitInstruction (fromIntegral y) source
+  2 -> resetInstruction (fromIntegral y) source
+  3 -> setInstruction (fromIntegral y) source
+  _ -> error "impossible"
+  where
+  (x,y,z) = instructionByteCodeDecompose b
+  withSource f = do
+    getSource8 source >>= f >>= writeSource8 source
+    return (timingSource8 source * 2)
+  source = case z of
+    0 -> Source8 B
+    1 -> Source8 C
+    2 -> Source8 D
+    3 -> Source8 E
+    4 -> Source8 H
+    5 -> Source8 L
+    6 -> PointerHL
+    7 -> Source8 A
+    _ -> error "impossible"
 
 jumpRelByFlag :: MonadEmulator m => (Word8 -> Bool) -> m Word
 jumpRelByFlag g = do
