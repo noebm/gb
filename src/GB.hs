@@ -75,27 +75,32 @@ ls16ToIndex (Register16 r) = rbase + reg16index r
 ls16ToIndex (Addr16 addr) = fromIntegral addr
 
 instance MonadIO m => MonadEmulator (GB m) where
+  {-# INLINE store8 #-}
   store8 ls b = GBT $ do
     addrspace <- asks addressSpace
-    liftIO $ V.write addrspace (ls8ToIndex ls) b
+    liftIO $ V.unsafeWrite addrspace (ls8ToIndex ls) b
 
+  {-# INLINE store16 #-}
   store16 ls w = GBT $ do
     addrspace <- asks addressSpace
     liftIO $ do
       let idx = ls16ToIndex ls
       let (h , l) = w ^. from word16
-      V.write addrspace idx l
-      V.write addrspace (idx + 1) h
+      V.unsafeWrite addrspace idx l
+      V.unsafeWrite addrspace (idx + 1) h
 
+  {-# INLINE load8 #-}
   load8 ls = GBT $ do
     addrspace <- asks addressSpace
-    liftIO $ V.read addrspace (ls8ToIndex ls)
+    liftIO $ V.unsafeRead addrspace (ls8ToIndex ls)
+
+  {-# INLINE load16 #-}
   load16 ls = GBT $ do
     addrspace <- asks addressSpace
     liftIO $ do
       let idx = ls16ToIndex ls
-      l <- V.read addrspace idx
-      h <- V.read addrspace (idx + 1)
+      l <- V.unsafeRead addrspace idx
+      h <- V.unsafeRead addrspace (idx + 1)
       return $ (h , l) ^. word16
 
   advCycles dt = GBT $ do
