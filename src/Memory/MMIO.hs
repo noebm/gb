@@ -49,7 +49,7 @@ updateGPU = do
   advCycles t'
   store8 currentLine l'
   for_ mode' $ \m -> store8 status (m .|. (stat .&. 0xFC))
-  return $ case True of
+  return $! case True of
     _ | mode' == Just HBlank && mode == VRAM   -> Just DrawLine
       -- {}| mode' == Just OAM    && mode == VBlank -> Just DrawLine
       | mode' == Just VBlank && mode == HBlank -> Just DrawImage
@@ -65,9 +65,9 @@ Bit1  Color #0 transparency in the window     | SOLID         | TRANSPARENT
 Bit0  Background display
 -}
 data LCDConfig = LCDConfig
-  -- { windowTileTableAddr :: Word8 -> m Word16
-  -- , windowEnabled :: Bool
-  { backgroundTileIndex :: Word8 -> Word8 -> LoadStore8
+  { windowTileTableIndex :: Word8 -> Word8 -> LoadStore8 -- m Word16
+  , windowEnabled :: Bool
+  , backgroundTileIndex :: Word8 -> Word8 -> LoadStore8
   , backgroundEnabled :: Bool
   , tileAddr :: Word8 -> Word16
   -- , spriteSize :: Word8
@@ -80,10 +80,16 @@ lcdConfig = do
   return $ do
     guard (c `testBit` 7)
     return $ LCDConfig
-      { backgroundTileIndex = \y x -> do
+      { windowTileTableIndex = \y x ->
+          let tableIndex = fromIntegral (x `div` 8) + fromIntegral (y `div` 8)
+          -- let tableIndex = fromIntegral (x `div` 8) + 32 * fromIntegral (y `div` 8)
+              tableBase = if c `testBit` 6 then 0x9C00 else 0x9800
+          in Addr8 $ tableBase + tableIndex
+      , windowEnabled = c `testBit` 5
+      , backgroundTileIndex = \y x ->
           let bgrdTableIndex = fromIntegral (x `div` 8) + 32 * fromIntegral (y `div` 8)
-          let bgrdTableBase = if c `testBit` 3 then 0x9C00 else 0x9800
-          Addr8 $ bgrdTableBase + bgrdTableIndex
+              bgrdTableBase = if c `testBit` 3 then 0x9C00 else 0x9800
+          in Addr8 $ bgrdTableBase + bgrdTableIndex
       , backgroundEnabled = c `testBit` 0
       , tileAddr = if c `testBit` 4
         then \idx -> 0x8000 + fromIntegral idx `shiftL` 4
@@ -93,14 +99,6 @@ lcdConfig = do
       }
 
 {-
-windowTileTableAddBase :: MonadEmulator m => m Word16
-windowTileTableAddBase = do
-  wndMode <- (`testBit` 6) <$> load8 control
-  return $ if wndMode then 0x9C00 else 0x9800
-
-windowDisplay :: MonadEmulator m => m Bool
-windowDisplay = (`testBit` 5) <$> load8 control
-
 -- sprite display?
 -- colorZeroTransparent :: MonadEmulator m => m Bool
 -- colorZeroTransparent = (`testBit` 1) <$> load8 control
