@@ -39,19 +39,6 @@ hexbyte w = ("0x" ++) . showHex w $ ""
 hexushort :: Word16 -> String
 hexushort w = ("0x" ++) . showHex w $ ""
 
--- selectSource8 :: Word8 -> Source8
-selectSource8 :: Word8 -> Source8
-selectSource8 b
-  | b .&. 0x07 == 0x00 = Source8 B
-  | b .&. 0x07 == 0x01 = Source8 C
-  | b .&. 0x07 == 0x02 = Source8 D
-  | b .&. 0x07 == 0x03 = Source8 E
-  | b .&. 0x07 == 0x04 = Source8 H
-  | b .&. 0x07 == 0x05 = Source8 L
-  | b .&. 0x07 == 0x06 = PointerHL
-  | b .&. 0x07 == 0x07 = Source8 A
-  | otherwise = error "selectSource8: no known register"
-
 selectSource16 :: Word8 -> Source16
 selectSource16 b
   | b .&. 0x30 == 0x00 = Source16 BC
@@ -93,12 +80,11 @@ modifyFlags g = do
   store8 rF $ g flags
 
 logicOp :: (MonadEmulator m)
-        => Word8
+        => Source8
         -> (Word8 -> Word8 -> Word8)
         -> ((Word8, Word8) -> Word8 -> (Word8 -> Word8)) -- ^ (old , new) delta 
         -> m Word
-logicOp b op flagChange = do
-  let reg = selectSource8 b
+logicOp reg op flagChange = do
   value <- getSource8 reg
   a <- load8 (Register8 A)
   let a' = a `op` value
@@ -326,7 +312,7 @@ instruction b = case x of
 
     -- inc
     | b .&. 0x0F == 0x04 && b .&. 0xF0 <= 0x30 -> do
-        let toReg   = selectSource8 $ b `div` 8
+        let toReg   = reg y
         r <- getSource8 toReg
         let n = r + 1
         writeSource8 toReg n
@@ -337,7 +323,7 @@ instruction b = case x of
 
     -- dec
     | b .&. 0x0F == 0x05 && b .&. 0xF0 <= 0x30 -> do
-        let toReg   = selectSource8 $ b `div` 8
+        let toReg   = reg y
         r <- getSource8 toReg
         let n = r - 1
         writeSource8 toReg n
@@ -348,10 +334,8 @@ instruction b = case x of
 
     -- ld
     | b .&. 0x0F == 0x06 && b .&. 0xF0 <= 0x30 -> do
-        let toReg   = selectSource8 $ b `div` 8
-        -- error $ show toReg
-        writeSource8 toReg =<< byte
-        return $ 4 + timingSource8 toReg
+        writeSource8 (reg y) =<< byte
+        return $ 4 + regtime y
 
     -- rlca
     | b == 0x07 -> do
@@ -389,7 +373,7 @@ instruction b = case x of
 
     -- [ 0x0e - 0x3e ] inc ?
     | b .&. 0x0F == 0x0C && b .&. 0xF0 <= 0x30 -> do
-        let toReg   = selectSource8 $ b `div` 8
+        let toReg   = reg y
         n <- (+1) <$> getSource8 toReg
         writeSource8 toReg n
         f <- load8 (Register8 F)
@@ -402,7 +386,7 @@ instruction b = case x of
 
     -- [ 0x0e - 0x3e ] dec ?
     | b .&. 0x0F == 0x0D && b .&. 0xF0 <= 0x30 -> do
-        let toReg   = selectSource8 $ b `div` 8
+        let toReg   = reg y
         n <- (\k -> k - 1) <$> getSource8 toReg
         writeSource8 toReg n
         f <- load8 (Register8 F)
@@ -416,10 +400,8 @@ instruction b = case x of
 
     -- [ 0x0e - 0x3e ] ld ? , d8
     | b .&. 0x0F == 0x0E && b .&. 0xF0 <= 0x30 -> do
-      let toReg   = selectSource8 $ b `div` 8
-      writeSource8 toReg =<< byte
-      -- should only be a normal register
-      return 8
+      writeSource8 (reg y) =<< byte
+      return $ 4 + regtime y
 
     | b == 0x0F -> do
         let r = Register8 A
@@ -450,21 +432,21 @@ instruction b = case x of
     3 -> arithCarry sub
 
     -- and
-    4 -> logicOp b (.&.) $ \(_a , a') _value x -> x
+    4 -> logicOp (reg z) (.&.) $ \(_a , a') _value x -> x
           & flagZ .~ (a' == 0)
           & flagN .~ False
           & flagH .~ True
           & flagC .~ False
 
     -- xor
-    5 -> logicOp b xor $ \(_a , a') _value x -> x
+    5 -> logicOp (reg z) xor $ \(_a , a') _value x -> x
           & flagZ .~ (a' == 0)
           & flagN .~ False
           & flagH .~ False
           & flagC .~ False
 
     -- [ 0xb0 - 0xb7 ] or
-    6 -> logicOp b (.|.) $ \(_a , a') _value x -> x
+    6 -> logicOp (reg z) (.|.) $ \(_a , a') _value x -> x
           & flagZ .~ (a' == 0)
           & flagN .~ False
           & flagH .~ False
