@@ -11,6 +11,8 @@ import qualified MonadEmulator as X
 
 import Control.Monad (when)
 
+import Text.Printf
+
 import Data.Word
 import Data.Bits
 
@@ -50,7 +52,7 @@ load8 x@(Addr8 addr)
   | echoRam addr        = X.load8 . Addr8 $ addr - 0x2000
   | vram addr           = tryAccess vramCheck
   | oam addr            = tryAccess oamCheck
-  | otherwise           = undefined
+  | otherwise            = error $ printf "load8 access to 0x%04x" addr
   where tryAccess check = do
           f <- check
           if f then X.load8 x else return 0xFF
@@ -62,7 +64,7 @@ load16 x@(Addr16 addr)
   | echoRam addr        = X.load16 . Addr16 $ addr - 0x2000
   | vram addr           = tryAccess vramCheck
   | oam addr            = tryAccess oamCheck
-  | otherwise           = undefined
+  | otherwise            = error $ printf "load16 access to 0x%04x" addr
   where tryAccess check = do
           f <- check
           if f then X.load16 x else return 0xFF
@@ -74,10 +76,15 @@ store8 x@(Addr8 addr)
   | echoRam addr         = X.store8 . Addr8 $ addr - 0x2000
   | vram addr            = tryWrite vramCheck
   | oam addr             = tryWrite oamCheck
-  | otherwise            = undefined
+  | addr < 0x8000        = \_ -> return () -- ignore writes to cartridge
+  | 0xFEA0 <= addr && addr < 0xFF00 = \_ -> return () -- ignore write s to unused memory area
+  | otherwise            = \_ -> do
+      r <- showRegisters
+      error $ r ++ printf "\nstore8 access to 0x%04x" addr
   where tryWrite check b = do
           f <- check
           when f $ X.store8 x b
+store8 x@(Register8 F) = X.store8 x . (.&. 0xF0)
 store8 x = X.store8 x
 
 store16 :: MonadEmulator m => LoadStore16 -> Word16 -> m ()
@@ -86,8 +93,9 @@ store16 x@(Addr16 addr)
   | echoRam addr         = X.store16 . Addr16 $ addr - 0x2000
   | vram addr            = tryWrite vramCheck
   | oam addr             = tryWrite oamCheck
-  | otherwise            = undefined
+  | otherwise            = error $ printf "store16 access to 0x%04x" addr
   where tryWrite check w = do
           f <- check
           when f $ X.store16 x w
+store16 x@(Register16 AF) = X.store16 x . (.&. 0xFFF0)
 store16 x = X.store16 x
