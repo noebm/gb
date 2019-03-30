@@ -10,7 +10,10 @@ import Data.Word
 import Data.Bits
 import Data.Bits.Lens
 
-import MonadEmulator
+import Memory.Accessible
+
+-- import MonadEmulator hiding (load8,load16,store8,store16)
+-- import qualified MonadEmulator as X
 
 data Source8 = Source8 Reg8 | PointerHL
   deriving (Show, Eq)
