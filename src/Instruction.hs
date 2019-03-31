@@ -351,30 +351,32 @@ instruction b = case x of
         writeSource8 (reg y) =<< byte
         return $ 4 + regtime y
 
-    -- rlca
-    | b == 0x07 -> do
-        let r = Register8 A
-        store8 r =<< rlc =<< load8 r
-        return 4
-    -- rla
-    | b == 0x17 -> do
-        let r = Register8 A
-        store8 r =<< rl =<< load8 r
-        return 4
-    | b == 0x27 -> error "daa"
-    | b == 0x37 -> error "scf"
-
-    | b == 0x0F -> do
-        let r = Register8 A
-        store8 r =<< rrc =<< load8 r
-        return 4
-      -- error "rrca"
-    | b == 0x1F -> do
-        let r = Register8 A
-        store8 r =<< rr =<< load8 r
-        return 4
-    | b == 0x2F -> error "cpl"
-    | b == 0x3F -> error "ccf"
+    | z == 7 -> case y of
+        0 -> do
+          let r = Register8 A
+          store8 r =<< rlc =<< load8 r
+          modifyFlags (flagZ .~ False)
+          return 4
+        1 -> do
+          let r = Register8 A
+          store8 r =<< rrc =<< load8 r
+          modifyFlags (flagZ .~ False)
+          return 4
+        2 -> do
+          let r = Register8 A
+          store8 r =<< rl =<< load8 r
+          modifyFlags (flagZ .~ False)
+          return 4
+        3 -> do
+          let r = Register8 A
+          store8 r =<< rr =<< load8 r
+          modifyFlags (flagZ .~ False)
+          return 4
+        4 -> error "daa"
+        5 -> error "cpl"
+        6 -> error "scf"
+        7 -> error "ccf"
+        _ -> error "impossible"
 
   -- [ 0x40 - 0x7F ] ld ?, ?
   1 -> if b == 0x76 then error "halt"
