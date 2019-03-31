@@ -417,65 +417,62 @@ instruction b = case x of
         3 -> do
           store16 (Register16 SP) =<< load16 (Register16 HL)
           return 8
+        _ -> error "impossible"
 
       else do
         store16 (Register16 $ selectStack16 b) =<< pop
         return 12
+    | z == 2 -> if y `testBit` 2
+      then do
+        addr <- if y `testBit` 0
+          then ushort
+          else view word16 . (,) 0xFF <$> load8 (Register8 C)
+        let (t , s) = if y `testBit` 1 then (Register8 A, Addr8 addr) else (Addr8 addr, Register8 A)
+        store8 t =<< load8 s
+        return $ if y `testBit` 0 then 16 else 8
+      else do
+        f <- ctrlFlags <$> load8 (Register8 F)
+        addr <- ushort
+        if f
+          then jump addr >> return 16
+          else return 12
+    | z == 3 -> case y of
+        0 -> do
+          jump =<< ushort
+          return 16
+        1 -> extendedInstruction =<< byte
+        6 -> do
+          store8 (Register8 F) 0x00
+          return 4
+          -- error "di"
+        7 -> do
+          store8 (Register8 F) 0x3F
+          return 4
+        _ -> error $ printf "invalid opcode 0x%02x" b
+    | z == 4 ->
+      if y `testBit` 2
+      then error $ printf "invalid opcode 0x%02x" b
+      else do
+        f <- ctrlFlags <$> load8 (Register8 F)
+        addr <- ushort
+        if f
+          then call addr >> return 24
+          else return 12
 
-    | b == 0xe2 -> do
-        a <- load8 (Register8 A)
-        c <- load8 (Register8 C)
-        let addr = (0xFF , c) ^. word16
-        store8 (Addr8 addr) a
-        return 8
-
-    | b == 0xf2 -> do
-        c <- load8 (Register8 C)
-        let addr = (0xFF , c) ^. word16
-        store8 (Register8 A) =<< load8 (Addr8 addr)
-        return 8
-
-    | b .&. 0x0F == 0x05 && b .&. 0xF0 >= 0xc0 -> do
+    | z == 5 -> if y `testBit` 0
+      then if b == 0xCD then ushort >>= call >> return 24 else error $ printf "invalid opcode 0x%02x" b
+      else do
         push =<< load16 (Register16 $ selectStack16 b)
         return 16
-
-    | b == 0xea -> do
-        addr <- ushort
-        store8 (Addr8 addr) =<< load8 (Register8 A)
-        return 16
-
-    | b == 0xfa -> do
-        addr <- ushort
-        store8 (Register8 A) =<< load8 (Addr8 addr)
-        return 16
-
-    -- 0xcb instruction
-    | b == 0xcb -> extendedInstruction =<< byte
-    -- call
-    | b == 0xcd -> do
-        call =<< ushort
-        return 24
-
-
-    | b == 0xFE -> do
-        n <- byte
-        compare n
-        return 8
-
-    | b == 0xC3 -> do
-        jump =<< ushort
-        return 16
-
-    -- disable interrupts
-    | b == 0xF3 -> do
-        store8 (Addr8 0xFFFF) 0x00
-        return 4
+    | z == 6 -> byte >>= alu y >> return 8
+    | z == 7 -> restart (y * 8) >> return 16
 
   _ -> do
         pc <- load16 (Register16 PC)
         error $ "instruction " ++ hexbyte b ++ " not implemented at " ++ hexushort (pc - 1)
   where
   (x,y,z) = byteCodeDecompose b
+  {-# INLINE reg #-}
   reg w = case w of
     0 -> Source8 B
     1 -> Source8 C
@@ -487,8 +484,10 @@ instruction b = case x of
     7 -> Source8 A
     _ -> error "impossible"
 
+  {-# INLINE regtime #-}
   regtime w = if w == 6 then 8 else 4
 
+  {-# INLINE alu #-}
   alu w = case w of
     0 -> add
     1 -> fcarry add
@@ -515,17 +514,16 @@ instruction b = case x of
           & flagC .~ False)
     7 -> compare
 
+  {-# INLINE arith #-}
   arith f = do
     f =<< getSource8 (reg z)
     return $ regtime z
 
+  {-# INLINE fcarry #-}
   fcarry f value = do
     c <- views flagC (fromIntegral . fromEnum) <$> load8 (Register8 F)
     f (value + c)
 
-  arithCarry f = do
-    fcarry f =<< getSource8 (reg z)
-    return $ regtime z
-
+  {-# INLINE ctrlFlags #-}
   ctrlFlags :: Word8 -> Bool
   ctrlFlags = views (if y `testBit` 1 then flagC else flagZ) (if y `testBit` 0 then id else not)
