@@ -298,24 +298,28 @@ instruction b = case x of
              in jumpRelByFlag f
 
     | z == 1 -> do
-      let s = selectSource16 b
-      if y `testBit` 0
-      then error $ "add hl," ++ show s
-      -- [ 0x01 - 0x31 ] ld ?? , d16
-      else do
-        d16 <- ushort
-        writeSource16 s d16
-        return 12
+        let s = selectSource16 b
+        if y `testBit` 0
+          then error $ "add hl," ++ show s
+          -- [ 0x01 - 0x31 ] ld ?? , d16
+          else do
+          writeSource16 s =<< ushort
+          return 12
 
     -- [ 0x02 - 0x32 ] ld (??), A
-    | b .&. 0x0F == 0x02 && b .&. 0xF0 <= 0x30 -> do
+    -- [ 0x0a - 0x3a ] ld a , (??)
+    | z == 2 -> do
         addr <- getSourcePtr (selectSourcePtr b)
-        store8 (Addr8 addr) =<< load8 (Register8 A)
+        let (s, t) = if y `testBit` 0 then (Addr8 addr, Register8 A) else (Register8 A, Addr8 addr)
+        store8 t =<< load8 s
         return 8
 
     -- [ 0x03 - 0x33 ] inc ??
-    | b .&. 0x0F == 0x03 && b .&. 0xF0 <= 0x30 -> do
-        modifySource16 (selectSource16 b) (+1)
+    -- [ 0x0B - 0x3B ] dec ??
+    | z == 3 -> do
+        if y `testBit` 0
+          then modifySource16 (selectSource16 b) (\s -> s - 1)
+          else modifySource16 (selectSource16 b) (+1)
         return 8
 
     -- inc
@@ -358,15 +362,6 @@ instruction b = case x of
     | b == 0x27 -> error "daa"
     | b == 0x37 -> error "scf"
 
-
-    -- [ 0x0a - 0x3a ] ld a , (??)
-    | b .&. 0x0F == 0x0A && b .&. 0xF0 <= 0x30 -> do
-        let toReg = selectSourcePtr b
-        store8 (Register8 A) =<< load8 . Addr8 =<< getSourcePtr toReg
-        return 8
-
-    | b .&. 0x0F == 0x0B && b .&. 0xF0 <= 0x30 -> do
-        error "dec ??"
 
     -- [ 0x0e - 0x3e ] inc ?
     | b .&. 0x0F == 0x0C && b .&. 0xF0 <= 0x30 -> do
