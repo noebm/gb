@@ -76,11 +76,11 @@ class Monad m => MonadEmulator m where
   setStop :: m ()
   stop :: m Bool
 
-  externalRam   :: Bool -> m ()
-  selectRomBank :: Word8 -> m ()
-  selectRamBank :: Word8 -> m ()
+  -- externalRam   :: Bool -> m ()
+  -- selectRomBank :: Word8 -> m ()
+  -- selectRamBank :: Word8 -> m ()
 
-  bootRom :: Word8 -> m Word8
+  -- bootRom :: Word8 -> m Word8
 
 getCycles :: MonadEmulator m => m Word
 getCycles = do

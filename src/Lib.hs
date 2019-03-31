@@ -93,10 +93,8 @@ drawTile conf idx = do
 someFunc :: IO ()
 someFunc = do
   rom <- memoryBootRom
-  -- Just cart <- loadCartridge "./Tetris.gb"
-  -- Just cart <- loadCartridge "./testroms/cpu_instrs/cpu_instrs.gb"
-
-  cartOrError <- loadCartridge "./testroms/cpu_instrs/individual/03-op sp,hl.gb"
+  cartOrError <- loadCartridge "./Tetris.gb"
+  -- cartOrError <- loadCartridge "./testroms/cpu_instrs/individual/03-op sp,hl.gb"
   let cart = either error id cartOrError
   runGB $ do
     -- copy boot rom to memory
