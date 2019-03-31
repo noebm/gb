@@ -7,6 +7,7 @@ module MonadEmulator
   , showRegisters
   , getCycles
   , word16
+  , load16LE, store16LE
   , flagC, flagH, flagN, flagZ
   , immediate8, byte, ushort, int8
   , jump, jumpRelative
@@ -44,10 +45,19 @@ showRegisters = do
     return $ show r ++ printf ": %04x " v
   return $ concat s1 ++ concat s2
 
-data LoadStore8 = Register8 Reg8 | Addr8 Word16
+load16LE :: Monad m => m Word8 -> m Word8 -> m Word16
+load16LE b0 b1 = do
+  l <- b0
+  h <- b1
+  return $ (h , l) ^. word16
+
+store16LE :: Monad m => (Word8 -> m ()) -> (Word8 -> m ()) -> (Word16 -> m ())
+store16LE b0 b1 w = let (h , l) = w ^. from word16 in b0 l >> b1 h
+
+data LoadStore8 = Register8 !Reg8 | Addr8 !Word16
   deriving (Eq, Show)
 
-data LoadStore16 = Register16 Reg16 | Addr16 Word16
+data LoadStore16 = Register16 !Reg16 | Addr16 !Word16
   deriving (Eq, Show)
 
 class Monad m => MonadEmulator m where
@@ -66,17 +76,28 @@ class Monad m => MonadEmulator m where
   setStop :: m ()
   stop :: m Bool
 
+  externalRam   :: Bool -> m ()
+  selectRomBank :: Word8 -> m ()
+  selectRamBank :: Word8 -> m ()
+
+  bootRom :: Word8 -> m Word8
+
 getCycles :: MonadEmulator m => m Word
 getCycles = do
   t <- resetCycles
   advCycles t
   return t
 
+{-# INLINE word16 #-}
 word16 :: Iso' (Word8, Word8) Word16
 word16 = iso
   (\(h,l) -> shift (fromIntegral h) 8 .|. fromIntegral l)
   (\w -> (fromIntegral $ shift (w .&. 0xff00) (negate 8), fromIntegral $ w .&. 0x00ff))
 
+{-# INLINE flagZ #-}
+{-# INLINE flagN #-}
+{-# INLINE flagH #-}
+{-# INLINE flagC #-}
 flagZ, flagN, flagH, flagC :: Lens' Word8 Bool
 flagZ = bitAt 7
 flagN = bitAt 6
@@ -94,10 +115,7 @@ byte :: MonadEmulator m => m Word8
 byte = immediate8
 
 ushort :: MonadEmulator m => m Word16
-ushort = do
-  l <- byte
-  h <- byte
-  return $ (h, l) ^. word16
+ushort = load16LE byte byte
 
 int8 :: MonadEmulator m => m Int8
 int8 = fromIntegral <$> immediate8
