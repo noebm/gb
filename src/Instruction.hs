@@ -344,10 +344,10 @@ instruction b = case x of
           & flagN .~ True
           -- has a carry when the result has all zeros for bits <= 3
           & flagH .~ all (n `testBit`) [0..3]
-        return $ max (regtime y + 4) 4
+        return $ if r == PointerHL then 12 else 4
 
-    -- ld
-    | b .&. 0x0F == 0x06 && b .&. 0xF0 <= 0x30 -> do
+    -- ld ? , d8
+    | z == 6 -> do
         writeSource8 (reg y) =<< byte
         return $ 4 + regtime y
 
@@ -363,12 +363,6 @@ instruction b = case x of
         return 4
     | b == 0x27 -> error "daa"
     | b == 0x37 -> error "scf"
-
-
-    -- [ 0x0e - 0x3e ] ld ? , d8
-    | b .&. 0x0F == 0x0E && b .&. 0xF0 <= 0x30 -> do
-      writeSource8 (reg y) =<< byte
-      return $ 4 + regtime y
 
     | b == 0x0F -> do
         let r = Register8 A
