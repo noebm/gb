@@ -1,13 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Graphics where
 
-import qualified Data.ByteString.Lazy as B
-import Data.ByteString.Lazy (ByteString)
-
--- import qualified Data.Vector.Unboxed as V
--- import Data.Vector.Unboxed (Vector)
-
-import Control.Monad
 import Control.Monad.IO.Class
 import SDL.Video
 import SDL.Vect
@@ -22,7 +15,7 @@ data GraphicsContext = GraphicsContext
 initializeGraphics :: MonadIO m => m GraphicsContext
 initializeGraphics = do
   let wndName = "GamerBoy"
-  let wndConfig = defaultWindow { windowInitialSize = V2 160 144 }
+  let wndConfig = defaultWindow { windowInitialSize = V2 (160*2) (144*2) }
   wnd  <- createWindow wndName wndConfig
   rndr <- createRenderer wnd (negate 1) defaultRenderer
   text <- createTexture rndr ARGB8888 TextureAccessStreaming (V2 160 144)
