@@ -83,17 +83,18 @@ modifyFlags g = do
   store8 rF $ g flags
 
 logicOp :: (MonadEmulator m)
-        => Source8
-        -> (Word8 -> Word8 -> Word8)
+        -- => Source8
+        => (Word8 -> Word8 -> Word8)
         -> ((Word8, Word8) -> Word8 -> (Word8 -> Word8)) -- ^ (old , new) delta 
-        -> m Word
-logicOp reg op flagChange = do
-  value <- getSource8 reg
+        -> Word8
+        -> m () -- Word
+logicOp op flagChange value = do
+  -- value <- getSource8 reg
   a <- load8 (Register8 A)
   let a' = a `op` value
   store8 (Register8 A) a'
   modifyFlags $ flagChange (a , a') value
-  return $ timingSource8 reg
+  -- return $ timingSource8 reg
 
 selectStack16 :: Word8 -> Reg16
 selectStack16 b
@@ -287,17 +288,17 @@ sub value = do
 -- instruction :: (MonadState s m, HasRegisters s, HasRom s) => Word8 -> m Timing
 instruction :: MonadEmulator m => Word8 -> m Word
 instruction b = case x of
-  0 | z == 0 -> case y of
+  0 -> case z of
+    0 -> case y of
         0 -> return 4
         1 -> error "ld a16"
         2 -> setStop >> return 0
         3 -> do
           jumpRelative =<< int8
           return 12
-        _ -> let f = views (if y `testBit` 1 then flagC else flagZ) (if y `testBit` 0 then id else not)
-             in jumpRelByFlag f
+        _ -> jumpRelByFlag ctrlFlags
 
-    | z == 1 -> do
+    1 -> do
         let s = selectSource16 b
         if y `testBit` 0
           then error $ "add hl," ++ show s
@@ -308,7 +309,7 @@ instruction b = case x of
 
     -- [ 0x02 - 0x32 ] ld (??), A
     -- [ 0x0a - 0x3a ] ld a , (??)
-    | z == 2 -> do
+    2 -> do
         addr <- getSourcePtr (selectSourcePtr b)
         let (s, t) = if y `testBit` 0 then (Addr8 addr, Register8 A) else (Register8 A, Addr8 addr)
         store8 t =<< load8 s
@@ -316,14 +317,14 @@ instruction b = case x of
 
     -- [ 0x03 - 0x33 ] inc ??
     -- [ 0x0B - 0x3B ] dec ??
-    | z == 3 -> do
+    3 -> do
         if y `testBit` 0
           then modifySource16 (selectSource16 b) (\s -> s - 1)
           else modifySource16 (selectSource16 b) (+1)
         return 8
 
     -- inc
-    | z == 4 -> do
+    4 -> do
         let r = reg y
         n <- (+1) <$>getSource8 r
         writeSource8 r n
@@ -335,9 +336,9 @@ instruction b = case x of
         return $ max (regtime y + 4) 4
 
     -- dec
-    | z == 5 -> do
+    5 -> do
         let r = reg y
-        n <- (\x -> x - 1) <$> getSource8 r
+        n <- (\s -> s - 1) <$> getSource8 r
         writeSource8 r n
         modifyFlags $ \f -> f
           & flagZ .~ (n == 0)
@@ -347,11 +348,11 @@ instruction b = case x of
         return $ if r == PointerHL then 12 else 4
 
     -- ld ? , d8
-    | z == 6 -> do
+    6 -> do
         writeSource8 (reg y) =<< byte
         return $ 4 + regtime y
 
-    | z == 7 -> case y of
+    7 -> case y of
         0 -> do
           let r = Register8 A
           store8 r =<< rlc =<< load8 r
@@ -377,6 +378,7 @@ instruction b = case x of
         6 -> error "scf"
         7 -> error "ccf"
         _ -> error "impossible"
+    _ -> error "impossible"
 
   -- [ 0x40 - 0x7F ] ld ?, ?
   1 -> if b == 0x76 then error "halt"
@@ -385,41 +387,27 @@ instruction b = case x of
         return $ max (regtime y) (regtime z)
 
     -- add
-  2 -> case y of
-    0 -> arith add
-    -- adc XXX might overflow
-    1 -> arithCarry add
-    -- sub
-    2 -> arith sub
-    -- sbc XXX might overflow
-    3 -> arithCarry sub
+  2 -> do
+    alu y =<< getSource8 (reg z)
+    return $ regtime z
 
-    -- and
-    4 -> logicOp (reg z) (.&.) $ \(_a , a') _value x -> x
-          & flagZ .~ (a' == 0)
-          & flagN .~ False
-          & flagH .~ True
-          & flagC .~ False
+  3 | z == 0 -> if y `testBit` 2
+      then if y `testBit` 0
+      then error "0xE8 / 0xF8"
+      else do
+        n <- byte
+        let addr = (0xFF , n) ^. word16
+        let (t , s) = if y `testBit` 1 then (Register8 A, Addr8 addr) else (Addr8 addr, Register8 A)
+        store8 t =<< load8 s
+        return 12
+        -- error "ldh"
+      else do
+        f <- ctrlFlags <$> load8 (Register8 F)
+        if f
+          then ret >> return 20
+          else return 4
 
-    -- xor
-    5 -> logicOp (reg z) xor $ \(_a , a') _value x -> x
-          & flagZ .~ (a' == 0)
-          & flagN .~ False
-          & flagH .~ False
-          & flagC .~ False
-
-    -- [ 0xb0 - 0xb7 ] or
-    6 -> logicOp (reg z) (.|.) $ \(_a , a') _value x -> x
-          & flagZ .~ (a' == 0)
-          & flagN .~ False
-          & flagH .~ False
-          & flagC .~ False
-
-    -- [ 0xb8 - 0xbf ] cp
-    7 -> arith compare
-    _ -> error "impossible"
-
-  3 | b == 0xC0 -> error "ret nz"
+    | b == 0xC0 -> error "ret nz"
     | b == 0xD0 -> error "ret nc"
 
     | b == 0xE0 -> do
@@ -510,13 +498,43 @@ instruction b = case x of
 
   regtime w = if w == 6 then 8 else 4
 
+  alu w = case w of
+    0 -> add
+    1 -> fcarry add
+    2 -> sub
+    3 -> fcarry sub
+    4 -> logicOp (.&.) (\(_a , a') _value x -> x
+          & flagZ .~ (a' == 0)
+          & flagN .~ False
+          & flagH .~ True
+          & flagC .~ False)
+
+    -- xor
+    5 -> logicOp xor (\(_a , a') _value x -> x
+          & flagZ .~ (a' == 0)
+          & flagN .~ False
+          & flagH .~ False
+          & flagC .~ False)
+
+    -- [ 0xb0 - 0xb7 ] or
+    6 -> logicOp (.|.) (\(_a , a') _value s -> s
+          & flagZ .~ (a' == 0)
+          & flagN .~ False
+          & flagH .~ False
+          & flagC .~ False)
+    7 -> compare
+
   arith f = do
     f =<< getSource8 (reg z)
     return $ regtime z
 
+  fcarry f value = do
+    c <- views flagC (fromIntegral . fromEnum) <$> load8 (Register8 F)
+    f (value + c)
+
   arithCarry f = do
-    value <- getSource8 (reg z)
-    c <- view flagC <$> load8 (Register8 F)
-    let value' = value + if c then 1 else 0
-    f value'
+    fcarry f =<< getSource8 (reg z)
     return $ regtime z
+
+  ctrlFlags :: Word8 -> Bool
+  ctrlFlags = views (if y `testBit` 1 then flagC else flagZ) (if y `testBit` 0 then id else not)
