@@ -302,7 +302,10 @@ instruction b = case x of
   0 -> case z of
     0 -> case y of
         0 -> return 4
-        1 -> error "ld a16"
+        1 -> do
+          addr <- load16 . Addr16 =<< ushort
+          store16 (Addr16 addr) =<< load16 (Register16 SP)
+          return 20
         2 -> setStop >> return 0
         3 -> do
           jumpRelative =<< int8
@@ -312,7 +315,14 @@ instruction b = case x of
     1 -> do
         let s = selectSource16 b
         if y `testBit` 0
-          then error $ "add hl," ++ show s
+          then do
+          hl <- load16 (Register16 HL)
+          r <- getSource16 s
+          store16 (Register16 HL) (hl + r)
+          -- XXX flags
+          return 8
+
+          -- error $ "add hl," ++ show s
           -- [ 0x01 - 0x31 ] ld ?? , d16
           else do
           writeSource16 s =<< ushort
@@ -384,10 +394,30 @@ instruction b = case x of
           store8 r =<< rr =<< load8 r
           modifyFlags (flagZ .~ False)
           return 4
-        4 -> error "daa"
-        5 -> error "cpl"
-        6 -> error "scf"
-        7 -> error "ccf"
+        4 -> do
+          -- XXX daa
+          f <- load8 (Register8 F)
+          v <- load8 (Register8 A)
+          let vcorr = (if (f ^. flagH || (not (f ^. flagN) && (v .&. 0xF) > 9)) then 0x06 else 0x00)
+                    + (if (f ^. flagC || (not (f ^. flagN) && v > 0x99))        then 0x60 else 0x00)
+          let vcorr' = if f ^. flagN then -vcorr else vcorr
+          let v' = v + vcorr'
+          store8 (Register8 A) v'
+          modifyFlags $ \k -> k
+            & flagH .~ False
+            & flagC .~ (f ^. flagC || (not (f ^. flagN) && v > 0x99))
+            & flagZ .~ (v' == 0)
+          return 4
+        5 -> do
+          store8 (Register8 A) . complement =<< load8 (Register8 A)
+          modifyFlags $ (flagN .~ True) . (flagH .~ True)
+          return 4
+        6 -> do
+          modifyFlags ((flagN .~ False) . (flagH .~ False) . (flagC .~ True))
+          return 4
+        7 -> do
+          modifyFlags ((flagN .~ False) . (flagH .~ False) . (flagC %~ not))
+          return 4
         _ -> error "impossible"
     _ -> error "impossible"
 
