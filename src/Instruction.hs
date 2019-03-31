@@ -324,9 +324,9 @@ instruction b = case x of
 
     -- inc
     | z == 4 -> do
-        let toReg   = reg y
-        n <- (+1) <$> getSource8 toReg
-        writeSource8 toReg n
+        let r = reg y
+        n <- getSource8 r
+        writeSource8 r (n + 1)
         modifyFlags $ \f -> f
           & flagZ .~ (n == 0)
           & flagN .~ False
@@ -335,15 +335,16 @@ instruction b = case x of
         return $ max (regtime y + 4) 4
 
     -- dec
-    | b .&. 0x0F == 0x05 && b .&. 0xF0 <= 0x30 -> do
-        let toReg   = reg y
-        r <- getSource8 toReg
-        let n = r - 1
-        writeSource8 toReg n
-        decFlags n
-        return $ if toReg == PointerHL
-          then 12
-          else 4
+    | z == 5 -> do
+        let r = reg y
+        n <- getSource8 r
+        writeSource8 r (n - 1)
+        modifyFlags $ \f -> f
+          & flagZ .~ (n == 0)
+          & flagN .~ True
+          -- has a carry when the result has all zeros for bits <= 3
+          & flagH .~ all (n `testBit`) [0..3]
+        return $ max (regtime y + 4) 4
 
     -- ld
     | b .&. 0x0F == 0x06 && b .&. 0xF0 <= 0x30 -> do
@@ -363,21 +364,6 @@ instruction b = case x of
     | b == 0x27 -> error "daa"
     | b == 0x37 -> error "scf"
 
-
-
-    -- [ 0x0e - 0x3e ] dec ?
-    | b .&. 0x0F == 0x0D && b .&. 0xF0 <= 0x30 -> do
-        let toReg   = reg y
-        n <- (\k -> k - 1) <$> getSource8 toReg
-        writeSource8 toReg n
-        f <- load8 (Register8 F)
-        store8 (Register8 F) $ f
-          & flagZ .~ (n == 0)
-          & flagN .~ True
-          -- has a carry when the result has all zeros for bits <= 3
-          & flagH .~ all (n `testBit`) [0..3]
-
-        return 4
 
     -- [ 0x0e - 0x3e ] ld ? , d8
     | b .&. 0x0F == 0x0E && b .&. 0xF0 <= 0x30 -> do
