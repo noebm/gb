@@ -1,12 +1,21 @@
 module Debugging where
 
-import MonadEmulator
 import Control.Monad.IO.Class
 import Control.Monad
 
--- import Data.Word
+import Data.Word
+import Data.Bits
+import Data.Maybe
 
 import qualified Data.Vector.Unboxed.Mutable as V
+import qualified Data.Vector.Storable.Mutable as VS
+
+import SDL.Video
+import SDL.Vect (V2(..))
+
+import MonadEmulator
+import Drawing
+import Memory.MMIO
 
 clearRegisters :: MonadEmulator m => m ()
 clearRegisters = do
@@ -28,3 +37,28 @@ testRegisters = do
 dumpVRAM mem = liftIO $ do
   x <- forM [0x8000..0x9FFF] $ V.read mem
   print x
+
+getBackgroundMap :: MonadEmulator m => LCDConfig -> m [ [ Word8 ] ]
+getBackgroundMap conf = fmap (filter (/= [])) . forM [0..255] $ \y ->
+  fmap (filter (/= 0)) . forM [0..255] $ \x -> getBackgroundTileIndex conf y x
+
+drawCompleteBackground :: (MonadIO m, MonadEmulator m) => m Surface -- B.ByteString
+drawCompleteBackground = do
+  -- make sure lcdConfig is true
+  lcd <- fromJust <$> do
+    cfg <- load8 control
+    store8 control (cfg .|. 0x80)
+    lcdConfig <* store8 control cfg
+  pal <- bgPalette
+  ar <- liftIO $ VS.new $ 256 * 256 * 3
+  -- bs <- fromJust <$> forM lcd $ \cfg -> do
+  forM_ [0..255] $ \y ->
+    forM_ [0..255] $ \x -> do
+      idx <- load8 $ backgroundTileIndex lcd y x
+      c <- pal <$> tile (tileAddr lcd idx) y x
+      let i = (fromIntegral y * 256 + fromIntegral x) * 3
+      liftIO $ do
+        VS.unsafeWrite ar (i + 0) c
+        VS.unsafeWrite ar (i + 1) c
+        VS.unsafeWrite ar (i + 2) c
+  createRGBSurfaceFrom ar (V2 256 256) (256 * 3) RGB888
