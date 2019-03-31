@@ -199,6 +199,13 @@ rl x = do
   rotateFlags x' c'
   return x'
 
+sla, sra, srl :: Monad m => Word8 -> m Word8
+sla = return . (`shiftL` 1)
+sra = return . (`shiftR` 1)
+srl x = do
+  v <- sra x
+  return $ v `clearBit` 7
+
 extendedInstruction :: MonadEmulator m => Word8 -> m Word
 extendedInstruction b = case x of
   0 -> case y of
@@ -206,6 +213,10 @@ extendedInstruction b = case x of
     1 -> withSource rrc
     2 -> withSource rl
     3 -> withSource rr
+    4 -> withSource sla
+    5 -> withSource sra
+    6 -> withSource (\x -> return $ ((x `shiftL` 4) .&. 0xF0) .|. ((x `shiftR` 4) .&. 0x0F))
+    7 -> withSource srl
     _ -> error "extended instruction not implemented"
   1 -> bitInstruction bit' reg
   2 -> resetInstruction bit' reg
@@ -296,7 +307,7 @@ instruction b = case x of
         3 -> do
           jumpRelative =<< int8
           return 12
-        _ -> jumpRelByFlag ctrlFlags
+        _ -> jumpRelByFlag (ctrlFlags y)
 
     1 -> do
         let s = selectSource16 b
@@ -391,7 +402,8 @@ instruction b = case x of
     alu y =<< getSource8 (reg z)
     return $ regtime z
 
-  3 | z == 0 -> if y `testBit` 2
+  3 -> case z of
+    0 -> if y `testBit` 2
       then if y `testBit` 0
       then error "0xE8 / 0xF8"
       else do
@@ -402,12 +414,12 @@ instruction b = case x of
         return 12
         -- error "ldh"
       else do
-        f <- ctrlFlags <$> load8 (Register8 F)
+        f <- ctrlFlags y <$> load8 (Register8 F)
         if f
           then ret >> return 20
           else return 4
 
-    | z == 1 -> if y `testBit` 0
+    1 -> if y `testBit` 0
       then case y `shiftR` 1 of
         0 -> ret >> return 16
         1 -> error "reti"
@@ -422,7 +434,7 @@ instruction b = case x of
       else do
         store16 (Register16 $ selectStack16 b) =<< pop
         return 12
-    | z == 2 -> if y `testBit` 2
+    2 -> if y `testBit` 2
       then do
         addr <- if y `testBit` 0
           then ushort
@@ -431,12 +443,12 @@ instruction b = case x of
         store8 t =<< load8 s
         return $ if y `testBit` 0 then 16 else 8
       else do
-        f <- ctrlFlags <$> load8 (Register8 F)
+        f <- ctrlFlags y <$> load8 (Register8 F)
         addr <- ushort
         if f
           then jump addr >> return 16
           else return 12
-    | z == 3 -> case y of
+    3 -> case y of
         0 -> do
           jump =<< ushort
           return 16
@@ -449,23 +461,23 @@ instruction b = case x of
           store8 (Register8 F) 0x3F
           return 4
         _ -> error $ printf "invalid opcode 0x%02x" b
-    | z == 4 ->
+    4 ->
       if y `testBit` 2
       then error $ printf "invalid opcode 0x%02x" b
       else do
-        f <- ctrlFlags <$> load8 (Register8 F)
+        f <- ctrlFlags y <$> load8 (Register8 F)
         addr <- ushort
         if f
           then call addr >> return 24
           else return 12
 
-    | z == 5 -> if y `testBit` 0
+    5 -> if y `testBit` 0
       then if b == 0xCD then ushort >>= call >> return 24 else error $ printf "invalid opcode 0x%02x" b
       else do
         push =<< load16 (Register16 $ selectStack16 b)
         return 16
-    | z == 6 -> byte >>= alu y >> return 8
-    | z == 7 -> restart (y * 8) >> return 16
+    6 -> byte >>= alu y >> return 8
+    7 -> restart (y * 8) >> return 16
 
   _ -> do
         pc <- load16 (Register16 PC)
@@ -525,5 +537,5 @@ instruction b = case x of
     f (value + c)
 
   {-# INLINE ctrlFlags #-}
-  ctrlFlags :: Word8 -> Bool
-  ctrlFlags = views (if y `testBit` 1 then flagC else flagZ) (if y `testBit` 0 then id else not)
+  ctrlFlags :: Word8 -> Word8 -> Bool
+  ctrlFlags w = views (if w `testBit` 1 then flagC else flagZ) (if w `testBit` 0 then id else not)
