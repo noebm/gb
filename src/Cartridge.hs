@@ -4,6 +4,7 @@ where
 import qualified Data.ByteString as B
 import Data.ByteString (ByteString)
 import Data.Word
+import Text.Printf
 
 import Control.Monad
 
@@ -19,10 +20,8 @@ data Cartridge = Cartridge
 instance Show Cartridge where
   show c = "Cartridge " ++ show (cartridgeTitle c)
 
-checksumHeader :: ByteString -> Maybe (Word8 , Word8)
-checksumHeader bs
-  | B.length bs >= 0x150 = Just (foldl (\x y -> x - y - 1) 0 checksumData, headerChecksum)
-  | otherwise = Nothing
+checksumHeader :: ByteString -> (Word8 , Word8)
+checksumHeader bs = (foldl (\x y -> x - y - 1) 0 checksumData, headerChecksum)
   where
     headerChecksum = bs `B.index` 0x14D
     checksumData = B.unpack $ B.take (0x14D - 0x134) $ B.drop 0x134 bs
@@ -47,12 +46,14 @@ headerRamSize bs = case bs `B.index` 0x149 of
   0x03 -> 32
   _ -> error "help ram size not defined"
 
-loadCartridge :: FilePath -> IO (Maybe Cartridge)
+loadCartridge :: FilePath -> IO (Either String Cartridge)
 loadCartridge fp = do
   f <- B.readFile fp
   return $ do
-    (checksumResult, checksum) <- checksumHeader f
-    guard (checksumResult == checksum)
+    when (B.length f < 0x150) $ Left "File too short to contain a header"
+    let (checksumResult, checksum) = checksumHeader f
+    when (checksumResult /= checksum) $ Left "Header checksum does not match"
+    when (headerType f /= 0x00) $ Left $ printf "Cartridge type (0x%02x) unsupported" (headerType f)
     return $ Cartridge f (headerTitle f) (headerType f) (headerRomBanks f) (headerRamSize f) (headerLocale f)
 
 getRomBank :: Cartridge -> Word -> Maybe ByteString

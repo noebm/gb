@@ -94,13 +94,17 @@ someFunc :: IO ()
 someFunc = do
   rom <- memoryBootRom
   -- Just cart <- loadCartridge "./Tetris.gb"
-  Just cart <- loadCartridge "./testroms/cpu_instrs/cpu_instrs.gb"
+  -- Just cart <- loadCartridge "./testroms/cpu_instrs/cpu_instrs.gb"
+
+  cartOrError <- loadCartridge "./testroms/cpu_instrs/individual/03-op sp,hl.gb"
+  let cart = either error id cartOrError
   runGB $ do
     -- copy boot rom to memory
     writeCartridge cart
     copyData rom
 
     let g fx = do
+          liftIO . print =<< load16 (Register16 PC)
           s <- interpret False fx
           unless s $ g fx
     let f fx = do
