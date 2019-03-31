@@ -287,14 +287,15 @@ sub value = do
 -- instruction :: (MonadState s m, HasRegisters s, HasRom s) => Word8 -> m Timing
 instruction :: MonadEmulator m => Word8 -> m Word
 instruction b = case x of
-    -- 0x00 nop
-  0 | b == 0x00 -> return 4
-    -- 0x01 stop
-    | b == 0x01 -> error "stop"
-    -- 0x02 jr nz
-    | b == 0x20 -> jumpRelByFlag (views flagZ not)
-    -- 0x03 jr nc
-    | b == 0x30 -> jumpRelByFlag (views flagC not)
+  0 | z == 0 -> case y of
+        0 -> return 4
+        1 -> error "ld a16"
+        2 -> setStop >> return 0
+        3 -> do
+          jumpRelative =<< int8
+          return 12
+        _ -> let f = views (if y `testBit` 1 then flagC else flagZ) (if y `testBit` 0 then id else not)
+             in jumpRelByFlag f
 
     -- [ 0x01 - 0x31 ] ld ?? , d16
     | b .&. 0x0F == 0x01 && b .&. 0xF0 <= 0x30 -> do
@@ -354,14 +355,6 @@ instruction b = case x of
     | b == 0x27 -> error "daa"
     | b == 0x37 -> error "scf"
 
-    | b == 0x08 -> error "ld a16"
-
-    -- jr
-    | b == 0x18 -> do
-        jumpRelative =<< int8
-        return 12
-    | b == 0x28 -> jumpRelByFlag (view flagZ)
-    | b == 0x38 -> jumpRelByFlag (view flagC)
 
     | b .&. 0x0F == 0x09 && b .&. 0xF0 <= 0x30 -> do
         error "add hl"
