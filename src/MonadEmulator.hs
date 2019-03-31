@@ -1,4 +1,19 @@
-module MonadEmulator where
+module MonadEmulator
+  ( Reg8 (..)
+  , Reg16 (..)
+  , LoadStore8 (..)
+  , LoadStore16 (..)
+  , MonadEmulator (..)
+  , showRegisters
+  , getCycles
+  , word16
+  , flagC, flagH, flagN, flagZ
+  , immediate8, byte, ushort, int8
+  , jump, jumpRelative
+  , push, pop
+  , call, ret
+  )
+where
 
 import Control.Lens
 import Control.Monad
@@ -96,14 +111,14 @@ jumpRelative addrdiff = do
 push :: MonadEmulator m => Word16 -> m ()
 push w = do
   sp <- load16 (Register16 SP)
-  store16 (Addr16 (sp - 2)) w
+  store16 (Addr16 (sp - 1)) w
   store16 (Register16 SP) (sp - 2)
 
 pop :: MonadEmulator m => m Word16
 pop = do
   sp <- load16 (Register16 SP)
   store16 (Register16 SP) (sp + 2)
-  load16 (Addr16 sp)
+  load16 (Addr16 (sp + 1))
 
 call :: MonadEmulator m => Word16 -> m ()
 call addr = do
