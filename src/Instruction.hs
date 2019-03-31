@@ -407,21 +407,6 @@ instruction b = case x of
           then ret >> return 20
           else return 4
 
-    | b == 0xC0 -> error "ret nz"
-    | b == 0xD0 -> error "ret nc"
-
-    | b == 0xE0 -> do
-        n <- byte
-        let addr = (0xFF , n) ^. word16
-        store8 (Addr8 addr) =<< load8 (Register8 A)
-        return 12
-
-    | b == 0xF0 -> do
-        n <- byte
-        let addr = (0xFF , n) ^. word16
-        store8 (Register8 A) =<< load8 (Addr8 addr)
-        return 12
-
     | b .&. 0x0F == 0x01 && b .&. 0xF0 >= 0xC0 -> do
         store16 (Register16 $ selectStack16 b) =<< pop
         return 12
