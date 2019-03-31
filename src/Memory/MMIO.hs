@@ -24,8 +24,6 @@ updateGPU' t l mode = case mode .&. 0x3 of
   _ -> error "impossible"
   where update clocktime f = if t >= clocktime then f (t - clocktime) else (t, l, Nothing)
 
-data DrawInstruction = DrawLine | DrawImage
-
 control           = Addr8 0xFF40
 status            = Addr8 0xFF41
 scrollY           = Addr8 0xFF42
@@ -37,6 +35,11 @@ spritePalette0    = Addr8 0xFF48
 spritePalette1    = Addr8 0xFF49
 windowY           = Addr8 0xFF4A
 windowX           = Addr8 0xFF4B
+
+bootRomEnabled :: MonadEmulator m => m Bool
+bootRomEnabled = not . (`testBit` 0) <$> load8 (Addr8 0xFF50)
+
+data DrawInstruction = DrawLine | DrawImage
 
 updateGPU :: MonadEmulator m => m (Maybe DrawInstruction)
 updateGPU = do
@@ -65,13 +68,13 @@ Bit1  Color #0 transparency in the window     | SOLID         | TRANSPARENT
 Bit0  Background display
 -}
 data LCDConfig = LCDConfig
-  { windowTileTableIndex :: Word8 -> Word8 -> LoadStore8 -- m Word16
+  { windowTileTableIndex :: Word8 -> Word8 -> LoadStore8
   , windowEnabled :: Bool
   , backgroundTileIndex :: Word8 -> Word8 -> LoadStore8
   , backgroundEnabled :: Bool
   , tileAddr :: Word8 -> Word16
-  -- , spriteSize :: Word8
-  -- , transparency :: Bool
+  , spriteSize :: Word8
+  , spriteEnabled :: Bool
   }
 
 lcdConfig :: MonadEmulator m => m (Maybe LCDConfig)
@@ -81,8 +84,7 @@ lcdConfig = do
     guard (c `testBit` 7)
     return $ LCDConfig
       { windowTileTableIndex = \y x ->
-          let tableIndex = fromIntegral (x `div` 8) + fromIntegral (y `div` 8)
-          -- let tableIndex = fromIntegral (x `div` 8) + 32 * fromIntegral (y `div` 8)
+          let tableIndex = fromIntegral (x `div` 8) + 32 * fromIntegral (y `div` 8)
               tableBase = if c `testBit` 6 then 0x9C00 else 0x9800
           in Addr8 $ tableBase + tableIndex
       , windowEnabled = c `testBit` 5
@@ -94,9 +96,12 @@ lcdConfig = do
       , tileAddr = if c `testBit` 4
         then \idx -> 0x8000 + fromIntegral idx `shiftL` 4
         else \idx -> 0x8800 + fromIntegral (idx + 128) `shiftL` 4
-      -- , spriteSize = if c `testBit` 2 then 16 else 8
-      -- , transparency = c `testBit` 1
+      , spriteSize = if c `testBit` 2 then 16 else 8
+      , spriteEnabled = c `testBit` 1
       }
+
+getBackgroundTileIndex :: MonadEmulator m => LCDConfig -> Word8 -> Word8 -> m Word8
+getBackgroundTileIndex conf y x = load8 $ backgroundTileIndex conf y x
 
 {-
 -- sprite display?
