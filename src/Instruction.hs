@@ -323,15 +323,16 @@ instruction b = case x of
         return 8
 
     -- inc
-    | b .&. 0x0F == 0x04 && b .&. 0xF0 <= 0x30 -> do
+    | z == 4 -> do
         let toReg   = reg y
-        r <- getSource8 toReg
-        let n = r + 1
+        n <- (+1) <$> getSource8 toReg
         writeSource8 toReg n
-        incFlags n
-        return $ if toReg == PointerHL
-          then 12
-          else 4
+        modifyFlags $ \f -> f
+          & flagZ .~ (n == 0)
+          & flagN .~ False
+          -- has a carry when the result has all zeros for bits <= 3
+          & flagH .~ not (any (n `testBit`) [0..3])
+        return $ max (regtime y + 4) 4
 
     -- dec
     | b .&. 0x0F == 0x05 && b .&. 0xF0 <= 0x30 -> do
@@ -363,18 +364,6 @@ instruction b = case x of
     | b == 0x37 -> error "scf"
 
 
-    -- [ 0x0e - 0x3e ] inc ?
-    | b .&. 0x0F == 0x0C && b .&. 0xF0 <= 0x30 -> do
-        let toReg   = reg y
-        n <- (+1) <$> getSource8 toReg
-        writeSource8 toReg n
-        f <- load8 (Register8 F)
-        store8 (Register8 F) $ f
-          & flagZ .~ (n == 0)
-          & flagN .~ False
-          -- has a carry when the result has all zeros for bits <= 3
-          & flagH .~ not (any (n `testBit`) [0..3])
-        return 4
 
     -- [ 0x0e - 0x3e ] dec ?
     | b .&. 0x0F == 0x0D && b .&. 0xF0 <= 0x30 -> do
