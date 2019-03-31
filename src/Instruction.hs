@@ -325,8 +325,8 @@ instruction b = case x of
     -- inc
     | z == 4 -> do
         let r = reg y
-        n <- getSource8 r
-        writeSource8 r (n + 1)
+        n <- (+1) <$>getSource8 r
+        writeSource8 r n
         modifyFlags $ \f -> f
           & flagZ .~ (n == 0)
           & flagN .~ False
@@ -337,8 +337,8 @@ instruction b = case x of
     -- dec
     | z == 5 -> do
         let r = reg y
-        n <- getSource8 r
-        writeSource8 r (n - 1)
+        n <- (\x -> x - 1) <$> getSource8 r
+        writeSource8 r n
         modifyFlags $ \f -> f
           & flagZ .~ (n == 0)
           & flagN .~ True
