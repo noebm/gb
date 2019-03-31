@@ -12,6 +12,7 @@ module MonadEmulator
   , jump, jumpRelative
   , push, pop
   , call, ret
+  , restart
   )
 where
 
@@ -130,3 +131,8 @@ call addr = do
 
 ret :: MonadEmulator m => m ()
 ret = jump =<< pop
+
+restart :: MonadEmulator m => Word8 -> m ()
+restart b = do
+  push =<< load16 (Register16 PC)
+  store16 (Register16 PC) $ (0x00, b) ^. word16
