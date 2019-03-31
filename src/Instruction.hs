@@ -1,11 +1,12 @@
 module Instruction
-  (
-    instruction
-  )
+--   (
+--     instruction
+--   )
 where
 
 import Prelude hiding (compare)
 import Numeric
+import Text.Printf
 
 import Control.Lens
 
@@ -34,10 +35,12 @@ data SourcePtr = PtrBC | PtrDE | PtrHLi | PtrHLd
   deriving (Show, Eq)
 
 hexbyte :: Word8 -> String
-hexbyte w = ("0x" ++) . showHex w $ ""
+hexbyte w = printf "0x%02x" w
+  -- ("0x" ++) . showHex w $ ""
 
 hexushort :: Word16 -> String
-hexushort w = ("0x" ++) . showHex w $ ""
+hexushort w = printf "0x%04x" w
+  -- ("0x" ++) . showHex w $ ""
 
 selectSource16 :: Word8 -> Source16
 selectSource16 b
@@ -153,13 +156,14 @@ setInstruction b s8 = do
   return $ timingSource8 s8 * 2
 
 -- rotation through carry
-rotateLeft  x c = rotateLeft'  x & _1 . bitAt 0 .~ c
-rotateRight x c = rotateRight' x & _1 . bitAt 7 .~ c
+rotateLeft, rotateRight :: Word8 -> Bool -> (Word8, Bool)
+rotateLeft  x c = rotateLeftCircular  x & _1 . bitAt 0 .~ c
+rotateRight x c = rotateRightCircular x & _1 . bitAt 7 .~ c
 
 -- rotate then copy to carry
-rotateLeft'  x = (x `rotateL` 1, x `testBit` 7)
-
-rotateRight' x = (x `rotateR` 1, x `testBit` 0)
+rotateLeftCircular, rotateRightCircular :: Word8 -> (Word8, Bool)
+rotateLeftCircular  x = (x `rotateL` 1, x `testBit` 7)
+rotateRightCircular x = (x `rotateR` 1, x `testBit` 0)
 
 rotateFlags x' c' = do
   f <- load8 (Register8 F)
@@ -171,12 +175,12 @@ rotateFlags x' c' = do
 
 rrc, rlc, rr,rl :: MonadEmulator m => Word8 -> m Word8
 rrc x = do
-  let (x' , c') = rotateRight' x
+  let (x' , c') = rotateRightCircular x
   rotateFlags x' c'
   return x'
 
 rlc x = do
-  let (x' , c') = rotateLeft' x
+  let (x' , c') = rotateLeftCircular x
   rotateFlags x' c'
   return x'
 
