@@ -24,6 +24,7 @@ import MonadEmulator
 data GBState s = GBState
   { addressSpace :: MVector s Word8
   , clock        :: STRef s Word
+  , shouldStop   :: STRef s Bool
   }
 
 newtype GBT s m a = GBT (ReaderT (GBState s) m a)
@@ -42,7 +43,8 @@ runGB (GBT x) = do
   gbState <- liftIO $ stToIO $ do
     addr <- V.replicate (0xFFFF + 0xD) 0x00
     t <- newSTRef 0
-    return $ GBState addr t
+    s <- newSTRef False
+    return $ GBState addr t s
   runReaderT x gbState
 
 
@@ -114,3 +116,10 @@ instance MonadIO m => MonadEmulator (GB m) where
       writeSTRef c 0
       return v
 
+  setStop = GBT $ do
+    s <- asks shouldStop
+    liftIO $ stToIO $ writeSTRef s True
+
+  stop = GBT $ do
+    s <- asks shouldStop
+    liftIO $ stToIO $ readSTRef s

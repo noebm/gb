@@ -62,6 +62,9 @@ class Monad m => MonadEmulator m where
   advCycles :: Word -> m ()
   resetCycles :: m Word
 
+  setStop :: m ()
+  stop :: m Bool
+
 getCycles :: MonadEmulator m => m Word
 getCycles = do
   t <- resetCycles
