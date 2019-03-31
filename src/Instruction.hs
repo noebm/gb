@@ -407,7 +407,18 @@ instruction b = case x of
           then ret >> return 20
           else return 4
 
-    | b .&. 0x0F == 0x01 && b .&. 0xF0 >= 0xC0 -> do
+    | z == 1 -> if y `testBit` 0
+      then case y `shiftR` 1 of
+        0 -> ret >> return 16
+        1 -> error "reti"
+        2 -> do
+          jump =<< load16 (Register16 HL)
+          return 4
+        3 -> do
+          store16 (Register16 SP) =<< load16 (Register16 HL)
+          return 8
+
+      else do
         store16 (Register16 $ selectStack16 b) =<< pop
         return 12
 
@@ -426,11 +437,6 @@ instruction b = case x of
 
     | b .&. 0x0F == 0x05 && b .&. 0xF0 >= 0xc0 -> do
         push =<< load16 (Register16 $ selectStack16 b)
-        return 16
-
-    -- ret
-    | b == 0xc9 -> do
-        ret
         return 16
 
     | b == 0xea -> do
