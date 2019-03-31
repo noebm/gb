@@ -297,10 +297,13 @@ instruction b = case x of
         _ -> let f = views (if y `testBit` 1 then flagC else flagZ) (if y `testBit` 0 then id else not)
              in jumpRelByFlag f
 
-    -- [ 0x01 - 0x31 ] ld ?? , d16
-    | b .&. 0x0F == 0x01 && b .&. 0xF0 <= 0x30 -> do
+    | z == 1 -> do
+      let s = selectSource16 b
+      if y `testBit` 0
+      then error $ "add hl," ++ show s
+      -- [ 0x01 - 0x31 ] ld ?? , d16
+      else do
         d16 <- ushort
-        let s = selectSource16 b
         writeSource16 s d16
         return 12
 
@@ -355,9 +358,6 @@ instruction b = case x of
     | b == 0x27 -> error "daa"
     | b == 0x37 -> error "scf"
 
-
-    | b .&. 0x0F == 0x09 && b .&. 0xF0 <= 0x30 -> do
-        error "add hl"
 
     -- [ 0x0a - 0x3a ] ld a , (??)
     | b .&. 0x0F == 0x0A && b .&. 0xF0 <= 0x30 -> do
