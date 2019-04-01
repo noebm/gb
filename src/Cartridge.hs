@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Cartridge
 where
 
@@ -16,6 +17,8 @@ data Cartridge = Cartridge
   , cartridgeRamBanks :: Word
   , cartridgeLocale   :: Word8
   }
+
+emptyCartridge = Cartridge (B.replicate 0x8000 0x00) "Test" 0x00 0 0 0
 
 instance Show Cartridge where
   show c = "Cartridge " ++ show (cartridgeTitle c)
