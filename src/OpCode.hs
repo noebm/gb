@@ -159,10 +159,10 @@ parseExtendedInstruction b =
         let op = case y of { 0 -> RLC ; 1 -> RRC ; 2 -> RL; 3 -> RR; 4 -> SLA; 5 -> SRA; 6 -> SWAP; 7 -> SRL }
         in o op [ basicRegisterArg z ]
 
-      (1,y,z) -> o BIT [ basicRegisterArg z ]
-      (2,y,z) -> o RES [ basicRegisterArg z ]
-      (3,y,z) -> o SET [ basicRegisterArg z ]
-      (x,y,z) -> error $ printf "unknown bytecode 0x%02x" b
+      (1,_,z) -> o BIT [ basicRegisterArg z ]
+      (2,_,z) -> o RES [ basicRegisterArg z ]
+      (3,_,z) -> o SET [ basicRegisterArg z ]
+      _ -> error $ printf "unknown bytecode 0x%02x" b
 
 parseInstruction :: Word8 -> Instruction
 parseInstruction b =
