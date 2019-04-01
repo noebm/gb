@@ -9,12 +9,11 @@ module GB
 where
 
 import qualified Data.Vector.Unboxed.Mutable as V
+import qualified Data.Vector.Unboxed         as VU
 import qualified Data.ByteString as B
 import Data.Vector.Unboxed.Mutable (MVector)
 import Data.STRef
 import Data.Word
-
-import Text.Printf
 
 import Control.Lens
 import Control.Monad.ST
@@ -22,15 +21,17 @@ import Control.Monad.Reader
 
 import MonadEmulator
 import Cartridge
+import VectorUtils
 
 data GBState s = GBState
   { addressSpace :: MVector s Word8
   , clock        :: STRef s Word
   , shouldStop   :: STRef s Bool
 
-  , gbCartridge  :: Cartridge
-  , romBank      :: STRef s (Maybe Word8)
-  , ramBank      :: STRef s (Maybe Word8)
+  , gbCartridge   :: Cartridge
+  , activeRomBank :: STRef s (Maybe Word8)
+  , activeRamBank :: STRef s (Maybe Word8)
+  , ramBanks      :: MVector s Word8
   }
 
 newtype GBT s m a = GBT (ReaderT (GBState s) m a)
@@ -44,29 +45,27 @@ type GB = GBT RealWorld
 unsafeMemory :: Monad m => GBT s m (MVector s Word8)
 unsafeMemory = GBT $ asks addressSpace
 
-runGB' :: MonadIO m => Cartridge -> GB m a -> m a
-runGB' cart (GBT x) = do
-  gbState <- liftIO $ stToIO $
-    GBState
-      <$> V.replicate (0xFFFF + 0xD) 0x00
-      <*> newSTRef 0
-      <*> newSTRef False
-      <*> pure cart
-      <*> newSTRef Nothing
-      <*> newSTRef Nothing
+makeGBState :: Cartridge -> ST s (GBState s)
+makeGBState cart = do
+  let bank k = B.take 0x4000 $ B.drop (0x4000 * (k - 1)) $ cartridgeData cart
+  memory      <- V.replicate (0xFFFF + 0xD) 0x00
+  let copyBank k = VU.copy (V.slice (0x4000 * k) 0x4000 memory) $ byteStringToVector $ bank k
+  copyBank 0
+  copyBank 1
+  externalRam <- V.replicate (0x2000 * fromIntegral (cartridgeRamBanks cart)) 0x00
+  GBState
+    <$> pure memory
+    <*> newSTRef 0
+    <*> newSTRef False
+    <*> pure cart
+    <*> newSTRef Nothing
+    <*> newSTRef Nothing
+    <*> pure externalRam
+
+runGB :: MonadIO m => Cartridge -> GB m a -> m a
+runGB cart (GBT x) = do
+  gbState <- liftIO $ stToIO $ makeGBState cart
   runReaderT x gbState
-
-copyData offset bs = do
-  mem <- unsafeMemory
-  liftIO $ forM_ [0..B.length bs - 1] $ \idx ->
-    V.write mem (offset + idx) (bs `B.index` idx)
-
-runGB cart act = runGB' cart $ do
-  copyData 0x0000 $ bank 0
-  copyData 0x4000 $ bank 1
-  act
-  where
-  bank k = B.take 0x4000 $ B.drop (0x4000 * (k - 1)) $ cartridgeData cart
 
 reg8index :: Reg8 -> Int
 reg8index A = 1
