@@ -96,7 +96,7 @@ someFunc = do
   cartOrError <- loadCartridge "./Tetris.gb"
   -- cartOrError <- loadCartridge "./testroms/cpu_instrs/individual/03-op sp,hl.gb"
   let cart = either error id cartOrError
-  runGB $ do
+  runGB cart $ do
     -- copy boot rom to memory
     writeCartridge cart
     copyData rom

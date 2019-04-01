@@ -20,11 +20,16 @@ import Control.Monad.ST
 import Control.Monad.Reader
 
 import MonadEmulator
+import Cartridge
 
 data GBState s = GBState
   { addressSpace :: MVector s Word8
   , clock        :: STRef s Word
   , shouldStop   :: STRef s Bool
+
+  , gbCartridge  :: Cartridge
+  , romBank      :: STRef s (Maybe Word8)
+  , ramBank      :: STRef s (Maybe Word8)
   }
 
 newtype GBT s m a = GBT (ReaderT (GBState s) m a)
@@ -38,15 +43,17 @@ type GB = GBT RealWorld
 unsafeMemory :: Monad m => GBT s m (MVector s Word8)
 unsafeMemory = GBT $ asks addressSpace
 
-runGB :: MonadIO m => GB m a -> m a
-runGB (GBT x) = do
-  gbState <- liftIO $ stToIO $ do
-    addr <- V.replicate (0xFFFF + 0xD) 0x00
-    t <- newSTRef 0
-    s <- newSTRef False
-    return $ GBState addr t s
+runGB :: MonadIO m => Cartridge -> GB m a -> m a
+runGB cart (GBT x) = do
+  gbState <- liftIO $ stToIO $
+    GBState
+      <$> V.replicate (0xFFFF + 0xD) 0x00
+      <*> newSTRef 0
+      <*> newSTRef False
+      <*> pure cart
+      <*> newSTRef Nothing
+      <*> newSTRef Nothing
   runReaderT x gbState
-
 
 reg8index :: Reg8 -> Int
 reg8index A = 1
