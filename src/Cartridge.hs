@@ -9,12 +9,12 @@ import Text.Printf
 import Control.Monad
 
 data Cartridge = Cartridge
-  { cartridgeData :: ByteString
-  , cartridgeTitle :: ByteString
-  , cartridgeType :: Word8
+  { cartridgeData     :: ByteString
+  , cartridgeTitle    :: ByteString
+  , cartridgeType     :: Word8
   , cartridgeRomBanks :: Word
-  , cartridgeRamSize :: Word
-  , cartridgeLocale :: Word8
+  , cartridgeRamBanks :: Word
+  , cartridgeLocale   :: Word8
   }
 
 instance Show Cartridge where
@@ -38,13 +38,13 @@ headerRomBanks bs = 4 * fromIntegral (bs `B.index` 0x148)
 headerLocale :: ByteString -> Word8
 headerLocale bs = bs `B.index` 0x14A
 
-headerRamSize :: ByteString -> Word
-headerRamSize bs = case bs `B.index` 0x149 of
-  0x00 -> 0
-  0x01 -> 2
-  0x02 -> 8
-  0x03 -> 32
-  _ -> error "help ram size not defined"
+headerRamBanks :: ByteString -> Either String Word
+headerRamBanks bs = case bs `B.index` 0x149 of
+  0x00 -> Right 0
+  0x01 -> Right 2
+  0x02 -> Right 8
+  0x03 -> Right 32
+  _ -> Left "RAM size not defined"
 
 loadCartridge :: FilePath -> IO (Either String Cartridge)
 loadCartridge fp = do
@@ -54,7 +54,7 @@ loadCartridge fp = do
     let (checksumResult, checksum) = checksumHeader f
     when (checksumResult /= checksum) $ Left "Header checksum does not match"
     when (headerType f /= 0x00) $ Left $ printf "Cartridge type (0x%02x) unsupported" (headerType f)
-    return $ Cartridge f (headerTitle f) (headerType f) (headerRomBanks f) (headerRamSize f) (headerLocale f)
+    Cartridge f (headerTitle f) (headerType f) (headerRomBanks f) <$> headerRamBanks f <*> pure (headerLocale f)
 
 getRomBank :: Cartridge -> Word -> Maybe ByteString
 getRomBank c idx = do

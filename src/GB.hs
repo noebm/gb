@@ -9,6 +9,7 @@ module GB
 where
 
 import qualified Data.Vector.Unboxed.Mutable as V
+import qualified Data.ByteString as B
 import Data.Vector.Unboxed.Mutable (MVector)
 import Data.STRef
 import Data.Word
@@ -43,8 +44,8 @@ type GB = GBT RealWorld
 unsafeMemory :: Monad m => GBT s m (MVector s Word8)
 unsafeMemory = GBT $ asks addressSpace
 
-runGB :: MonadIO m => Cartridge -> GB m a -> m a
-runGB cart (GBT x) = do
+runGB' :: MonadIO m => Cartridge -> GB m a -> m a
+runGB' cart (GBT x) = do
   gbState <- liftIO $ stToIO $
     GBState
       <$> V.replicate (0xFFFF + 0xD) 0x00
@@ -54,6 +55,18 @@ runGB cart (GBT x) = do
       <*> newSTRef Nothing
       <*> newSTRef Nothing
   runReaderT x gbState
+
+copyData offset bs = do
+  mem <- unsafeMemory
+  liftIO $ forM_ [0..B.length bs - 1] $ \idx ->
+    V.write mem (offset + idx) (bs `B.index` idx)
+
+runGB cart act = runGB' cart $ do
+  copyData 0x0000 $ bank 0
+  copyData 0x4000 $ bank 1
+  act
+  where
+  bank k = B.take 0x4000 $ B.drop (0x4000 * (k - 1)) $ cartridgeData cart
 
 reg8index :: Reg8 -> Int
 reg8index A = 1
