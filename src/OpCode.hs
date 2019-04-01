@@ -264,7 +264,7 @@ parseInstruction b =
     (3,2,5) -> o PUSH [ ArgDirect16 DE ]
     (3,4,5) -> o PUSH [ ArgDirect16 HL ]
     (3,6,5) -> o PUSH [ ArgDirect16 AF ]
-    (3,1,5) -> o CALL []
+    (3,1,5) -> o CALL [ Address ]
 
     (3,y,6) -> o (aluMnemonic y) [Immediate8]
     (3,_,7) -> o RST [] -- infer argument from bytecode
