@@ -38,8 +38,8 @@ hexbyte :: Word8 -> String
 hexbyte w = printf "0x%02x" w
   -- ("0x" ++) . showHex w $ ""
 
-hexushort :: Word16 -> String
-hexushort w = printf "0x%04x" w
+hexword :: Word16 -> String
+hexword w = printf "0x%04x" w
   -- ("0x" ++) . showHex w $ ""
 
 selectSource16 :: Word8 -> Source16
@@ -244,7 +244,7 @@ extendedInstruction b = case x of
 
 jumpRelByFlag :: MonadEmulator m => (Word8 -> Bool) -> m Word
 jumpRelByFlag g = do
-  relAddr <- int8
+  relAddr <- sbyte
   f <- load8 (Register8 F)
   if g f
     then 12 <$ jumpRelative relAddr
@@ -303,12 +303,12 @@ instruction b = case x of
     0 -> case y of
         0 -> return 4
         1 -> do
-          addr <- load16 . Addr16 =<< ushort
+          addr <- load16 . Addr16 =<< word
           store16 (Addr16 addr) =<< load16 (Register16 SP)
           return 20
         2 -> setStop >> return 0
         3 -> do
-          jumpRelative =<< int8
+          jumpRelative =<< sbyte
           return 12
         _ -> jumpRelByFlag (ctrlFlags y)
 
@@ -325,7 +325,7 @@ instruction b = case x of
           -- error $ "add hl," ++ show s
           -- [ 0x01 - 0x31 ] ld ?? , d16
           else do
-          writeSource16 s =<< ushort
+          writeSource16 s =<< word
           return 12
 
     -- [ 0x02 - 0x32 ] ld (??), A
@@ -339,10 +339,19 @@ instruction b = case x of
     -- [ 0x03 - 0x33 ] inc ??
     -- [ 0x0B - 0x3B ] dec ??
     3 -> do
-        if y `testBit` 0
-          then modifySource16 (selectSource16 b) (\s -> s - 1)
-          else modifySource16 (selectSource16 b) (+1)
-        return 8
+      let reg = case y .&. 0x6 of
+            0 -> BC
+            2 -> DE
+            4 -> HL
+            6 -> SP
+      -- error $ printf "b: %02x y:%02x select: " b y ++ show (select y) ++ show (y `testBit` 0)
+      if y `testBit` 0
+        then --- modifySource16 (Source16 reg) (\s -> s - 1)
+          store16 (Register16 reg) . (\v -> v - 1) =<< load16 (Register16 reg)
+        else
+          store16 (Register16 reg) . (\v -> v + 1) =<< load16 (Register16 reg)
+        -- modifySource16 (select y) (+1)
+      return 8
 
     -- inc
     4 -> do
@@ -467,20 +476,20 @@ instruction b = case x of
     2 -> if y `testBit` 2
       then do
         addr <- if y `testBit` 0
-          then ushort
+          then word
           else view word16 . (,) 0xFF <$> load8 (Register8 C)
         let (t , s) = if y `testBit` 1 then (Register8 A, Addr8 addr) else (Addr8 addr, Register8 A)
         store8 t =<< load8 s
         return $ if y `testBit` 0 then 16 else 8
       else do
         f <- ctrlFlags y <$> load8 (Register8 F)
-        addr <- ushort
+        addr <- word
         if f
           then jump addr >> return 16
           else return 12
     3 -> case y of
         0 -> do
-          jump =<< ushort
+          jump =<< word
           return 16
         1 -> extendedInstruction =<< byte
         6 -> do
@@ -496,13 +505,13 @@ instruction b = case x of
       then error $ printf "invalid opcode 0x%02x" b
       else do
         f <- ctrlFlags y <$> load8 (Register8 F)
-        addr <- ushort
+        addr <- word
         if f
           then call addr >> return 24
           else return 12
 
     5 -> if y `testBit` 0
-      then if b == 0xCD then ushort >>= call >> return 24 else error $ printf "invalid opcode 0x%02x" b
+      then if b == 0xCD then word >>= call >> return 24 else error $ printf "invalid opcode 0x%02x" b
       else do
         push =<< load16 (Register16 $ selectStack16 b)
         return 16
@@ -511,7 +520,7 @@ instruction b = case x of
 
   _ -> do
         pc <- load16 (Register16 PC)
-        error $ "instruction " ++ hexbyte b ++ " not implemented at " ++ hexushort (pc - 1)
+        error $ "instruction " ++ hexbyte b ++ " not implemented at " ++ hexword (pc - 1)
   where
   (x,y,z) = byteCodeDecompose b
   {-# INLINE reg #-}

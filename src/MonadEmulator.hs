@@ -9,7 +9,7 @@ module MonadEmulator
   , word16
   , load16LE, store16LE
   , flagC, flagH, flagN, flagZ
-  , immediate8, byte, ushort, int8
+  , byte, word, sbyte
   , jump, jumpRelative
   , push, pop
   , call, ret
@@ -45,12 +45,14 @@ showRegisters = do
     return $ show r ++ printf ": %04x " v
   return $ concat s1 ++ concat s2
 
+{-# INLINE load16LE #-}
 load16LE :: Monad m => m Word8 -> m Word8 -> m Word16
 load16LE b0 b1 = do
   l <- b0
   h <- b1
   return $ (h , l) ^. word16
 
+{-# INLINE store16LE #-}
 store16LE :: Monad m => (Word8 -> m ()) -> (Word8 -> m ()) -> (Word16 -> m ())
 store16LE b0 b1 w = let (h , l) = w ^. from word16 in b0 l >> b1 h
 
@@ -110,21 +112,21 @@ flagN = bitAt 6
 flagH = bitAt 5
 flagC = bitAt 4
 
-immediate8 :: MonadEmulator m => m Word8
-immediate8 = do
+{-# INLINE byte #-}
+byte :: MonadEmulator m => m Word8
+byte = do
   let regPC = Register16 PC
   pc <- load16 regPC
   store16 regPC (pc + 1)
   load8 (Addr8 pc)
 
-byte :: MonadEmulator m => m Word8
-byte = immediate8
+{-# INLINE word #-}
+word :: MonadEmulator m => m Word16
+word = load16LE byte byte
 
-ushort :: MonadEmulator m => m Word16
-ushort = load16LE byte byte
-
-int8 :: MonadEmulator m => m Int8
-int8 = fromIntegral <$> immediate8
+{-# INLINE sbyte #-}
+sbyte :: MonadEmulator m => m Int8
+sbyte = fromIntegral <$> byte
 
 jump :: MonadEmulator m => Word16 -> m ()
 jump = store16 (Register16 PC)

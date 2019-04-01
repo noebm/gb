@@ -32,7 +32,7 @@ import Drawing
 interpret :: (MonadEmulator m, MonadIO m) => Bool -> GraphicsContext -> m Bool
 interpret enablePrinting gfx = do
   regs <- showRegisters
-  b <- immediate8
+  b <- byte
 
   when enablePrinting $ do
     -- liftIO $ putStrLn $ printf "Instruction: 0x%02x / PC: 0x%04x" b pc
@@ -44,6 +44,7 @@ interpret enablePrinting gfx = do
   lcd <- lcdConfig
   forM_ lcd $ \conf -> do
     gpuInstr <- updateGPU
+    return ()
     forM_ gpuInstr $ \case
       DrawLine  -> genPixelRow (image gfx) conf
       DrawImage -> renderGraphics gfx
@@ -60,16 +61,28 @@ copyData bs = do
   liftIO $ forM_ [0..B.length bs - 1] $ \idx ->
     V.write mem idx (bs `B.index` idx)
 
+getTileData :: MonadEmulator m => LCDConfig -> Word8 -> m [Word16]
+getTileData conf idx = do
+  let addr = tileAddr conf idx
+  forM [0,2..8*2 - 1] $ \k ->
+    load16 (Addr16 $ addr + k)
+
 drawTile :: (MonadIO m, MonadEmulator m) => LCDConfig -> Word8 -> m Surface
 drawTile conf idx = do
   let addr = tileAddr conf idx
-  ar <- liftIO $ VS.new $ 8 * 8 * 3
+  let sx = 8
+  let sy = 8
+  let depth = 3
+  ar <- liftIO $ VS.new $ fromIntegral sx * fromIntegral sy * depth
   bgrdPal <- paletteValue <$> load8 backgroundPalette
-  forM_ [0..7 :: Word8] $ \y ->
-    forM_ [0..7 :: Word8] $ \x -> do
-      colorNumber <- tile addr y x
-      let i = fromIntegral $ (y * 8 + x) * 3
-      liftIO $ case bgrdPal colorNumber of
+  forM_ [0..sy - 1 :: Word8] $ \y ->
+    forM_ [0..sx - 1 :: Word8] $ \x -> do
+      colorNumber <- bgrdPal <$> tile addr y x
+      -- let i = fromIntegral $ (y * sx + x) * depth
+      let i = (fromIntegral y * fromIntegral sx + fromIntegral x) * depth
+      -- liftIO $ do
+      --   putStrLn $ printf "x: %d y: %d i: %03d" x y i
+      liftIO $ case colorNumber of
         0 -> do
           VS.unsafeWrite ar (i + 0) 0
           VS.unsafeWrite ar (i + 1) 0
@@ -88,21 +101,24 @@ drawTile conf idx = do
           VS.unsafeWrite ar (i + 2) 0xFF
         _ -> error "impossible"
       -- liftIO $ VS.unsafeWrite ar (i + 3) 0xFF
-  createRGBSurfaceFrom ar (V2 8 8) (8 * 3) RGB888
+  createRGBSurfaceFrom ar (fromIntegral <$> V2 sx sy) (fromIntegral sx * fromIntegral depth - 1) RGB888
 
-someFunc :: IO ()
-someFunc = do
+someFunc :: Maybe FilePath -> IO ()
+someFunc fp' = do
   rom <- memoryBootRom
-  cartOrError <- loadCartridge "./Tetris.gb"
+  -- cartOrError <- loadCartridge "./Tetris.gb"
   -- cartOrError <- loadCartridge "./testroms/cpu_instrs/individual/03-op sp,hl.gb"
-  let cart = either error id cartOrError
+
+  cart <- maybe (return emptyCartridge)
+    (\fp -> do
+        cartOrError <- loadCartridge fp
+        return $ either error id cartOrError) fp'
   runGB cart $ do
     -- copy boot rom to memory
-    writeCartridge cart
     copyData rom
 
     let g fx = do
-          liftIO . print =<< load16 (Register16 PC)
+          -- liftIO . print =<< load16 (Register16 PC)
           s <- interpret False fx
           unless s $ g fx
     let f fx = do
@@ -116,14 +132,22 @@ someFunc = do
 
                 -- c <- lcdConfig
                 -- forM_ c $ \conf -> do
-                --   forM_ [0..25] $ \k -> do
+                --   forM_ [0..26] $ \k -> do
+                --     t <- getTileData conf k
+                --     liftIO $ do
+                --       putStrLn $ printf "Tile %d contains" k
+                --       forM t $ putStr . printf "0x%04x "
+                --       putStr "\n"
+                --       getLine
+
                 --   -- let k = 25
                 --     surf <- drawTile conf k
                 --     text <- createTextureFromSurface (renderer fx) surf
                 --     renderGraphics (fx { image = text })
                 --     void $ liftIO $ getLine
 
-                writeCartridge cart >> g fx
+                -- writeCartridge cart >> g fx
+                return ()
                 else f fx
     gfx <- initializeGraphics
     f gfx
@@ -133,7 +157,3 @@ someFunc = do
     -- surf <- drawCompleteBackground
     -- text <- createTextureFromSurface (renderer gfx) surf
     -- renderGraphics (gfx { image = text })
-    liftIO $ do
-      putStrLn "waiting for input"
-      void getLine
-
