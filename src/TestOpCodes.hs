@@ -5,8 +5,9 @@ import qualified Data.ByteString as B
 
 import Cartridge (memoryBootRom)
 
-import Data.Word
 import Control.Monad.State
+import Text.Printf
+import Data.Word
 
 runTest :: IO ()
 runTest = do
@@ -18,7 +19,9 @@ runTest = do
           k <- state (\k -> (k , k + 1))
           return $ rom `B.index` k
     let printInstr = do
+          pc <- get
           instr <- parseInstructionM byte
+          liftIO $ putStrLn $ printf "%0x%04x: %s" pc instr
           liftIO $ print instr
           let byteToSkip = sum . fmap argSize $ arguments instr
           modify' (+ byteToSkip)
