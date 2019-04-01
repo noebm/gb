@@ -81,6 +81,7 @@ runGB cart (GBT x) = do
   gbState <- liftIO $ stToIO $ makeGBState cart
   runReaderT x gbState
 
+{-# INLINE reg8index #-}
 reg8index :: Reg8 -> Int
 reg8index A = 1
 reg8index F = 0
@@ -91,23 +92,26 @@ reg8index E = 4
 reg8index H = 7
 reg8index L = 6
 
-reg16index :: Reg16 -> Int
-reg16index AF = 0
-reg16index BC = 2
-reg16index DE = 4
-reg16index HL = 6
-reg16index PC = 8
-reg16index SP = 10
-
+{-# INLINE ls8ToIndex #-}
 ls8ToIndex :: LoadStore8 -> Int
 ls8ToIndex (Register8 r) = rbase + reg8index r
   where rbase = 0x10000
 ls8ToIndex (Addr8 addr) = fromIntegral addr
 
-ls16ToIndex :: LoadStore16 -> Int
-ls16ToIndex (Register16 r) = rbase + reg16index r
-  where rbase = 0x10000
-ls16ToIndex (Addr16 addr) = fromIntegral addr
+{-# INLINE ls16ToIndex #-}
+ls16ToIndex :: LoadStore16 -> (Int,Int)
+ls16ToIndex (Register16 r) = reg16decomp r & each +~ rbase
+  where
+  rbase = 0x10000
+  {-# INLINE reg16decomp #-}
+  reg16decomp AF = (F, A) & each %~ reg8index
+  reg16decomp BC = (C, B) & each %~ reg8index
+  reg16decomp DE = (E, D) & each %~ reg8index
+  reg16decomp HL = (L, H) & each %~ reg8index
+  reg16decomp PC = (0x8 , 0x9)
+  reg16decomp SP = (0xA , 0xB)
+
+ls16ToIndex (Addr16 addr) = (fromIntegral addr , fromIntegral addr + 1)
 
 instance MonadIO m => MonadEmulator (GB m) where
   {-# INLINE store8 #-}
@@ -119,10 +123,11 @@ instance MonadIO m => MonadEmulator (GB m) where
   store16 ls w = GBT $ do
     addrspace <- asks addressSpace
     liftIO $ do
-      let idx = ls16ToIndex ls
-      let (h , l) = w ^. from word16
-      V.unsafeWrite addrspace idx l
-      V.unsafeWrite addrspace (idx + 1) h
+      let (idx0, idx1) = ls16ToIndex ls
+      store16LE
+        (V.unsafeWrite addrspace idx0)
+        (V.unsafeWrite addrspace idx1)
+        w
 
   {-# INLINE load8 #-}
   load8 ls = GBT $ do
@@ -133,10 +138,10 @@ instance MonadIO m => MonadEmulator (GB m) where
   load16 ls = GBT $ do
     addrspace <- asks addressSpace
     liftIO $ do
-      let idx = ls16ToIndex ls
-      l <- V.unsafeRead addrspace idx
-      h <- V.unsafeRead addrspace (idx + 1)
-      return $ (h , l) ^. word16
+      let (idx0, idx1) = ls16ToIndex ls
+      load16LE
+        (V.unsafeRead addrspace idx0)
+        (V.unsafeRead addrspace idx1)
 
   advCycles dt = GBT $ do
     c <- asks clock
