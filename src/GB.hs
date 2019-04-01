@@ -15,6 +15,8 @@ import Data.Vector.Unboxed.Mutable (MVector)
 import Data.STRef
 import Data.Word
 
+import Text.Printf
+
 import Control.Lens
 import Control.Monad.ST
 import Control.Monad.Reader
@@ -29,8 +31,13 @@ data GBState s = GBState
   , shouldStop   :: STRef s Bool
 
   , gbCartridge   :: Cartridge
-  , activeRomBank :: STRef s (Maybe Int)
-  , activeRamBank :: STRef s (Maybe Int)
+  , activeRomBank :: STRef s (Maybe Word8)
+
+  , gbBankingMode :: STRef s Bool
+
+  , gbEnableERam  :: STRef s Bool
+  , activeRamBank :: STRef s (Maybe Word8)
+
   , ramBanks      :: MVector s Word8
   }
 
@@ -64,6 +71,8 @@ makeGBState cart = do
     <*> newSTRef False
     <*> pure cart
     <*> newSTRef Nothing
+    <*> newSTRef False
+    <*> newSTRef False
     <*> newSTRef Nothing
     <*> pure externalRam
 
@@ -148,20 +157,32 @@ instance MonadIO m => MonadEmulator (GB m) where
     s <- asks shouldStop
     liftIO $ stToIO $ readSTRef s
 
-  selectRomBank k = GBT $ do
-    let idx = fromIntegral k
-    memory <- asks addressSpace
-    cart   <- asks (cartridgeData . gbCartridge)
-    cartBanks <- asks (cartridgeRomBanks . gbCartridge)
-    when (idx < fromIntegral cartBanks) $ liftIO $ stToIO $ copyBankAux 0x4000 idx memory cart
+  modifyRomBank f = GBT $ do
+    romBank <- liftIO . stToIO . readSTRef =<< asks activeRomBank
+    forM_ romBank $ \k -> do
+      let k' = f k
+      let idx = fromIntegral k'
+      memory <- asks addressSpace
+      cart   <- asks (cartridgeData . gbCartridge)
+      cartBanks <- asks (cartridgeRomBanks . gbCartridge)
+      if idx < fromIntegral cartBanks
+        then liftIO $ stToIO $ copyBankAux 0x4000 idx memory cart
+        else error $ printf "Access to rom bank out of range %d" idx
 
   selectRamBank k = do
     storeERAM
     let idx = fromIntegral k
     active <- GBT $ asks activeRamBank
     cartBanks <- GBT $ asks (cartridgeRamBanks . gbCartridge)
-    when (idx < fromIntegral cartBanks) $ liftIO $ stToIO $ writeSTRef active (Just idx)
-    loadERAM
+    f <- GBT $ liftIO . stToIO . readSTRef =<< asks gbEnableERam
+    if f && idx < fromIntegral cartBanks
+      then do
+      liftIO $ stToIO $ writeSTRef active (Just idx)
+      loadERAM
+      else error $ printf "Access to ram bank out of range (Enabled: %d) %d" (fromEnum f) idx
+
+  setRamBank f = GBT $
+    liftIO . stToIO . (`writeSTRef` f) =<< asks gbEnableERam
 
 accessERAM :: MonadIO m
            => GBT RealWorld m (V.MVector RealWorld Word8, Maybe (V.MVector RealWorld Word8))
@@ -172,7 +193,7 @@ accessERAM = GBT $ do
   let eram = V.slice 0xA000 0x2000 memory
   let bankslice = do
         bank <- currentRamBank
-        return $ V.slice (0x2000 * bank) 0x2000 ram
+        return $ V.slice (0x2000 * fromIntegral bank) 0x2000 ram
   return (eram, bankslice)
 
 storeERAM :: MonadIO m => GBT RealWorld m ()

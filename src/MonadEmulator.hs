@@ -76,8 +76,11 @@ class Monad m => MonadEmulator m where
   setStop :: m ()
   stop :: m Bool
 
-  selectRomBank :: Word8 -> m ()
+  -- selectRomBank :: Word8 -> m ()
+  modifyRomBank :: (Word8 -> Word8) -> m ()
+
   selectRamBank :: Word8 -> m ()
+  setRamBank :: Bool -> m ()
 
   -- externalRam   :: Bool -> m ()
   -- selectRomBank :: Word8 -> m ()
