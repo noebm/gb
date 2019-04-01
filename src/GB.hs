@@ -29,8 +29,8 @@ data GBState s = GBState
   , shouldStop   :: STRef s Bool
 
   , gbCartridge   :: Cartridge
-  , activeRomBank :: STRef s (Maybe Word8)
-  , activeRamBank :: STRef s (Maybe Word8)
+  , activeRomBank :: STRef s (Maybe Int)
+  , activeRamBank :: STRef s (Maybe Int)
   , ramBanks      :: MVector s Word8
   }
 
@@ -45,11 +45,16 @@ type GB = GBT RealWorld
 unsafeMemory :: Monad m => GBT s m (MVector s Word8)
 unsafeMemory = GBT $ asks addressSpace
 
+
+copyBankAux :: Int -> Int -> V.MVector s Word8 -> B.ByteString -> ST s ()
+copyBankAux target k memory cart = do
+  let bank = B.take 0x4000 $ B.drop (0x4000 * (k - 1)) cart
+  VU.copy (V.slice target 0x4000 memory) $ byteStringToVector bank
+
 makeGBState :: Cartridge -> ST s (GBState s)
 makeGBState cart = do
-  let bank k = B.take 0x4000 $ B.drop (0x4000 * (k - 1)) $ cartridgeData cart
-  memory      <- V.replicate (0xFFFF + 0xD) 0x00
-  let copyBank k = VU.copy (V.slice (0x4000 * k) 0x4000 memory) $ byteStringToVector $ bank k
+  memory <- V.replicate (0xFFFF + 0xD) 0x00
+  let copyBank k = copyBankAux (0x4000 * k) k memory (cartridgeData cart)
   copyBank 0
   copyBank 1
   externalRam <- V.replicate (0x2000 * fromIntegral (cartridgeRamBanks cart)) 0x00
@@ -142,3 +147,41 @@ instance MonadIO m => MonadEmulator (GB m) where
   stop = GBT $ do
     s <- asks shouldStop
     liftIO $ stToIO $ readSTRef s
+
+  selectRomBank k = GBT $ do
+    let idx = fromIntegral k
+    memory <- asks addressSpace
+    cart   <- asks (cartridgeData . gbCartridge)
+    cartBanks <- asks (cartridgeRomBanks . gbCartridge)
+    when (idx < fromIntegral cartBanks) $ liftIO $ stToIO $ copyBankAux 0x4000 idx memory cart
+
+  selectRamBank k = do
+    storeERAM
+    let idx = fromIntegral k
+    active <- GBT $ asks activeRamBank
+    cartBanks <- GBT $ asks (cartridgeRamBanks . gbCartridge)
+    when (idx < fromIntegral cartBanks) $ liftIO $ stToIO $ writeSTRef active (Just idx)
+    loadERAM
+
+accessERAM :: MonadIO m
+           => GBT RealWorld m (V.MVector RealWorld Word8, Maybe (V.MVector RealWorld Word8))
+accessERAM = GBT $ do
+  memory <- asks addressSpace
+  ram    <- asks ramBanks
+  currentRamBank <- liftIO . stToIO . readSTRef =<< asks activeRamBank
+  let eram = V.slice 0xA000 0x2000 memory
+  let bankslice = do
+        bank <- currentRamBank
+        return $ V.slice (0x2000 * bank) 0x2000 ram
+  return (eram, bankslice)
+
+storeERAM :: MonadIO m => GBT RealWorld m ()
+storeERAM = do
+  (eram , bankslice) <- accessERAM
+  liftIO $ stToIO $ forM_ bankslice $ \b -> V.copy b eram
+
+loadERAM :: MonadIO m => GBT RealWorld m ()
+loadERAM = do
+  (eram , bankslice) <- accessERAM
+  liftIO $ stToIO $ forM_ bankslice $ \b -> V.copy eram b
+
