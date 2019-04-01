@@ -1,11 +1,10 @@
 module Instruction
---   (
---     instruction
---   )
+-- (
+--   instruction
+-- )
 where
 
 import Prelude hiding (compare)
-import Numeric
 import Text.Printf
 
 import Control.Lens
@@ -25,56 +24,56 @@ byteCodeDecompose b =
   ((b `shiftR` 6) .&. 0x3, (b `shiftR` 3) .&. 0x7, b .&. 0x7)
 {-# INLINE byteCodeDecompose #-}
 
--- data Source8 = Source8 Reg8 | PointerHL
---   deriving (Show, Eq)
--- 
--- newtype Source16 = Source16 Reg16
---   deriving (Show, Eq)
--- 
--- data SourcePtr = PtrBC | PtrDE | PtrHLi | PtrHLd
---   deriving (Show, Eq)
+data Source8 = Source8 Reg8 | PointerHL
+  deriving (Show, Eq)
 
-hexbyte :: Word8 -> String
-hexbyte w = printf "0x%02x" w
+newtype Source16 = Source16 Reg16
+  deriving (Show, Eq)
+
+data SourcePtr = PtrBC | PtrDE | PtrHLi | PtrHLd
+  deriving (Show, Eq)
+
+-- hexbyte :: Word8 -> String
+-- hexbyte w = printf "0x%02x" w
+--   -- ("0x" ++) . showHex w $ ""
+-- 
+-- hexword :: Word16 -> String
+-- hexword w = printf "0x%04x" w
   -- ("0x" ++) . showHex w $ ""
 
-hexword :: Word16 -> String
-hexword w = printf "0x%04x" w
-  -- ("0x" ++) . showHex w $ ""
+selectSource16 :: Word8 -> Source16
+selectSource16 b
+  | b .&. 0x30 == 0x00 = Source16 BC
+  | b .&. 0x30 == 0x10 = Source16 DE
+  | b .&. 0x30 == 0x20 = Source16 HL
+  | b .&. 0x30 == 0x30 = Source16 SP
+  | otherwise = error "selectSource16: no known register"
 
--- selectSource16 :: Word8 -> Source16
--- selectSource16 b
---   | b .&. 0x30 == 0x00 = Source16 BC
---   | b .&. 0x30 == 0x10 = Source16 DE
---   | b .&. 0x30 == 0x20 = Source16 HL
---   | b .&. 0x30 == 0x30 = Source16 SP
---   | otherwise = error "selectSource16: no known register"
+timingSource8 :: Source8 -> Word
+timingSource8 (Source8 _) = 4
+timingSource8 PointerHL   = 8
 
--- timingSource8 :: Source8 -> Word
--- timingSource8 (Source8 _) = 4
--- timingSource8 PointerHL   = 8
--- 
--- getSource8 :: MonadEmulator m => Source8 -> m Word8
--- getSource8 (Source8 r) = load8 (Register8 r)
--- getSource8 PointerHL = load8 . Addr8 =<< load16 (Register16 HL)
--- 
--- writeSource8 :: MonadEmulator m => Source8 -> Word8 -> m ()
--- writeSource8 (Source8 r) w = store8 (Register8 r) w
--- writeSource8 PointerHL w = do
---   addr <- load16 (Register16 HL)
---   store8 (Addr8 addr) w
+getSource8 :: MonadEmulator m => Source8 -> m Word8
+getSource8 (Source8 r) = load8 (Register8 r)
+getSource8 PointerHL = load8 . Addr8 =<< load16 (Register16 HL)
 
--- modifySource8 :: MonadEmulator m => Source8 -> (Word8 -> Word8) -> m ()
--- modifySource8 s f = writeSource8 s . f =<< getSource8 s
--- 
--- getSource16 :: MonadEmulator m => Source16 -> m Word16
--- getSource16 (Source16 r) = load16 (Register16 r)
--- 
--- writeSource16 :: MonadEmulator m => Source16 -> Word16 -> m ()
--- writeSource16 (Source16 r) dw = store16 (Register16 r) dw
--- 
--- modifySource16 :: MonadEmulator m => Source16 -> (Word16 -> Word16) -> m ()
--- modifySource16 s f = writeSource16 s . f =<< getSource16 s
+writeSource8 :: MonadEmulator m => Source8 -> Word8 -> m ()
+writeSource8 (Source8 r) w = store8 (Register8 r) w
+writeSource8 PointerHL w = do
+  addr <- load16 (Register16 HL)
+  store8 (Addr8 addr) w
+
+modifySource8 :: MonadEmulator m => Source8 -> (Word8 -> Word8) -> m ()
+modifySource8 s f = writeSource8 s . f =<< getSource8 s
+
+getSource16 :: MonadEmulator m => Source16 -> m Word16
+getSource16 (Source16 r) = load16 (Register16 r)
+
+writeSource16 :: MonadEmulator m => Source16 -> Word16 -> m ()
+writeSource16 (Source16 r) dw = store16 (Register16 r) dw
+
+modifySource16 :: MonadEmulator m => Source16 -> (Word16 -> Word16) -> m ()
+modifySource16 s f = writeSource16 s . f =<< getSource16 s
 
 modifyFlags :: MonadEmulator m => (Word8 -> Word8) -> m ()
 modifyFlags g = do
@@ -189,35 +188,33 @@ srl x = do
 
 extendedInstruction :: MonadEmulator m => Word8 -> m Word
 extendedInstruction b = do
-  case x of
-    0 -> case y of
-      0 -> getReg >>= rlc >>= setReg
-      1 -> getReg >>= rrc >>= setReg
-      2 -> getReg >>= rl  >>= setReg
-      3 -> getReg >>= rr  >>= setReg
-      4 -> getReg >>= sla >>= setReg
-      5 -> getReg >>= sra >>= setReg
-      6 -> getReg >>= (\x -> return $ ((x `shiftL` 4) .&. 0xF0) .|. ((x `shiftR` 4) .&. 0x0F)) >>= setReg
-      7 -> getReg >>= srl >>= setReg
-      _ -> error "extended instruction not implemented"
-    1 -> do
-      v <- getReg
+  let bc = byteCodeDecompose b
+  case bc of
+    (0, 0, z) -> modifyReg z rlc
+    (0, 1, z) -> modifyReg z rrc
+    (0, 2, z) -> modifyReg z rl
+    (0, 3, z) -> modifyReg z rr
+    (0, 4, z) -> modifyReg z sla
+    (0, 5, z) -> modifyReg z sra
+    (0, 6, z) -> modifyReg z (\x -> return $ ((x `shiftL` 4) .&. 0xF0) .|. ((x `shiftR` 4) .&. 0x0F))
+    (0, 7, z) -> modifyReg z srl
+    (1,y, z) -> do
+      v <- getReg z
       modifyFlags $ \f -> f
-        & flagZ .~ not (v `testBit` bit')
+        & flagZ .~ not (v `testBit` bit' y)
         & flagN .~ False
         & flagH .~ True
-    2 -> setReg . (`clearBit` bit') =<< getReg
-    3 -> setReg . (`setBit` bit') =<< getReg
+    (2,y,z) -> modifyReg z (return . (`clearBit` bit' y))
+    (3,y,z) -> modifyReg z (return . (`setBit`   bit' y))
     _ -> error "impossible"
-  return $ instrTime
+  return $ instrTime bc
 
   where
-  (x,y,z) = byteCodeDecompose b
-  bit' = fromIntegral y
-  getReg   = load8 =<< reg'
-  setReg b = (`store8` b) =<< reg'
-
-  reg' = case z of
+  bit' y = fromIntegral y
+  getReg z  = load8 =<< reg' z
+  setReg z b = (`store8` b) =<< reg' z
+  modifyReg z f = getReg z >>= f >>= setReg z
+  reg' z = case z of
     0 -> return (Register8 B)
     1 -> return (Register8 C)
     2 -> return (Register8 D)
@@ -227,7 +224,7 @@ extendedInstruction b = do
     6 -> Addr8 <$> load16 (Register16 HL)
     7 -> return (Register8 A)
 
-  instrTime
+  instrTime (_,_,z)
     | z == 6    = 16
     | otherwise = 8
 
@@ -302,27 +299,36 @@ instruction b = case x of
         _ -> jumpRelByFlag (ctrlFlags y)
 
     1 -> do
-        let s = selectSource16 b
+        let reg = case y .&. 0x6 of { 0 -> BC; 2 -> DE; 4 -> HL; 6 -> SP }
         if y `testBit` 0
           then do
           hl <- load16 (Register16 HL)
-          r <- getSource16 s
+          r <- load16 (Register16 reg)
           store16 (Register16 HL) (hl + r)
           -- XXX flags
           return 8
-
-          -- error $ "add hl," ++ show s
-          -- [ 0x01 - 0x31 ] ld ?? , d16
           else do
-          writeSource16 s =<< word
+          store16 (Register16 reg) =<< word
           return 12
 
     -- [ 0x02 - 0x32 ] ld (??), A
     -- [ 0x0a - 0x3a ] ld a , (??)
     2 -> do
-        addr <- getSourcePtr (selectSourcePtr b)
-        let (s, t) = if y `testBit` 0 then (Addr8 addr, Register8 A) else (Register8 A, Addr8 addr)
-        store8 t =<< load8 s
+        addr <- Addr8 <$> case y .&. 0x6 of
+          { 0 -> load16 (Register16 BC)
+          ; 2 -> load16 (Register16 DE)
+          ; 4 -> do
+              addr <- load16 (Register16 HL)
+              store16 (Register16 HL) (addr + 1)
+              return addr
+          ; 6 -> do
+              addr <-load16 (Register16 HL)
+              store16 (Register16 HL) (addr - 1)
+              return addr
+          }
+        if y `testBit` 0
+          then store8 (Register8 A) =<< load8 addr
+          else store8 addr =<< load8 (Register8 A)
         return 8
 
     -- [ 0x03 - 0x33 ] inc ??
@@ -371,39 +377,43 @@ instruction b = case x of
         writeSource8 (reg y) =<< byte
         return $ 4 + regtime y
 
-    7 -> case y of
+    7 -> do
+      let modA f = do
+            let r = Register8 A
+            store8 r =<< f =<< load8 r
+      case y of
         0 -> do
-          let r = Register8 A
-          store8 r =<< rlc =<< load8 r
+          modA rlc
           modifyFlags (flagZ .~ False)
           return 4
         1 -> do
-          let r = Register8 A
-          store8 r =<< rrc =<< load8 r
+          modA rrc
           modifyFlags (flagZ .~ False)
           return 4
         2 -> do
-          let r = Register8 A
-          store8 r =<< rl =<< load8 r
+          modA rl
           modifyFlags (flagZ .~ False)
           return 4
         3 -> do
-          let r = Register8 A
-          store8 r =<< rr =<< load8 r
+          modA rr
           modifyFlags (flagZ .~ False)
           return 4
         4 -> do
           -- XXX daa
           f <- load8 (Register8 F)
           v <- load8 (Register8 A)
-          let vcorr = (if (f ^. flagH || (not (f ^. flagN) && (v .&. 0xF) > 9)) then 0x06 else 0x00)
-                    + (if (f ^. flagC || (not (f ^. flagN) && v > 0x99))        then 0x60 else 0x00)
-          let vcorr' = if f ^. flagN then -vcorr else vcorr
+          let vcorr'
+                | f ^. flagN
+                = negate $ if f ^. flagC then 0x60 else 0x00
+                         + if f ^. flagH then 0x06 else 0x00
+                | otherwise
+                = if f ^. flagC || v > 0x99 then 0x60 else 0x00
+                + if f ^. flagH || v > 0x09 then 0x06 else 0x00
           let v' = v + vcorr'
           store8 (Register8 A) v'
           modifyFlags $ \k -> k
             & flagH .~ False
-            & flagC .~ (f ^. flagC || (not (f ^. flagN) && v > 0x99))
+            -- & flagC .~ (f ^. flagC || (not (f ^. flagN) && v > 0x99))
             & flagZ .~ (v' == 0)
           return 4
         5 -> do
@@ -422,6 +432,7 @@ instruction b = case x of
   -- [ 0x40 - 0x7F ] ld ?, ?
   1 -> if b == 0x76 then error "halt"
       else do
+        -- error $ printf "ld %s,%s (0x%02x)" (show $ reg y) (show $ reg z) b
         writeSource8 (reg y) =<< getSource8 (reg z)
         return $ max (regtime y) (regtime z)
 
@@ -509,7 +520,7 @@ instruction b = case x of
 
   _ -> do
         pc <- load16 (Register16 PC)
-        error $ "instruction " ++ hexbyte b ++ " not implemented at " ++ hexword (pc - 1)
+        error $ printf "instruction 0x%02x not implemented at 0x%04x" b (pc - 1)
   where
   (x,y,z) = byteCodeDecompose b
   {-# INLINE reg #-}
