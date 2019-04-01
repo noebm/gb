@@ -60,7 +60,7 @@ copyBankAux target k memory cart = do
 
 makeGBState :: Cartridge -> ST s (GBState s)
 makeGBState cart = do
-  memory <- V.replicate (0xFFFF + 0xD) 0x00
+  memory <- V.replicate (0xFFFF + 0xC) 0x00
   let copyBank k = copyBankAux (0x4000 * k) k memory (cartridgeData cart)
   copyBank 0
   copyBank 1
