@@ -2,8 +2,13 @@ module TestOpCodes where
 
 import OpCode
 import qualified Data.ByteString as B
+import qualified Data.Vector.Unboxed.Mutable as VUM
 
-import Cartridge (memoryBootRom)
+import Cartridge (memoryBootRom, emptyCartridge)
+import GB
+
+import Interpret
+import MonadEmulator
 
 import Control.Monad.State
 import Text.Printf
@@ -30,3 +35,22 @@ runTest = do
           when (idx == 0xA8) (put 0xE0 >> liftIO (putStrLn "skipping data..."))
           when (idx < 0xFF) (printInstr >> loop)
     loop
+
+runInterpretTest :: IO ()
+runInterpretTest = do
+  rom <- memoryBootRom
+  let copyData bs = do
+        mem <- unsafeMemory
+        liftIO $ forM_ [0..B.length bs - 1] $ \idx ->
+          VUM.write mem idx (bs `B.index` idx)
+  runGB emptyCartridge $ do
+    copyData rom
+    let aux = do
+          i <- parseInstructionM byte
+          liftIO $ print i
+          interpretM i
+
+    let loop f = do
+          idx <- load16 (Register16 PC)
+          when (idx < 0xFF) (f >> loop f)
+    loop aux

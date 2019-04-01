@@ -8,6 +8,8 @@ import Control.Lens
 import OpCode
 import Memory.Accessible
 
+import Instruction (byteCodeDecompose, modifyFlags)
+
 getFlag :: Flag -> Word8 -> Bool
 getFlag FlagC = view flagC
 getFlag FlagZ = view flagZ
@@ -74,7 +76,6 @@ setArgM arg = case arg of
   -- AddressFF  -> Right (addrFF <$> byte)
   -- AddressRel -> Right (addrRel =<< sbyte)
 
-
 interpretM :: MonadEmulator m => Instruction -> m ()
 interpretM instr@(Instruction b op args) = case op of
   LD -> case args of
@@ -93,8 +94,13 @@ interpretM instr@(Instruction b op args) = case op of
       a <- load8 (Register8 A)
       store8 (Register8 A) (a `xor` v)
     _ -> error "interpretM: XOR - invalid arguments"
-  -- BIT -> case getArgM <$> args of
-  --   [ Left g ] -> do
-  --     let (_, y, _) = byteCodeDecompose b
+  BIT -> case getArgM <$> args of
+    [ Left g ] -> do
+      let (_, y, _) = byteCodeDecompose b
+      v <- g
+      modifyFlags $ \f -> f
+        & flagZ .~ not (v `testBit` fromIntegral y)
+        & flagN .~ False
+        & flagH .~ True
   _ -> error $ "failed at " ++ show instr
 
