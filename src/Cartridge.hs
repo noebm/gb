@@ -49,6 +49,11 @@ headerRamBanks bs = case bs `B.index` 0x149 of
   0x03 -> Right 32
   _ -> Left "RAM size not defined"
 
+cartridgeTypeSupported :: Word8 -> Bool
+cartridgeTypeSupported 0x00 = True
+cartridgeTypeSupported 0x01 = True
+cartridgeTypeSupported _ = False
+
 loadCartridge :: FilePath -> IO (Either String Cartridge)
 loadCartridge fp = do
   f <- B.readFile fp
@@ -56,7 +61,7 @@ loadCartridge fp = do
     when (B.length f < 0x150) $ Left "File too short to contain a header"
     let (checksumResult, checksum) = checksumHeader f
     when (checksumResult /= checksum) $ Left "Header checksum does not match"
-    when (headerType f /= 0x00) $ Left $ printf "Cartridge type (0x%02x) unsupported" (headerType f)
+    when (not $ cartridgeTypeSupported $ headerType f) $ Left $ printf "Cartridge type (0x%02x) unsupported" (headerType f)
     Cartridge f (headerTitle f) (headerType f) (headerRomBanks f) <$> headerRamBanks f <*> pure (headerLocale f)
 
 getRomBank :: Cartridge -> Word -> Maybe ByteString
