@@ -15,6 +15,7 @@ pattern VBlank = 1
 pattern OAM    = 2
 pattern VRAM   = 3
 
+{-# INLINE updateGPU' #-}
 updateGPU' :: Word -> Word8 -> Word8 -> (Word, Word8, Maybe Word8)
 updateGPU' t l mode = case mode .&. 0x3 of
   HBlank -> update 204 (\t' -> (t' , l+1, Just $ if l == 143 then VBlank else OAM))
@@ -22,7 +23,9 @@ updateGPU' t l mode = case mode .&. 0x3 of
   OAM    -> update 80  (\t' -> (t' , l, Just VRAM))
   VRAM   -> update 172 (\t' -> (t' , l, Just HBlank))
   _ -> error "impossible"
-  where update clocktime f = if t >= clocktime then f (t - clocktime) else (t, l, Nothing)
+  where
+    {-# INLINE update #-}
+    update clocktime f = if t >= clocktime then f (t - clocktime) else (t, l, Nothing)
 
 control           = Addr8 0xFF40
 status            = Addr8 0xFF41
