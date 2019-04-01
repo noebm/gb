@@ -27,5 +27,6 @@ runTest = do
 
     let loop = do
           idx <- get
+          when (idx == 0xA8) (put 0xE0 >> liftIO (putStrLn "skipping data..."))
           when (idx < 0xFF) (printInstr >> loop)
     loop
