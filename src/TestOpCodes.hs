@@ -21,8 +21,7 @@ runTest = do
     let printInstr = do
           pc <- get
           instr <- parseInstructionM byte
-          liftIO $ putStrLn $ printf "%0x%04x: %s" pc instr
-          liftIO $ print instr
+          liftIO $ putStrLn $ printf "0x%04x: %s" pc (show instr)
           let byteToSkip = sum . fmap argSize $ arguments instr
           modify' (+ byteToSkip)
 
