@@ -26,6 +26,7 @@ import Instruction
 import Cartridge
 import Memory.MMIO
 
+import Interrupt
 import Debugging
 import Drawing
 
@@ -38,6 +39,8 @@ interpret enablePrinting gfx = do
     -- liftIO $ putStrLn $ printf "Instruction: 0x%02x / PC: 0x%04x" b pc
     liftIO $ putStrLn regs
     liftIO $ putStrLn $ printf "Instruction: 0x%02x" b
+
+  mapM_ (advCycles <=< enterInterrupt) =<< handleInterrupt
 
   advCycles =<< instruction b
 
@@ -146,8 +149,8 @@ someFunc fp' = do
                 --     renderGraphics (fx { image = text })
                 --     void $ liftIO $ getLine
 
-                -- writeCartridge cart >> g fx
-                return ()
+                writeCartridge cart >> g fx
+                -- return ()
                 else f fx
     gfx <- initializeGraphics
     f gfx
