@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 module TestOpCodes where
 
 import OpCode
@@ -6,9 +7,12 @@ import qualified Data.Vector.Unboxed.Mutable as VUM
 
 import Cartridge (memoryBootRom, emptyCartridge)
 import GB
+import Data.Foldable (find)
+import Data.Maybe
 
-import Interpret
 import MonadEmulator
+import Interpret
+import InstructionPath
 
 import Control.Monad.State
 import Text.Printf
@@ -54,3 +58,34 @@ runInterpretTest = do
           idx <- load16 (Register16 PC)
           when (idx < 0xFF) (f >> loop f)
     loop aux
+
+runInterpretTestOptimized :: IO ()
+runInterpretTestOptimized = do
+  rom <- memoryBootRom
+  let copyData bs = do
+        mem <- unsafeMemory
+        liftIO $ forM_ [0..B.length bs - 1] $ \idx ->
+          VUM.write mem idx (bs `B.index` idx)
+  runGB emptyCartridge $ do
+    copyData rom
+    (`evalStateT` ([] :: [ CodePath (GB IO) ])) $ do
+      let run addr = do
+            hasCodePath <- gets (find (\cp -> entryAddress cp == addr))
+            c <- StateT $ \s -> if isJust hasCodePath
+              then do
+              let Just cp = hasCodePath
+              liftIO $ putStrLn $ printf "executing path 0x%04x" (entryAddress cp)
+              executePath cp
+              return (Nothing , s)
+              else do
+              c <- getCodePath 3
+              return (c , s)
+            let updateCodePath c' = do
+                  liftIO $ putStrLn $ printf "new path 0x%04x" (entryAddress c')
+                  liftIO $ print $ pathInstructions c'
+                  modify' (c' :)
+            maybe (return ()) updateCodePath c
+      let loop f = do
+            pc <- load16 (Register16 PC)
+            when (pc < 0xFF) (f pc >> loop f)
+      loop run

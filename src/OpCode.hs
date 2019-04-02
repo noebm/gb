@@ -81,10 +81,13 @@ argSize ArgPointerImm   = 2
 argSize ArgPointerImmFF = 1
 argSize _ = 0
 
-opcodeSize :: Instruction -> Int
-opcodeSize (Instruction _ op _)
+opcodeSize :: Mnemonic -> Int
+opcodeSize op
   | op `elem` [ STOP, RLC , RRC , RL , RR , SLA , SRA , SRL , SWAP , BIT , SET , RES ] = 2
   | otherwise = 1
+
+instructionSize :: Instruction -> Int
+instructionSize (Instruction _ op args) = opcodeSize op + sum (argSize <$> args)
 
 data Flag = FlagZ | FlagC | FlagNZ | FlagNC
 

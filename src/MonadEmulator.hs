@@ -19,6 +19,7 @@ where
 
 import Control.Lens
 import Control.Monad
+import Control.Monad.State
 
 import Text.Printf
 
@@ -93,6 +94,34 @@ class Monad m => MonadEmulator m where
   -- selectRamBank :: Word8 -> m ()
 
   -- bootRom :: Word8 -> m Word8
+
+
+{-# INLINE aux0 #-}
+{-# INLINE aux1 #-}
+{-# INLINE aux2 #-}
+aux0 :: Functor m => m a -> StateT s m a
+aux0 x = StateT $ \s -> flip (,) s <$> x
+aux1 :: Functor m => (a -> m b) -> (a -> StateT s m b)
+aux1 f  = aux0 . f
+aux2 :: Functor m => (a -> b -> m c) -> (a -> b -> StateT s m c)
+aux2 f = aux1 . f
+
+instance MonadEmulator m => MonadEmulator (StateT s m) where
+  store8  = aux2 store8
+  store16 = aux2 store16
+
+  load8     = aux1 load8
+  load16    = aux1 load16
+
+  advCycles = aux1 advCycles
+  resetCycles = aux0 resetCycles
+
+  setStop = aux0 setStop
+  stop    = aux0 stop
+
+  modifyRomBank = aux1 modifyRomBank
+  selectRamBank = aux1 selectRamBank
+  setRamBank    = aux1 setRamBank
 
 getCycles :: MonadEmulator m => m Word
 getCycles = do
