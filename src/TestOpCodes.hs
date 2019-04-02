@@ -71,20 +71,16 @@ runInterpretTestOptimized = do
     (`evalStateT` ([] :: [ CodePath (GB IO) ])) $ do
       let run addr = do
             hasCodePath <- gets (find (\cp -> entryAddress cp == addr))
-            c <- StateT $ \s -> if isJust hasCodePath
-              then do
-              let Just cp = hasCodePath
-              liftIO $ putStrLn $ printf "executing path 0x%04x" (entryAddress cp)
-              executePath cp
-              return (Nothing , s)
-              else do
-              c <- getCodePath 3
-              return (c , s)
-            let updateCodePath c' = do
-                  liftIO $ putStrLn $ printf "new path 0x%04x" (entryAddress c')
-                  liftIO $ print $ pathInstructions c'
-                  modify' (c' :)
-            maybe (return ()) updateCodePath c
+            let withCodePath cp = do
+                  liftIO $ putStrLn $ printf "executing path 0x%04x" (entryAddress cp)
+                  executePath cp
+                  return Nothing
+            c <- StateT $ \s -> flip (,) s <$> maybe (getCodePath 3) withCodePath hasCodePath
+            let updateCodePath cp = do
+                  liftIO $ putStrLn $ printf "new path 0x%04x" (entryAddress cp)
+                  liftIO $ print $ pathInstructions cp
+                  modify' (cp :)
+            mapM_ updateCodePath c
       let loop f = do
             pc <- load16 (Register16 PC)
             when (pc < 0xFF) (f pc >> loop f)
