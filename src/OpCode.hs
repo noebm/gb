@@ -7,10 +7,6 @@ import Text.Printf
 import Data.Word
 import Data.Bits
 
--- byteCodeDecompose :: Word8 -> (Word8, Word8, Word8)
--- byteCodeDecompose b =
---   ((b `shiftR` 6) .&. 0x3, (b `shiftR` 3) .&. 0x7, b .&. 0x7)
-
 data Mnemonic
   = LD
   | PUSH | POP
@@ -25,12 +21,13 @@ data Mnemonic
   | DI | EI | RETI | RST
 
   | AND | OR | XOR
+  | RLCA | RRCA | RLA | RRA
   | RLC | RRC | RL | RR
   | SLA | SRA | SRL | SWAP
   | BIT | SET | RES
 
   | DAA | CPL | SCF | CCF
-  deriving (Show)
+  deriving (Show, Eq)
 
 data Arg = ArgDirect8 Reg8
          | ArgDirect16 Reg16
@@ -81,6 +78,11 @@ argSize AddressFF   = 1
 argSize AddressRel  = 1
 argSize _ = 0
 
+opcodeSize :: Instruction -> Int
+opcodeSize (Instruction _ op _)
+  | op `elem` [ STOP, RLC , RRC , RL , RR , SLA , SRA , SRL , SWAP , BIT , SET , RES ] = 2
+  | otherwise = 1
+
 data Flag = FlagZ | FlagC | FlagNZ | FlagNC
 
 instance Show Flag where
@@ -94,6 +96,7 @@ data Instruction = Instruction !Word8 !Mnemonic ![ Arg ]
 instance Show Instruction where
   show (Instruction code mnemonic args) = printf "0x%02x - %s" code (show mnemonic) ++ showArgs args
 
+{-# INLINE arguments #-}
 arguments :: Instruction -> [ Arg ]
 arguments (Instruction _ _ args) = args
 
@@ -212,10 +215,10 @@ parseInstruction b =
     (0,y,5) -> o DEC [ basicRegisterArg y ]
     (0,y,6) -> o LD  [ basicRegisterArg y, Immediate8 ]
 
-    (0,0,7) -> o RLC [ ArgDirect8 A ]
-    (0,1,7) -> o RRC [ ArgDirect8 A ]
-    (0,2,7) -> o RL  [ ArgDirect8 A ]
-    (0,3,7) -> o RR  [ ArgDirect8 A ]
+    (0,0,7) -> o RLCA []
+    (0,1,7) -> o RRCA []
+    (0,2,7) -> o RLA  []
+    (0,3,7) -> o RRA  []
 
     (0,4,7) -> o DAA []
     (0,5,7) -> o CPL []
