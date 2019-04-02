@@ -3,6 +3,7 @@ module Interpret where
 import Data.Word
 import Data.Int
 import Data.Bits
+import Data.Bits.Lens (bitAt)
 
 import Control.Lens hiding (op, to, from)
 import Control.Monad
@@ -91,8 +92,23 @@ setArgM arg = case arg of
   -- AddressFF  -> Right (addrFF <$> byte)
   -- AddressRel -> Right (addrRel =<< sbyte)
 
+addFlags :: MonadEmulator m => Word8 -> Word8 -> m ()
+addFlags vold vnew = modifyFlags $ \f -> f
+  & flagC .~ (vnew < vold)                 -- register overflows
+  & flagZ .~ (vnew == 0)                   -- new value is zero
+  & flagN .~ False                         -- not a subtraction
+  & flagH .~ (vnew .&. 0xF < vold .&. 0xF) -- lower half of register overflows
+
+subFlags :: MonadEmulator m => Word8 -> Word8 -> m ()
+subFlags vold vnew = modifyFlags $ \f -> f
+  & flagC .~ (vnew > vold)                 -- register underflows
+  & flagZ .~ (vnew == 0)                   -- new value is zero
+  & flagN .~ True                          -- is a subtraction
+  & flagH .~ (vnew .&. 0xF > vold .&. 0xF) -- lower half of register underflows
+
 interpretM :: MonadEmulator m => Instruction -> m ()
 interpretM instr@(Instruction b op args) = case op of
+  NOP -> return ()
   LD -> case args of
     [to , from] -> case (setArgM to, getArgM from) of
       (Left s , Left g) -> s =<< g
@@ -169,10 +185,59 @@ interpretM instr@(Instruction b op args) = case op of
                 v <- g
                 let v' = v + 1
                 s v'
-                modifyFlags $ \f -> f
-                  & flagN .~ False
-                  & flagH .~ (v' `xor` v) `testBit` 3
-                  & flagC .~ (v' `xor` v) `testBit` 7
+                addFlags v v'
+    _ -> msg
+  ADD -> case args of
+    [ arg ] | Left g <- getArgM arg -> do
+                k <- g
+                v <- load8 (Register8 A)
+                let v' = v + k
+                store8 (Register8 A) v'
+                addFlags v v'
+    _ -> msg
+  SUB -> case args of
+    [ arg ] | Left g <- getArgM arg -> do
+                k <- g
+                v <- load8 (Register8 A)
+                let v' = v - k
+                store8 (Register8 A) v'
+                subFlags v v'
+    _ -> msg
+
+  DEC -> case args of
+    [ arg ] | Right g <- getArgM arg
+            , Right s <- setArgM arg -> s . subtract 1 =<< g
+            | Left g <- getArgM arg
+            , Left s <- setArgM arg -> do
+                v <- g
+                let v' = v - 1
+                s v'
+                subFlags v v'
+    _ -> msg
+
+
+  RL -> case args of
+    [ arg ] | Left g <- getArgM arg
+            , Left s <- setArgM arg -> do
+                v <- g
+                let v' = v `rotateL` 1
+                let c' = v' `testBit` 0
+                f <- load8 (Register8 F)
+                let c = f ^. flagC
+                s (v' & bitAt 0 .~ c)
+                store8 (Register8 F) (f & flagC .~ c')
+    _ -> msg
+
+  RR -> case args of
+    [ arg ] | Left g <- getArgM arg
+            , Left s <- setArgM arg -> do
+                v <- g
+                let v' = v `rotateR` 1
+                let c' = v' `testBit` 7
+                f <- load8 (Register8 F)
+                let c = f ^. flagC
+                s (v' & bitAt 7 .~ c)
+                store8 (Register8 F) (f & flagC .~ c')
     _ -> msg
 
   _ -> error $ "failed at " ++ show instr
