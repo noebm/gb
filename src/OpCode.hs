@@ -11,13 +11,12 @@ data Mnemonic
   = LD
   | PUSH | POP
 
-  | INC | DEC
   | JP | JR | CALL | RET
+  | NOP | STOP | HALT
 
+  | INC | DEC
   | ADD | SUB | ADC | SBC
   | CP
-
-  | NOP | STOP | HALT
   | DI | EI | RETI | RST
 
   | AND | OR | XOR
