@@ -20,26 +20,6 @@ isControlStatement :: Instruction -> Bool
 isControlStatement (Instruction _ op _) = op `elem`
   [ JP, JR, CALL, RET, RETI, RST, STOP, HALT ]
 
-{- execute a path and return the actions up to the next control statement -}
-getCodeConstantPath :: MonadEmulator m => Int -> m (Maybe (Word16 , m ()))
-getCodeConstantPath threshold = do
-  entry <- load16 (Register16 PC)
-  let skipOpcode i =
-        store16 (Register16 PC) . (+ fromIntegral (opcodeSize i)) =<< load16 (Register16 PC)
-  let getOp = do
-        i <- parseInstructionM byte
-        let stmnt = interpretM i
-        stmnt
-        return (i , skipOpcode i >> stmnt)
-  let run = do
-        (i, stmnt) <- getOp
-        if isControlStatement i
-          then return []
-          else (stmnt :) <$> run
-  stmnts <- run
-  let codepath = if length stmnts > threshold then Just (sequence_ stmnts) else Nothing
-  return $ (,) entry <$> codepath
-
 {-# INLINE getFlag #-}
 getFlag :: Flag -> Word8 -> Bool
 getFlag FlagC = view flagC
