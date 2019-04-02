@@ -47,7 +47,7 @@ getArgM arg = case arg of
 
   -- addresses
   Address    -> Right word
-  AddressFF  -> Right (addrFF <$> byte)
+  AddressFF  -> Left (load8 . Addr8 . addrFF =<< byte)
   AddressRel -> Right (addrRel =<< sbyte)
 
   -- pointers
@@ -113,7 +113,7 @@ interpretM instr@(Instruction b op args) = case op of
     [to , from] -> case (setArgM to, getArgM from) of
       (Left s , Left g) -> s =<< g
       (Right s , Right g) -> s =<< g
-      _ -> error "interpretM: LD - cannot match type"
+      _ -> error $ printf "interpretM: %s - cannot match type" (show instr)
     [ArgPointerReg HL, ArgPointerReg SP, AddressRel] -> do
       sp <- load16 (Register16 SP)
       r <- sbyte
@@ -252,6 +252,14 @@ interpretM instr@(Instruction b op args) = case op of
                 s (v' & bitAt 0 .~ c)
                 store8 (Register8 F) (f & flagC .~ c')
     _ -> msg
+  RLA -> do
+    v <- load8 (Register8 A)
+    let v' = v `rotateL` 1
+    let c' = v' `testBit` 0
+    f <- load8 (Register8 F)
+    let c = f ^. flagC
+    store8 (Register8 A) (v' & bitAt 0 .~ c)
+    store8 (Register8 F) (f & flagC .~ c')
 
   RR -> case args of
     [ arg ] | Left g <- getArgM arg
@@ -264,6 +272,14 @@ interpretM instr@(Instruction b op args) = case op of
                 s (v' & bitAt 7 .~ c)
                 store8 (Register8 F) (f & flagC .~ c')
     _ -> msg
+  RRA -> do
+    v <- load8 (Register8 A)
+    let v' = v `rotateR` 1
+    let c' = v' `testBit` 7
+    f <- load8 (Register8 F)
+    let c = f ^. flagC
+    store8 (Register8 A) (v' & bitAt 7 .~ c)
+    store8 (Register8 F) (f & flagC .~ c')
 
   _ -> error $ "failed at " ++ show instr
 
