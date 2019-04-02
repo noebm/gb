@@ -36,13 +36,15 @@ data Arg = ArgDirect8 Reg8
          | Immediate16
 
          | Address
-         | AddressFF
          | AddressRel
 
          | ArgPointerRegFF Reg8
          | ArgPointerReg Reg16
+         | ArgPointerImmFF
+         | ArgPointerImm
          | ArgPointerHLi
          | ArgPointerHLd
+
          | ArgFlag Flag
 
 instance Show Arg where
@@ -52,10 +54,11 @@ instance Show Arg where
     Immediate8 -> "d8"
     Immediate16 -> "d16"
 
-    Address    -> "(a16)"
-    AddressFF  -> "($FF00+a8)"
-    AddressRel -> "(r8)"
+    Address    -> "a16"
+    AddressRel -> "r8"
 
+    ArgPointerImmFF   -> "($FF00+a8)"
+    ArgPointerImm     -> "(a16)"
     ArgPointerRegFF r -> printf "($FF00+%s)" (show r)
     ArgPointerReg r   -> printf "(%s)" (show r)
     ArgPointerHLi     -> "(HL+)"
@@ -74,8 +77,9 @@ argSize :: Arg -> Int
 argSize Immediate16 = 2
 argSize Immediate8  = 1
 argSize Address     = 2
-argSize AddressFF   = 1
 argSize AddressRel  = 1
+argSize ArgPointerImm   = 2
+argSize ArgPointerImmFF = 1
 argSize _ = 0
 
 opcodeSize :: Instruction -> Int
@@ -230,8 +234,8 @@ parseInstruction b =
 
     (2,y,z) -> o (aluMnemonic y) [ basicRegisterArg z ]
 
-    (3,4,0) -> o LD  [ AddressFF, ArgDirect8 A ]
-    (3,6,0) -> o LD  [ ArgDirect8 A, AddressFF ]
+    (3,4,0) -> o LD  [ ArgPointerImmFF, ArgDirect8 A ]
+    (3,6,0) -> o LD  [ ArgDirect8 A, ArgPointerImmFF ]
     (3,5,0) -> o ADD [ ArgDirect16 SP, AddressRel ]
     (3,7,0) -> o LD  [ ArgDirect16 HL, ArgDirect16 SP, AddressRel ]
     (3,y,0) -> o RET [ ArgFlag $! flag y ]
@@ -248,8 +252,8 @@ parseInstruction b =
 
     (3,4,2) -> o LD [ ArgPointerRegFF C, ArgDirect8 A ]
     (3,6,2) -> o LD [ ArgDirect8 A, ArgPointerRegFF C ]
-    (3,5,2) -> o LD [ Address, ArgDirect8 A ]
-    (3,7,2) -> o LD [ ArgDirect8 A, Address ]
+    (3,5,2) -> o LD [ ArgPointerImm, ArgDirect8 A ]
+    (3,7,2) -> o LD [ ArgDirect8 A, ArgPointerImm ]
     (3,y,2) -> o JP [ ArgFlag $! flag y, Address ]
 
     (3,0,3) -> o JP [ Address ]

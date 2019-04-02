@@ -47,10 +47,11 @@ getArgM arg = case arg of
 
   -- addresses
   Address    -> Right word
-  AddressFF  -> Left (load8 . Addr8 . addrFF =<< byte)
   AddressRel -> Right (addrRel =<< sbyte)
 
   -- pointers
+  ArgPointerImmFF   -> Left (load8 . Addr8 . addrFF =<< byte)
+  ArgPointerImm     -> Left (load8 . Addr8 =<< word)
   ArgPointerRegFF r -> Left (load8 . Addr8 . addrFF =<< load8 (Register8 r))
   ArgPointerReg   r -> Left (load8 . Addr8 =<< load16 (Register16 r))
   ArgPointerHLi -> Left $ do
@@ -83,8 +84,8 @@ setArgM arg = case arg of
     store16 (Register16 HL) (hl - 1)
     store8 (Addr8 hl) b
 
-  AddressFF -> Left (\b -> (`store8` b) . Addr8 . addrFF =<< byte)
-  Address   -> Left (\b -> (`store8` b) . Addr8 =<< word)
+  ArgPointerImmFF -> Left (\b -> (`store8` b) . Addr8 . addrFF =<< byte)
+  ArgPointerImm   -> Left (\b -> (`store8` b) . Addr8 =<< word)
 
   x -> error $ "setArgM: cannot write to " ++ show x
   -- ArgFlag f -> Left (load8 (Register8 F))
