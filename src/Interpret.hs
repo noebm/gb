@@ -203,6 +203,31 @@ interpretM instr@(Instruction b op args) = case op of
                 store8 (Register8 A) v'
                 subFlags v v'
     _ -> msg
+  ADC -> case args of
+    [ arg ] | Left g <- getArgM arg -> do
+                k <- g
+                v <- load8 (Register8 A)
+                c <- fromIntegral . fromEnum . view flagC <$> load8 (Register8 F)
+                let v' = v + k + c
+                store8 (Register8 A) v'
+                addFlags v v'
+    _ -> msg
+  SBC -> case args of
+    [ arg ] | Left g <- getArgM arg -> do
+                k <- g
+                v <- load8 (Register8 A)
+                c <- fromIntegral . fromEnum . view flagC <$> load8 (Register8 F)
+                let v' = v - k - c
+                store8 (Register8 A) v'
+                subFlags v v'
+    _ -> msg
+  CP -> case args of
+    [ arg ] | Left g <- getArgM arg -> do
+                k <- g
+                v <- load8 (Register8 A)
+                let v' = v - k
+                subFlags v v'
+    _ -> msg
 
   DEC -> case args of
     [ arg ] | Right g <- getArgM arg
