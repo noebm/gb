@@ -15,6 +15,10 @@ import Data.Bits.Lens
 
 import Memory.Accessible
 
+-- for specialization
+import GB (GB)
+import Control.Monad.IO.Class
+
 -- import MonadEmulator hiding (load8,load16,store8,store16)
 -- import qualified MonadEmulator as X
 
@@ -283,6 +287,8 @@ sub value = do
   store8 (Register8 A) a'
 
 -- instruction :: (MonadState s m, HasRegisters s, HasRom s) => Word8 -> m Timing
+
+{-# SPECIALIZE instruction :: Word8 -> GB IO Word #-}
 instruction :: MonadEmulator m => Word8 -> m Word
 instruction b = case x of
   0 -> case z of
@@ -461,7 +467,7 @@ instruction b = case x of
     1 -> if y `testBit` 0
       then case y `shiftR` 1 of
         0 -> ret >> return 16
-        1 -> error "reti"
+        1 -> ret >> setIEM True >> return 16
         2 -> do
           jump =<< load16 (Register16 HL)
           return 4
@@ -493,11 +499,10 @@ instruction b = case x of
           return 16
         1 -> extendedInstruction =<< byte
         6 -> do
-          store8 (Register8 F) 0x00
+          setIEM False
           return 4
-          -- error "di"
         7 -> do
-          store8 (Register8 F) 0x3F
+          setIEM True
           return 4
         _ -> error $ printf "invalid opcode 0x%02x" b
     4 ->
