@@ -62,16 +62,20 @@ data LoadStore8 = Register8 !Reg8 | Addr8 !Word16
 data LoadStore16 = Register16 !Reg16 | Addr16 !Word16
   deriving (Eq, Show)
 
+-- | Allow reading and writing inside the address space.
+-- All loads and stores should be idempotent.
+-- load-store should be the identity for registers.
+-- store-load should be equal to store.
 class Monad m => MonadEmulator m where
-  -- stores
+  -- | Stores a value in side the emulator state.
   store8 :: LoadStore8 -> Word8 -> m ()
   store16 :: LoadStore16 -> Word16 -> m ()
 
-  -- loads
+  -- | Retrieves a value from the emulator state.
   load8 :: LoadStore8 -> m Word8
   load16 :: LoadStore16 -> m Word16
 
-  -- timing
+  -- | Advances / Clears internal timer.
   advCycles :: Word -> m ()
   resetCycles :: m Word
 
