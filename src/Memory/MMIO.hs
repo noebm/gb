@@ -27,6 +27,8 @@ updateGPU' t l mode = case mode .&. 0x3 of
     {-# INLINE update #-}
     update clocktime f = if t >= clocktime then f (t - clocktime) else (t, l, Nothing)
 
+interruptFlag   = Addr8 0xFF0F
+interruptEnable = Addr8 0xFFFF
 control           = Addr8 0xFF40
 status            = Addr8 0xFF41
 scrollY           = Addr8 0xFF42
@@ -46,7 +48,6 @@ data DrawInstruction = DrawLine | DrawImage
 
 updateGPU :: MonadEmulator m => m (Maybe DrawInstruction)
 updateGPU = do
-  -- t <- dotClock <+= dt
   t <- resetCycles
   stat <- load8 status
   let mode = 3 .&. stat
@@ -54,12 +55,27 @@ updateGPU = do
   let (t', l', mode') = updateGPU' t l mode
   advCycles t'
   store8 currentLine l'
-  for_ mode' $ \m -> store8 status (m .|. (stat .&. 0xFC))
-  return $! case True of
-    _ | mode' == Just HBlank && mode == VRAM   -> Just DrawLine
-      -- {}| mode' == Just OAM    && mode == VBlank -> Just DrawLine
-      | mode' == Just VBlank && mode == HBlank -> Just DrawImage
-      | otherwise -> Nothing
+
+  lyC <- load8 compareLine
+  let lyF = l' == lyC
+  for_ mode' $ \m -> store8 status (m .|. (stat .&. 0xF8) .|. if lyF then 0x04 else 0x00)
+
+  let lyIF     = lyF && stat `testBit` 6
+  let oamIF    = mode' == Just OAM    && stat `testBit` 5
+  let vblankIF = mode' == Just VBlank && stat `testBit` 4
+  let hblankIF = mode' == Just HBlank && stat `testBit` 3
+
+  ie <- load8 interruptEnable
+  when (any id [ lyIF, oamIF, hblankIF ] && ie `testBit` 1) $
+    store8 interruptFlag . (`setBit` 1) =<< load8 interruptFlag
+
+  when (vblankIF && ie `testBit` 0) $
+    store8 interruptFlag . (`setBit` 0) =<< load8 interruptFlag
+
+  case True of
+    _ | mode' == Just HBlank && mode == VRAM   -> return (Just DrawLine)
+      | mode' == Just VBlank && mode == HBlank -> return (Just DrawImage)
+      | otherwise -> return Nothing
 {-
 Bit7  LCD operation                           | ON            | OFF
 Bit6  Window Tile Table address               | 9C00-9FFF     | 9800-9BFF
