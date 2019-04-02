@@ -30,6 +30,8 @@ data GBState s = GBState
   , clock        :: STRef s Word
   , shouldStop   :: STRef s Bool
 
+  , gbIEM :: STRef s Bool
+
   , gbCartridge   :: Cartridge
   , activeRomBank :: STRef s (Maybe Word8)
 
@@ -68,6 +70,7 @@ makeGBState cart = do
   GBState
     <$> pure memory
     <*> newSTRef 0
+    <*> newSTRef False
     <*> newSTRef False
     <*> pure cart
     <*> newSTRef Nothing
@@ -142,6 +145,9 @@ instance MonadIO m => MonadEmulator (GB m) where
       load16LE
         (V.unsafeRead addrspace idx0)
         (V.unsafeRead addrspace idx1)
+
+  getIEM   = GBT $ liftIO . stToIO . readSTRef =<< asks gbIEM
+  setIEM b = GBT $ liftIO . stToIO . (`writeSTRef` b) =<< asks gbIEM
 
   advCycles dt = GBT $ do
     c <- asks clock
