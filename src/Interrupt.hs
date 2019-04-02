@@ -22,9 +22,14 @@ enterInterrupt (Interrupt k) = do
 
 handleInterrupt :: MonadEmulator m => m (Maybe Interrupt)
 handleInterrupt = do
-  interEnabled <- load8 (Addr8 0xFFFF)
-  interFlags   <- load8 (Addr8 0xFF0F)
-  let flags = interFlags .&. interEnabled
-  -- get interrupt with highest priority
-  let interrupt = getFirst $ mconcat $ First . Just <$> filter (flags `testBit`) [0..4]
-  return $ fmap Interrupt interrupt
+  r <- getIEM
+  if r
+    then do
+    interEnabled <- load8 (Addr8 0xFFFF)
+    interFlags   <- load8 (Addr8 0xFF0F)
+    let flags = interFlags .&. interEnabled
+    -- get interrupt with highest priority
+    let interrupt = getFirst $ mconcat $ First . Just <$> filter (flags `testBit`) [0..4]
+    return $ fmap Interrupt interrupt
+    else
+    return Nothing

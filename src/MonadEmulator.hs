@@ -83,6 +83,9 @@ class Monad m => MonadEmulator m where
   setStop :: m ()
   stop :: m Bool
 
+  getIEM :: m Bool
+  setIEM :: Bool -> m ()
+
   -- selectRomBank :: Word8 -> m ()
   modifyRomBank :: (Word8 -> Word8) -> m ()
 
@@ -122,6 +125,9 @@ instance MonadEmulator m => MonadEmulator (StateT s m) where
   modifyRomBank = aux1 modifyRomBank
   selectRamBank = aux1 selectRamBank
   setRamBank    = aux1 setRamBank
+
+  getIEM = aux0 getIEM
+  setIEM = aux1 setIEM
 
 getCycles :: MonadEmulator m => m Word
 getCycles = do
