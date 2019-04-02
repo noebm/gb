@@ -4,7 +4,7 @@ import Data.Word
 import Data.Int
 import Data.Bits
 
-import Control.Lens
+import Control.Lens hiding (op, to, from)
 import Control.Monad
 
 import Text.Printf
@@ -14,20 +14,27 @@ import Memory.Accessible
 
 import Instruction (byteCodeDecompose, modifyFlags)
 
+{-# INLINE getFlag #-}
 getFlag :: Flag -> Word8 -> Bool
 getFlag FlagC = view flagC
 getFlag FlagZ = view flagZ
 getFlag FlagNC = views flagC not
 getFlag FlagNZ = views flagZ not
 
+{-# INLINE addRelative #-}
 addRelative :: Word16 -> Int8 -> Word16
 addRelative addr x = fromIntegral $ (fromIntegral addr :: Int) + fromIntegral x
 
+{-# INLINE addrFF #-}
+addrFF :: Word8 -> Word16
 addrFF k = (0xFF , k) ^. word16
+{-# INLINE addrRel #-}
+addrRel :: MonadEmulator m => Int8 -> m Word16
 addrRel k = do
   pc <- load16 (Register16 PC)
   return $ addRelative pc k
 
+{-# INLINE getArgM #-}
 getArgM :: MonadEmulator m => Arg -> Either (m Word8) (m Word16)
 getArgM arg = case arg of
   -- single byte data
@@ -55,6 +62,7 @@ getArgM arg = case arg of
     load8 (Addr8 hl)
   ArgFlag _ -> Left (load8 (Register8 F))
 
+{-# INLINE setArgM #-}
 setArgM :: MonadEmulator m => Arg -> Either (Word8 -> m ()) (Word16 -> m ())
 setArgM arg = case arg of
   -- single byte data
@@ -68,7 +76,7 @@ setArgM arg = case arg of
   ArgPointerHLi -> Left $ \b -> do
     hl <- load16 (Register16 HL)
     store16 (Register16 HL) (hl + 1)
-    store8 (Addr8 hl) b 
+    store8 (Addr8 hl) b
   ArgPointerHLd -> Left $ \b -> do
     hl <- load16 (Register16 HL)
     store16 (Register16 HL) (hl - 1)
@@ -145,6 +153,12 @@ interpretM instr@(Instruction b op args) = case op of
     _ -> msg
   RET -> case args of
     [] -> pop >>= store16 (Register16 PC)
+    _ -> msg
+  PUSH -> case getArgM <$> args of
+    [ Right g ] -> g >>= push
+    _ -> msg
+  POP -> case setArgM <$> args of
+    [ Right s ] -> pop >>= s
     _ -> msg
 
   INC -> case args of
