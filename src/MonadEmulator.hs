@@ -180,14 +180,14 @@ jumpRelative addrdiff = do
 push :: MonadEmulator m => Word16 -> m ()
 push w = do
   sp <- load16 (Register16 SP)
-  store16 (Addr16 (sp - 1)) w
+  store16 (Addr16 (sp - 2)) w
   store16 (Register16 SP) (sp - 2)
 
 pop :: MonadEmulator m => m Word16
 pop = do
   sp <- load16 (Register16 SP)
   store16 (Register16 SP) (sp + 2)
-  load16 (Addr16 (sp + 1))
+  load16 (Addr16 sp)
 
 call :: MonadEmulator m => Word16 -> m ()
 call addr = do
