@@ -259,6 +259,18 @@ interpretM instr@(Instruction b op args) = case op of
                 let v' = v + k
                 store8 (Register8 A) v'
                 addFlags v v'
+    [ to@(ArgDirect16 HL) , from ]
+      | Right s  <- setArgM to
+      , Right gs <- getArgM to
+      , Right g  <- getArgM from -> do
+          v <- gs
+          dv <- g
+          let v' = v + dv
+          s v'
+          modifyFlags $ \f -> f
+            & flagN .~ False
+            & flagC .~ ((v' .&. 0xFF) < (v .&. 0xFF))
+            & flagH .~ ((v' .&. 0x0F) < (v .&. 0x0F))
     _ -> msg
   SUB -> case args of
     [ arg ] | Left g <- getArgM arg -> do
