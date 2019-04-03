@@ -3,6 +3,8 @@ module Instruction.Instruction where
 import MonadEmulator
 import Instruction
 
+import Data.Traversable
+
 import Text.Printf
 import Data.Word
 import Data.Bits
@@ -96,7 +98,7 @@ opcodeSize op
   | op `elem` [ RLC, RRC, RL, RR, SLA, SRA, SRL, SWAP, BIT, SET, RES ] = 2
   | otherwise = 1
 
-instructionSize :: Instruction -> Int
+instructionSize :: Instruction Arg -> Int
 instructionSize (Instruction _ op args) = opcodeSize op + sum (argSize <$> args)
 
 data Flag = FlagZ | FlagC | FlagNZ | FlagNC
@@ -107,13 +109,23 @@ instance Show Flag where
   show FlagC  = "C"
   show FlagNC = "NC"
 
-data Instruction = Instruction !Word8 !Mnemonic ![ Arg ]
+data Instruction a = Instruction !Word8 !Mnemonic ![ a ]
 
-instance Show Instruction where
-  show (Instruction code mnemonic args) = printf "0x%02x - %s %s" code (show mnemonic) (showArgs args)
+instance Functor Instruction where
+  fmap f (Instruction code op args) = Instruction code op (fmap f args)
+
+instance Foldable Instruction where
+  foldMap = foldMapDefault
+
+instance Traversable Instruction where
+  traverse f (Instruction code op args) = Instruction code op <$> traverse f args
+
+instance Show a => Show (Instruction a) where
+  show (Instruction code mnemonic args)
+    = printf "0x%02x - %s %s" code (show mnemonic) (showArgStructure $ show <$> args)
 
 {-# INLINE arguments #-}
-arguments :: Instruction -> [ Arg ]
+arguments :: Instruction a -> [ a ]
 arguments (Instruction _ _ args) = args
 
 {-# INLINE basicRegisterArg #-}
@@ -161,14 +173,14 @@ flag w = case w of
   _ -> error "flag: invalid argument"
 
 
-parseInstructionM :: Monad m => m Word8 -> m Instruction
+parseInstructionM :: Monad m => m Word8 -> m (Instruction Arg)
 parseInstructionM get = do
   b <- get
   if b == 0xCB
     then parseExtendedInstruction <$> get
     else return $ parseInstruction b
 
-parseExtendedInstruction :: Word8 -> Instruction
+parseExtendedInstruction :: Word8 -> Instruction Arg
 parseExtendedInstruction b =
   let {-# INLINE o #-}
       o = Instruction b
@@ -183,7 +195,7 @@ parseExtendedInstruction b =
       (3,y,z) -> o SET [ ArgByteCode y, basicRegisterArg z ]
       _ -> error $ printf "unknown bytecode 0x%02x" b
 
-parseInstruction :: Word8 -> Instruction
+parseInstruction :: Word8 -> Instruction Arg
 parseInstruction b =
 
   let {-# INLINE o #-}

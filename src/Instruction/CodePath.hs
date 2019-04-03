@@ -10,7 +10,7 @@ import Interrupt
 
 data CodePath m = CodePath
   { entryAddress :: Word16
-  , pathInstructions :: [ Instruction ]
+  , pathInstructions :: [ Instruction Arg ]
   , executePath :: m ()
   }
 

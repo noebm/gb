@@ -7,8 +7,10 @@ import Instruction.Interpret
 import Instruction.Instruction
 import Text.Printf
 
+import Data.Foldable
 import Data.Traversable
 
+import Data.Maybe
 import Data.Word
 import Data.Int
 
@@ -21,67 +23,75 @@ argData arg = case argSize arg of
   2 -> Just . ArgWord <$> word
   _ -> error "impossible argsize"
 
-data DisassembledInstruction
-  = DisassembledInstruction
-  { address   :: Word16
-  , mnemonic  :: Mnemonic
-  , arguments :: [ (Arg , Maybe ArgData) ]
-   }
+data ArgWithData = ArgWithData
+  { removeArgData :: Arg
+  , argumentData :: Maybe ArgData
+  }
 
-disassemble :: MonadEmulator m => m DisassembledInstruction
+data DisassembledInstruction = DisassembledInstruction
+  { address :: Word16
+  , instruction :: Instruction ArgWithData
+  }
+
+disassemble :: MonadEmulator m => m (Instruction ArgWithData)
 disassemble = do
-  pc <- load16 (Register16 PC)
-  Instruction _ op args <- parseInstructionM byte
-  args' <- forM args $ \arg -> do
-    darg <- argData arg
-    return (arg , darg)
-  return $ DisassembledInstruction pc op args'
+  i <- parseInstructionM byte
+  mapM (\arg -> ArgWithData arg <$> argData arg) i
 
-hasTargetAddress :: DisassembledInstruction -> Maybe Word16
-hasTargetAddress (DisassembledInstruction addr op args) = case op of
-  JP | (Address, Just (ArgWord addr')) : _ <- reverse args -> Just addr'
-  JR | (AddressRel, Just (ArgByte r))  : _ <- reverse args -> Just $ addRelative addr (fromIntegral r)
-  CALL | (Address, Just (ArgWord addr')) : _ <- reverse args -> Just addr'
+hasTargetAddress :: [ ArgWithData ] -> Word16 -> Maybe Word16
+hasTargetAddress args addr = case find (isAddress . removeArgData) args of
+  Just (ArgWithData Address    (Just (ArgWord addr'))) -> Just addr'
+  Just (ArgWithData AddressRel (Just (ArgByte r)))     -> Just (addRelative addr $ fromIntegral r)
   _ -> Nothing
+  where
+    isAddress Address = True
+    isAddress AddressRel = True
+    isAddress _ = False
 
-changesControlFlow :: Mnemonic -> Bool
-changesControlFlow op = op `elem` [ JP, JR, CALL, RET, RETI, RST, STOP, HALT ]
+isConditional :: Arg -> Bool
+isConditional (ArgFlag _) = True
+isConditional _ = False
 
--- isConditional :: DisassembledInstruction -> ``
--- 
--- runDisassembler :: MonadEmulator m => m [ DisassembledInstruction ]
--- runDisassembler = (`execStateT` []) $ do
---   store16 (Register16 PC) 0
---   let parse = do
---         dis <- disassemble
---         modify' (dis:)
---         let DisassembledInstruction _ op _ = dis
---         if changesControlFlow op
---           then do
---           let addr = hasTargetAddress dis
---           
---           -- mapM_ (parse << load16 (Register16 PC))
---           else
---           parse
---   parse
---   return ()
+runDisassembler :: MonadEmulator m => m [ DisassembledInstruction ]
+runDisassembler = (`execStateT` []) $ do
+  store16 (Register16 PC) 0
+  let parse = do
+        addr <- load16 (Register16 PC)
+        x <- gets (find ((== addr) . address))
+        unless (isJust x) $ do
+          instr <- disassemble
+          modify' (DisassembledInstruction addr instr:)
+          if isControlStatement instr
+            then do
+            -- a conditional control statement guards additional code
+            when (any (isConditional . removeArgData) instr) parse
+            -- after finding the remaining code jump to next address
+            mapM_ (const parse <=< store16 (Register16 PC)) (hasTargetAddress (toList instr) addr)
+            else
+            parse
+  parse
 
 instance Show DisassembledInstruction where
-  show (DisassembledInstruction addr mne args)
-    = printf "0x%04x: %s %s" addr (show mne) (showArgStructure $ disassembleArg <$> args)
-    where
-    disassembleArg (t , Nothing) = show t
-    disassembleArg (t , Just d)
-      | ArgByte b <- d = case t of
-          Immediate8 -> printf "0x%02x" b
-          AddressRel -> printf "0x%02x" (fromIntegral b :: Int8)
-          ArgPointerImmFF -> printf "(0xFF%02x)" b
-          _ -> error $ printf "%s has byte data" (show t)
+  show (DisassembledInstruction addr instr) = printf "0x%04x: %s" addr (show instr)
 
-      | ArgWord w <- d = case t of
-          Immediate16 -> printf "0x%04x" w
-          Address     -> printf "0x%04x" w
-          ArgPointerImm8  -> printf "(0x%04x)" w
-          ArgPointerImm16 -> printf "(0x%04x)" w
-          _ -> error $ printf "%s has word data" (show t)
+instance Show ArgWithData where
+  show (ArgWithData t Nothing) = show t
+  show (ArgWithData t (Just d))
+    | ArgByte b <- d = case t of
+        Immediate8 -> printf "0x%02x" b
+        AddressRel -> printf "0x%02x" (fromIntegral b :: Int8)
+        ArgPointerImmFF -> printf "(0xFF%02x)" b
+        _ -> error $ printf "%s has byte data" (show t)
+
+    | ArgWord w <- d = case t of
+        Immediate16 -> printf "0x%04x" w
+        Address     -> printf "0x%04x" w
+        ArgPointerImm8  -> printf "(0x%04x)" w
+        ArgPointerImm16 -> printf "(0x%04x)" w
+        _ -> error $ printf "%s has word data" (show t)
+
+-- instance Show DisassembledInstruction where
+--   show (DisassembledInstruction addr mne args)
+--     = printf "0x%04x: %s %s" addr (show mne) (showArgStructure $ disassembleArg <$> args)
+--     where
 

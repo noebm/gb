@@ -16,7 +16,7 @@ import Memory.Accessible
 import Instruction (byteCodeDecompose, modifyFlags)
 
 {-# INLINE isControlStatement #-}
-isControlStatement :: Instruction -> Bool
+isControlStatement :: Instruction a -> Bool
 isControlStatement (Instruction _ op _) = op `elem`
   [ JP, JR, CALL, RET, RETI, RST, STOP, HALT ]
 
@@ -134,7 +134,7 @@ daa = do
     & flagC .~ (f ^. flagC || (not (f ^. flagN) && v > 0x99))
     & flagZ .~ (v' == 0)
 
-interpretM :: MonadEmulator m => Instruction -> m ()
+interpretM :: MonadEmulator m => Instruction Arg -> m ()
 interpretM instr@(Instruction b op args) = case op of
   NOP -> return ()
   LD -> case args of
