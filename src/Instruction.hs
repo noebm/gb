@@ -499,9 +499,11 @@ instruction b = case x of
           return 16
         1 -> extendedInstruction =<< byte
         6 -> do
+          -- store8 (Register8 F) 0x00
           setIEM False
           return 4
         7 -> do
+          -- store8 (Register8 F) 0x3F
           setIEM True
           return 4
         _ -> error $ printf "invalid opcode 0x%02x" b
