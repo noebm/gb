@@ -140,7 +140,7 @@ interpretM instr@(Instruction b op args) = case op of
       (Left s , Left g) -> s =<< g
       (Right s , Right g) -> s =<< g
       _ -> error $ printf "interpretM: %s - cannot match type" (show instr)
-    [ArgDirect16 HL, ArgPointerReg SP, AddressRel] -> do
+    [ ArgDirect16 HL, ArgDirect16 SP, AddressRel] -> do
       sp <- load16 (Register16 SP)
       r <- sbyte
       let v = addRelative sp r
