@@ -70,6 +70,8 @@ getArgM arg = case arg of
     load8 (Addr8 hl)
   ArgFlag _ -> Left (load8 (Register8 F))
 
+  ArgByte b -> Left (return b)
+
 {-# INLINE setArgM #-}
 setArgM :: MonadEmulator m => Arg -> Either (Word8 -> m ()) (Word16 -> m ())
 setArgM arg = case arg of
@@ -185,8 +187,8 @@ interpretM instr@(Instruction b op args) = case op of
     _ -> msg
 
   BIT -> case getArgM <$> args of
-    [ Left g ] -> do
-      let (_, y, _) = byteCodeDecompose b
+    [ Left gb, Left g ] -> do
+      y <- gb
       v <- g
       modifyFlags $ \f -> f
         & flagZ .~ not (v `testBit` fromIntegral y)
@@ -232,7 +234,10 @@ interpretM instr@(Instruction b op args) = case op of
           when t $ pop >>= store16 (Register16 PC)
     [] -> pop >>= store16 (Register16 PC)
     _ -> msg
-  RST -> restart $ ((b `shiftR` 3) .&. 0x7) * 8
+  RST -> case getArgM <$> args of
+    [ Left g ] -> do
+      restart . (* 8) =<< g
+    _ -> msg
   PUSH -> case getArgM <$> args of
     [ Right g ] -> g >>= push
     _ -> msg

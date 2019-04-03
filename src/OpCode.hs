@@ -30,6 +30,7 @@ data Mnemonic
 
 data Arg = ArgDirect8 Reg8
          | ArgDirect16 Reg16
+         | ArgByte Word8 -- extract argument data embedded in instruction
 
          | Immediate8
          | Immediate16
@@ -187,9 +188,9 @@ parseExtendedInstruction b =
         let op = case y of { 0 -> RLC ; 1 -> RRC ; 2 -> RL; 3 -> RR; 4 -> SLA; 5 -> SRA; 6 -> SWAP; 7 -> SRL }
         in o op [ basicRegisterArg z ]
 
-      (1,_,z) -> o BIT [ basicRegisterArg z ]
-      (2,_,z) -> o RES [ basicRegisterArg z ]
-      (3,_,z) -> o SET [ basicRegisterArg z ]
+      (1,y,z) -> o BIT [ ArgByte y, basicRegisterArg z ]
+      (2,y,z) -> o RES [ ArgByte y, basicRegisterArg z ]
+      (3,y,z) -> o SET [ ArgByte y, basicRegisterArg z ]
       _ -> error $ printf "unknown bytecode 0x%02x" b
 
 parseInstruction :: Word8 -> Instruction
@@ -295,5 +296,5 @@ parseInstruction b =
     (3,1,5) -> o CALL [ Address ]
 
     (3,y,6) -> o (aluMnemonic y) [Immediate8]
-    (3,_,7) -> o RST []
+    (3,y,7) -> o RST [ ArgByte y ]
     _ -> error $ printf "unknown bytecode 0x%02x" b
