@@ -115,7 +115,11 @@ instance Show Instruction where
     | hasBitNumber mnemonic
     , (_,y,_) <- byteCodeDecompose code
     = printf "0x%02x - %s %d," code (show mnemonic) y ++ showArgs args
-    | otherwise = printf "0x%02x - %s" code (show mnemonic) ++ showArgs args
+    | RST <- mnemonic
+    , (_,y,_) <- byteCodeDecompose code
+    = printf "0x%02x - %s %d" code (show mnemonic) (y * 8)
+    | otherwise
+    = printf "0x%02x - %s" code (show mnemonic) ++ showArgs args
 
 {-# INLINE arguments #-}
 arguments :: Instruction -> [ Arg ]
