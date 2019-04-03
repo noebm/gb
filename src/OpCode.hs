@@ -40,7 +40,10 @@ data Arg = ArgDirect8 Reg8
          | ArgPointerRegFF Reg8
          | ArgPointerReg Reg16
          | ArgPointerImmFF
-         | ArgPointerImm
+
+         | ArgPointerImm8
+         | ArgPointerImm16
+
          | ArgPointerHLi
          | ArgPointerHLd
 
@@ -57,7 +60,8 @@ instance Show Arg where
     AddressRel -> "r8"
 
     ArgPointerImmFF   -> "($FF00+a8)"
-    ArgPointerImm     -> "(a16)"
+    ArgPointerImm8    -> "(a16)"
+    ArgPointerImm16   -> "(a16)"
     ArgPointerRegFF r -> printf "($FF00+%s)" (show r)
     ArgPointerReg r   -> printf "(%s)" (show r)
     ArgPointerHLi     -> "(HL+)"
@@ -77,7 +81,8 @@ argSize Immediate16 = 2
 argSize Immediate8  = 1
 argSize Address     = 2
 argSize AddressRel  = 1
-argSize ArgPointerImm   = 2
+argSize ArgPointerImm8  = 2
+argSize ArgPointerImm16 = 2
 argSize ArgPointerImmFF = 1
 argSize _ = 0
 
@@ -183,7 +188,7 @@ parseInstruction b =
 
     (0,0,0) -> o  NOP []
     (0,2,0) -> o STOP []
-    (0,1,0) -> o LD   [ Address, ArgDirect16 SP ]
+    (0,1,0) -> o LD   [ ArgPointerImm16, ArgDirect16 SP ]
     (0,3,0) -> o JR   [ AddressRel ]
     (0,y,0) -> o JR   [ ArgFlag $! flag (y .&. 0x3), AddressRel ]
 
@@ -254,8 +259,8 @@ parseInstruction b =
 
     (3,4,2) -> o LD [ ArgPointerRegFF C, ArgDirect8 A ]
     (3,6,2) -> o LD [ ArgDirect8 A, ArgPointerRegFF C ]
-    (3,5,2) -> o LD [ ArgPointerImm, ArgDirect8 A ]
-    (3,7,2) -> o LD [ ArgDirect8 A, ArgPointerImm ]
+    (3,5,2) -> o LD [ ArgPointerImm8, ArgDirect8 A ]
+    (3,7,2) -> o LD [ ArgDirect8 A, ArgPointerImm8 ]
     (3,y,2) -> o JP [ ArgFlag $! flag y, Address ]
 
     (3,0,3) -> o JP [ Address ]
@@ -264,10 +269,10 @@ parseInstruction b =
     (3,6,3) -> o DI []
     (3,7,3) -> o EI []
 
-    (3,0,4) -> o CALL [ArgFlag $! flag 0, Address ]
-    (3,1,4) -> o CALL [ArgFlag $! flag 1, Address ]
-    (3,2,4) -> o CALL [ArgFlag $! flag 2, Address ]
-    (3,3,4) -> o CALL [ArgFlag $! flag 3, Address ]
+    (3,f@0,4) -> o CALL [ArgFlag $! flag f, Address ]
+    (3,f@1,4) -> o CALL [ArgFlag $! flag f, Address ]
+    (3,f@2,4) -> o CALL [ArgFlag $! flag f, Address ]
+    (3,f@3,4) -> o CALL [ArgFlag $! flag f, Address ]
 
     (3,0,5) -> o PUSH [ ArgDirect16 BC ]
     (3,2,5) -> o PUSH [ ArgDirect16 DE ]

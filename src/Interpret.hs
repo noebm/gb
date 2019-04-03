@@ -56,7 +56,8 @@ getArgM arg = case arg of
 
   -- pointers
   ArgPointerImmFF   -> Left (load8 . Addr8 . addrFF =<< byte)
-  ArgPointerImm     -> Left (load8 . Addr8 =<< word)
+  ArgPointerImm8    -> Left (load8 . Addr8 =<< word)
+  ArgPointerImm16   -> Right (load16 . Addr16 =<< word)
   ArgPointerRegFF r -> Left (load8 . Addr8 . addrFF =<< load8 (Register8 r))
   ArgPointerReg   r -> Left (load8 . Addr8 =<< load16 (Register16 r))
   ArgPointerHLi -> Left $ do
@@ -90,7 +91,8 @@ setArgM arg = case arg of
     store8 (Addr8 hl) b
 
   ArgPointerImmFF -> Left (\b -> (`store8` b) . Addr8 . addrFF =<< byte)
-  ArgPointerImm   -> Left (\b -> (`store8` b) . Addr8 =<< word)
+  ArgPointerImm8  -> Left (\b -> (`store8` b) . Addr8 =<< word)
+  ArgPointerImm16 -> Right (\w -> (`store16` w) . Addr16 =<< word)
 
   x -> error $ "setArgM: cannot write to " ++ show x
   -- ArgFlag f -> Left (load8 (Register8 F))
