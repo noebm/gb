@@ -61,7 +61,7 @@ loadCartridge fp = do
     when (B.length f < 0x150) $ Left "File too short to contain a header"
     let (checksumResult, checksum) = checksumHeader f
     when (checksumResult /= checksum) $ Left "Header checksum does not match"
-    when (not $ cartridgeTypeSupported $ headerType f) $ Left $ printf "Cartridge type (0x%02x) unsupported" (headerType f)
+    unless (cartridgeTypeSupported $ headerType f) $ Left $ printf "Cartridge type (0x%02x) unsupported" (headerType f)
     Cartridge f (headerTitle f) (headerType f) (headerRomBanks f) <$> headerRamBanks f <*> pure (headerLocale f)
 
 getRomBank :: Cartridge -> Word -> Maybe ByteString
@@ -69,8 +69,3 @@ getRomBank c idx = do
   let banksize = 0x4000
   guard (idx < cartridgeRomBanks c || idx < 2)
   return $ B.take banksize $ B.drop (fromIntegral (idx - 1) * banksize) (cartridgeData c)
-
-memoryBootRom :: IO ByteString
-memoryBootRom = do
-  let bootStrapName = "DMG_ROM.bin"
-  B.readFile $ "./" ++ bootStrapName
