@@ -117,7 +117,7 @@ instance Show Instruction where
     = printf "0x%02x - %s %d," code (show mnemonic) y ++ showArgs args
     | RST <- mnemonic
     , (_,y,_) <- byteCodeDecompose code
-    = printf "0x%02x - %s %d" code (show mnemonic) (y * 8)
+    = printf "0x%02x - %s 0x%02x" code (show mnemonic) (y * 8)
     | otherwise
     = printf "0x%02x - %s" code (show mnemonic) ++ showArgs args
 
@@ -295,6 +295,5 @@ parseInstruction b =
     (3,1,5) -> o CALL [ Address ]
 
     (3,y,6) -> o (aluMnemonic y) [Immediate8]
-    (3,_,7) -> o RST [] -- infer argument from bytecode
-      -- error "z = 3"
-    (x,y,z) -> error $ printf "unknown bytecode 0x%02x" b
+    (3,_,7) -> o RST []
+    _ -> error $ printf "unknown bytecode 0x%02x" b
