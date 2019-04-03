@@ -125,12 +125,27 @@ interpretM instr@(Instruction b op args) = case op of
       r <- sbyte
       store16 (Register16 HL) (addRelative sp r)
     _ -> msg
+
+  OR -> case getArgM <$> args of
+    [ Left g ] -> do
+      v <- g
+      a <- load8 (Register8 A)
+      let a' = a .|. v
+      store8 (Register8 A) a'
+      modifyFlags $ \_ -> 0x00
+        & flagZ .~ (a' == 0)
+    _ -> msg
+
   XOR -> case getArgM <$> args of
     [ Left g ] -> do
       v <- g
       a <- load8 (Register8 A)
+      let a' = a `xor` v
       store8 (Register8 A) (a `xor` v)
+      modifyFlags $ \_ -> 0x00
+        & flagZ .~ (a' == 0)
     _ -> msg
+
   BIT -> case getArgM <$> args of
     [ Left g ] -> do
       let (_, y, _) = byteCodeDecompose b
