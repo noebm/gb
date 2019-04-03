@@ -52,13 +52,13 @@ isConditional :: Arg -> Bool
 isConditional (ArgFlag _) = True
 isConditional _ = False
 
-runDisassembler :: MonadEmulator m => m [ DisassembledInstruction ]
-runDisassembler = (`execStateT` []) $ do
+runDisassembler :: MonadEmulator m => (Word16 -> Bool) -> m [ DisassembledInstruction ]
+runDisassembler stopPlease = (`execStateT` []) $ do
   store16 (Register16 PC) 0
   let parse = do
         addr <- load16 (Register16 PC)
         x <- gets (find ((== addr) . address))
-        unless (isJust x) $ do
+        unless (isJust x || stopPlease addr) $ do
           instr <- disassemble
           modify' (DisassembledInstruction addr instr:)
           if isControlStatement instr
