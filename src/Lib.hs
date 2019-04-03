@@ -30,24 +30,28 @@ import Interrupt
 import Debugging
 import Drawing
 
+import Interpret
+import OpCode (parseInstructionM)
+
 interpret :: (MonadEmulator m, MonadIO m) => Bool -> GraphicsContext -> m Bool
 interpret enablePrinting gfx = do
-  regs <- showRegisters
-  b <- byte
+  -- regs <- showRegisters
+  -- b <- byte
 
-  when enablePrinting $ do
-    -- liftIO $ putStrLn $ printf "Instruction: 0x%02x / PC: 0x%04x" b pc
-    liftIO $ putStrLn regs
-    liftIO $ putStrLn $ printf "Instruction: 0x%02x" b
+  -- when enablePrinting $ do
+  --   -- liftIO $ putStrLn $ printf "Instruction: 0x%02x / PC: 0x%04x" b pc
+  --   liftIO $ putStrLn regs
+  --   liftIO $ putStrLn $ printf "Instruction: 0x%02x" b
 
   mapM_ (advCycles <=< enterInterrupt) =<< handleInterrupt
 
-  advCycles =<< instruction b
+  interpretM =<< parseInstructionM byte
+  advCycles 4
+  -- advCycles =<< instruction b
 
   lcd <- lcdConfig
   forM_ lcd $ \conf -> do
     gpuInstr <- updateGPU
-    return ()
     forM_ gpuInstr $ \case
       DrawLine  -> genPixelRow (image gfx) conf
       DrawImage -> renderGraphics gfx
