@@ -249,7 +249,7 @@ parseInstruction b =
 
     (3,1,1) -> o RET  []
     (3,3,1) -> o RETI []
-    (3,5,1) -> o JP   [ ArgPointerReg HL ]
+    (3,5,1) -> o JP   [ ArgDirect16 HL ]
     (3,7,1) -> o ADD  [ ArgDirect16 SP, ArgDirect16 HL ]
 
     (3,4,2) -> o LD [ ArgPointerRegFF C, ArgDirect8 A ]
