@@ -112,6 +112,24 @@ subFlags vold vnew = modifyFlags $ \f -> f
   & flagN .~ True                          -- is a subtraction
   & flagH .~ (vnew .&. 0xF > vold .&. 0xF) -- lower half of register underflows
 
+daa :: MonadEmulator m => m ()
+daa = do
+  f <- load8 (Register8 F)
+  v <- load8 (Register8 A)
+  let vcorr'
+        | f ^. flagN
+        = if f ^. flagC then 0x60 else 0x00
+        + if f ^. flagH then 0x06 else 0x00
+        | otherwise
+        = if f ^. flagC || v > 0x99 then 0x60 else 0x00
+        + if f ^. flagH || v > 0x09 then 0x06 else 0x00
+  let v' = if f ^. flagN then v - vcorr' else v + vcorr'
+  store8 (Register8 A) v'
+  modifyFlags $ \k -> k
+    & flagH .~ False
+    & flagC .~ (f ^. flagC || (not (f ^. flagN) && v > 0x99))
+    & flagZ .~ (v' == 0)
+
 interpretM :: MonadEmulator m => Instruction -> m ()
 interpretM instr@(Instruction b op args) = case op of
   NOP -> return ()
@@ -124,6 +142,16 @@ interpretM instr@(Instruction b op args) = case op of
       sp <- load16 (Register16 SP)
       r <- sbyte
       store16 (Register16 HL) (addRelative sp r)
+    _ -> msg
+
+  AND -> case getArgM <$> args of
+    [ Left g ] -> do
+      v <- g
+      a <- load8 (Register8 A)
+      let a' = a .&. v
+      store8 (Register8 A) a'
+      modifyFlags $ \_ -> 0x20
+        & flagZ .~ (a' == 0)
     _ -> msg
 
   OR -> case getArgM <$> args of
@@ -307,6 +335,7 @@ interpretM instr@(Instruction b op args) = case op of
 
   DI -> setIEM False
   EI -> setIEM True
+  DAA -> daa
 
   _ -> error $ "failed at " ++ show instr
 
