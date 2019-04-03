@@ -10,6 +10,7 @@ import Text.Printf
 import Data.Foldable
 import Data.Traversable
 
+import Data.List
 import Data.Maybe
 import Data.Word
 import Data.Int
@@ -52,8 +53,14 @@ isConditional :: Arg -> Bool
 isConditional (ArgFlag _) = True
 isConditional _ = False
 
+isCall :: Mnemonic -> Bool
+isCall CALL = True
+isCall _ = False
+
 runDisassembler :: MonadEmulator m => (Word16 -> Bool) -> m [ DisassembledInstruction ]
-runDisassembler stopPlease = (`execStateT` []) $ do
+runDisassembler stopPlease
+  = fmap (sortBy (\x y -> compare (address x) (address y)))
+  . (`execStateT` []) $ do
   store16 (Register16 PC) 0
   let parse = do
         addr <- load16 (Register16 PC)
@@ -64,9 +71,10 @@ runDisassembler stopPlease = (`execStateT` []) $ do
           if isControlStatement instr
             then do
             -- a conditional control statement guards additional code
-            when (any (isConditional . removeArgData) instr) parse
+            let (Instruction _ op _) = instr
+            when (any (isConditional . removeArgData) instr || isCall op) parse
             -- after finding the remaining code jump to next address
-            mapM_ (const parse <=< store16 (Register16 PC)) (hasTargetAddress (toList instr) addr)
+            mapM_ (const parse <=< store16 (Register16 PC)) (hasTargetAddress (toList instr) (addr + 2))
             else
             parse
   parse
@@ -79,7 +87,7 @@ instance Show ArgWithData where
   show (ArgWithData t (Just d))
     | ArgByte b <- d = case t of
         Immediate8 -> printf "0x%02x" b
-        AddressRel -> printf "0x%02x" (fromIntegral b :: Int8)
+        AddressRel -> printf "%d" (fromIntegral b :: Int8)
         ArgPointerImmFF -> printf "(0xFF%02x)" b
         _ -> error $ printf "%s has byte data" (show t)
 
