@@ -174,6 +174,9 @@ interpretM instr@(Instruction b op args) = case op of
             store16 (Register16 PC) addr
     _ -> msg
   RET -> case args of
+    [ ArgFlag f ] -> do
+          t <- getFlag f <$> load8 (Register8 F)
+          when t $ pop >>= store16 (Register16 PC)
     [] -> pop >>= store16 (Register16 PC)
     _ -> msg
   PUSH -> case getArgM <$> args of
@@ -287,6 +290,9 @@ interpretM instr@(Instruction b op args) = case op of
     store8 (Register8 A) (v' & bitAt 7 .~ c)
     store8 (Register8 F) (f & flagC .~ c')
 
+  DI -> setIEM False
+  EI -> setIEM True
+
   _ -> error $ "failed at " ++ show instr
 
-  where msg = error $ printf "interpretM: %s - invalid arguments" (show op)
+  where msg = error $ printf "interpretM: %s - invalid arguments %s" (show op) (show args)
