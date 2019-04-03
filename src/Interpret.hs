@@ -138,10 +138,18 @@ interpretM instr@(Instruction b op args) = case op of
       (Left s , Left g) -> s =<< g
       (Right s , Right g) -> s =<< g
       _ -> error $ printf "interpretM: %s - cannot match type" (show instr)
-    [ArgPointerReg HL, ArgPointerReg SP, AddressRel] -> do
+    [ArgDirect16 HL, ArgPointerReg SP, AddressRel] -> do
       sp <- load16 (Register16 SP)
       r <- sbyte
-      store16 (Register16 HL) (addRelative sp r)
+      let v = addRelative sp r
+      store16 (Register16 HL) v
+      modifyFlags $ \_ -> if r >= 0
+        then 0x00
+        & flagC .~ ((v .&. 0xFF) < (sp .&. 0xFF))
+        & flagH .~ ((v .&. 0x0F) < (sp .&. 0x0F))
+        else 0x00
+        & flagC .~ ((v .&. 0xFF) >= (sp .&. 0xFF))
+        & flagH .~ ((v .&. 0x0F) >= (sp .&. 0x0F))
     _ -> msg
 
   AND -> case getArgM <$> args of
