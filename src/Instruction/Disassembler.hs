@@ -61,7 +61,6 @@ runDisassembler :: MonadEmulator m => (Word16 -> Bool) -> m [ DisassembledInstru
 runDisassembler stopPlease
   = fmap (sortBy (\x y -> compare (address x) (address y)))
   . (`execStateT` []) $ do
-  store16 (Register16 PC) 0
   let parse = do
         addr <- load16 (Register16 PC)
         x <- gets (find ((== addr) . address))
@@ -77,7 +76,12 @@ runDisassembler stopPlease
             mapM_ (const parse <=< store16 (Register16 PC)) (hasTargetAddress (toList instr) (addr + 2))
             else
             parse
-  parse
+
+  let aux x = store16 (Register16 PC) x >> parse
+  -- begin at usual program entry point
+  aux 0x100
+  -- walk through all interrupt addresses
+  for [0..12] $ \addr -> aux (addr * 8)
 
 instance Show DisassembledInstruction where
   show (DisassembledInstruction addr instr) = printf "0x%04x: %s" addr (show instr)
