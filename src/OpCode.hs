@@ -264,10 +264,10 @@ parseInstruction b =
     (3,6,3) -> o DI []
     (3,7,3) -> o EI []
 
-    (3,0,4) -> o CALL [ArgFlag $! flag 0]
-    (3,1,4) -> o CALL [ArgFlag $! flag 1]
-    (3,2,4) -> o CALL [ArgFlag $! flag 2]
-    (3,3,4) -> o CALL [ArgFlag $! flag 3]
+    (3,0,4) -> o CALL [ArgFlag $! flag 0, Address ]
+    (3,1,4) -> o CALL [ArgFlag $! flag 1, Address ]
+    (3,2,4) -> o CALL [ArgFlag $! flag 2, Address ]
+    (3,3,4) -> o CALL [ArgFlag $! flag 3, Address ]
 
     (3,0,5) -> o PUSH [ ArgDirect16 BC ]
     (3,2,5) -> o PUSH [ ArgDirect16 DE ]
