@@ -88,7 +88,7 @@ argSize _ = 0
 
 opcodeSize :: Mnemonic -> Int
 opcodeSize op
-  | op `elem` [ STOP, RLC , RRC , RL , RR , SLA , SRA , SRL , SWAP , BIT , SET , RES ] = 2
+  | op `elem` [ RLC, RRC, RL, RR, SLA, SRA, SRL, SWAP, BIT, SET, RES ] = 2
   | otherwise = 1
 
 instructionSize :: Instruction -> Int
