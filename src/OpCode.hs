@@ -104,8 +104,18 @@ instance Show Flag where
 
 data Instruction = Instruction !Word8 !Mnemonic ![ Arg ]
 
+hasBitNumber :: Mnemonic -> Bool
+hasBitNumber BIT = True
+hasBitNumber SET = True
+hasBitNumber RES = True
+hasBitNumber _ = False
+
 instance Show Instruction where
-  show (Instruction code mnemonic args) = printf "0x%02x - %s" code (show mnemonic) ++ showArgs args
+  show (Instruction code mnemonic args)
+    | hasBitNumber mnemonic
+    , (_,y,_) <- byteCodeDecompose code
+    = printf "0x%02x - %s %d," code (show mnemonic) y ++ showArgs args
+    | otherwise = printf "0x%02x - %s" code (show mnemonic) ++ showArgs args
 
 {-# INLINE arguments #-}
 arguments :: Instruction -> [ Arg ]
