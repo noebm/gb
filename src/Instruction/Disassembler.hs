@@ -1,8 +1,10 @@
-module Disassembler where
+module Instruction.Disassembler where
+
+import Control.Monad.State
 
 import MonadEmulator
-import Interpret
-import OpCode
+import Instruction.Interpret
+import Instruction.Instruction
 import Text.Printf
 
 import Data.Traversable
@@ -20,7 +22,7 @@ argData arg = case argSize arg of
   _ -> error "impossible argsize"
 
 data DisassembledInstruction
-  = DissassembledInstruction
+  = DisassembledInstruction
   { address   :: Word16
   , mnemonic  :: Mnemonic
   , arguments :: [ (Arg , Maybe ArgData) ]
@@ -33,10 +35,39 @@ disassemble = do
   args' <- forM args $ \arg -> do
     darg <- argData arg
     return (arg , darg)
-  return $ DissassembledInstruction pc op args'
+  return $ DisassembledInstruction pc op args'
+
+hasTargetAddress :: DisassembledInstruction -> Maybe Word16
+hasTargetAddress (DisassembledInstruction addr op args) = case op of
+  JP | (Address, Just (ArgWord addr')) : _ <- reverse args -> Just addr'
+  JR | (AddressRel, Just (ArgByte r))  : _ <- reverse args -> Just $ addRelative addr (fromIntegral r)
+  CALL | (Address, Just (ArgWord addr')) : _ <- reverse args -> Just addr'
+  _ -> Nothing
+
+changesControlFlow :: Mnemonic -> Bool
+changesControlFlow op = op `elem` [ JP, JR, CALL, RET, RETI, RST, STOP, HALT ]
+
+-- isConditional :: DisassembledInstruction -> ``
+-- 
+-- runDisassembler :: MonadEmulator m => m [ DisassembledInstruction ]
+-- runDisassembler = (`execStateT` []) $ do
+--   store16 (Register16 PC) 0
+--   let parse = do
+--         dis <- disassemble
+--         modify' (dis:)
+--         let DisassembledInstruction _ op _ = dis
+--         if changesControlFlow op
+--           then do
+--           let addr = hasTargetAddress dis
+--           
+--           -- mapM_ (parse << load16 (Register16 PC))
+--           else
+--           parse
+--   parse
+--   return ()
 
 instance Show DisassembledInstruction where
-  show (DissassembledInstruction addr mne args)
+  show (DisassembledInstruction addr mne args)
     = printf "0x%04x: %s %s" addr (show mne) (showArgStructure $ disassembleArg <$> args)
     where
     disassembleArg (t , Nothing) = show t

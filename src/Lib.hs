@@ -30,13 +30,12 @@ import Interrupt
 import Debugging
 import Drawing
 
-import Interpret
-import OpCode (parseInstructionM)
+import Instruction.Interpret
+import Instruction.Instruction (parseInstructionM)
 
 interpret :: (MonadEmulator m, MonadIO m) => Bool -> GraphicsContext -> m Bool
 interpret enablePrinting gfx = do
   -- regs <- showRegisters
-  -- b <- byte
 
   -- when enablePrinting $ do
   --   -- liftIO $ putStrLn $ printf "Instruction: 0x%02x / PC: 0x%04x" b pc

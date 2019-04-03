@@ -1,4 +1,4 @@
-module Interpret where
+module Instruction.Interpret where
 
 import Data.Word
 import Data.Int
@@ -10,7 +10,7 @@ import Control.Monad
 
 import Text.Printf
 
-import OpCode
+import Instruction.Instruction
 import Memory.Accessible
 
 import Instruction (byteCodeDecompose, modifyFlags)

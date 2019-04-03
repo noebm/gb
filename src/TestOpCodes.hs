@@ -1,7 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 module TestOpCodes where
 
-import OpCode
 import qualified Data.ByteString as B
 import qualified Data.Vector.Unboxed.Mutable as VUM
 
@@ -11,8 +10,9 @@ import Data.Foldable (find)
 import Data.Maybe
 
 import MonadEmulator
-import Interpret
-import InstructionPath
+import Instruction.Instruction
+import Instruction.Interpret
+import Instruction.CodePath
 
 import Control.Monad.State
 import Text.Printf
