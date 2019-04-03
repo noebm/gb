@@ -68,14 +68,18 @@ instance Show Arg where
     ArgPointerHLi     -> "(HL+)"
     ArgPointerHLd     -> "(HL-)"
 
-    ArgFlag f -> show f
+    ArgFlag     f -> show f
+    ArgByteCode b -> show b
 
 showArgs :: [ Arg ] -> String
-showArgs [] = ""
-showArgs (x:[]) = " " ++ show x
-showArgs (x:y:[]) = printf " %s, %s" (show x) (show y)
-showArgs (x:y:z:[]) = printf " %s, %s + %s" (show x) (show y) (show z)
-showArgs xs = show xs
+showArgs = showArgStructure . fmap show
+
+showArgStructure :: [ String ] -> String
+showArgStructure [] = ""
+showArgStructure [ x ] = x
+showArgStructure [ x, y ] = printf "%s, %s" x y
+showArgStructure [ x, y, z ] = printf "%s, %s + %s" x y z
+showArgStructure xs = show xs
 
 argSize :: Arg -> Int
 argSize Immediate16 = 2
