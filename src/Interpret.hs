@@ -70,7 +70,7 @@ getArgM arg = case arg of
     load8 (Addr8 hl)
   ArgFlag _ -> Left (load8 (Register8 F))
 
-  ArgByte b -> Left (return b)
+  ArgByteCode b -> Left (return b)
 
 {-# INLINE setArgM #-}
 setArgM :: MonadEmulator m => Arg -> Either (Word8 -> m ()) (Word16 -> m ())
