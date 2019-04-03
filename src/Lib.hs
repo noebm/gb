@@ -24,6 +24,7 @@ import MonadEmulator
 import GB
 import Instruction
 import Cartridge
+import BootRom
 import Memory.MMIO
 
 import Interrupt
@@ -31,22 +32,20 @@ import Debugging
 import Drawing
 
 import Instruction.Interpret
-import Instruction.Instruction (parseInstructionM)
+import Instruction.Instruction (parseInstructionM, Instruction, Arg)
+import Instruction.Disassembler
 
-interpret :: (MonadEmulator m, MonadIO m) => Bool -> GraphicsContext -> m Bool
-interpret enablePrinting gfx = do
-  -- regs <- showRegisters
+update :: (MonadEmulator m, MonadIO m) => GraphicsContext -> m Bool
+update gfx = do
+  -- mapM_ (advCycles <=< enterInterrupt) =<< handleInterrupt
 
-  -- when enablePrinting $ do
-  --   -- liftIO $ putStrLn $ printf "Instruction: 0x%02x / PC: 0x%04x" b pc
-  --   liftIO $ putStrLn regs
-  --   liftIO $ putStrLn $ printf "Instruction: 0x%02x" b
-
-  mapM_ (advCycles <=< enterInterrupt) =<< handleInterrupt
-
-  interpretM =<< parseInstructionM byte
-  advCycles 4
-  -- advCycles =<< instruction b
+  if False
+    then do
+    i <- parseInstructionM byte
+    interpretM i
+    advCycles 4
+    else
+    advCycles =<< Instruction.instruction =<< byte
 
   lcd <- lcdConfig
   forM_ lcd $ \conf -> do
@@ -54,7 +53,15 @@ interpret enablePrinting gfx = do
     forM_ gpuInstr $ \case
       DrawLine  -> genPixelRow (image gfx) conf
       DrawImage -> renderGraphics gfx
+
   stop
+  -- (,) i <$> stop
+
+interpret :: (MonadEmulator m, MonadIO m) => Bool -> GraphicsContext -> m Bool
+interpret enablePrinting gfx = do
+  pc <- load16 (Register16 PC)
+  s <- update gfx
+  return s
 
 disableBootRom :: MonadEmulator m => m Bool
 disableBootRom = (`testBit` 0) <$> load8 (Addr8 0xFF50)
@@ -111,55 +118,26 @@ drawTile conf idx = do
 
 someFunc :: Maybe FilePath -> IO ()
 someFunc fp' = do
-  rom <- memoryBootRom
-  -- cartOrError <- loadCartridge "./Tetris.gb"
-  -- cartOrError <- loadCartridge "./testroms/cpu_instrs/individual/03-op sp,hl.gb"
-
+  rom <- readBootRom
   cart <- maybe (return emptyCartridge)
     (\fp -> do
         cartOrError <- loadCartridge fp
         return $ either error id cartOrError) fp'
   runGB cart $ do
-    -- copy boot rom to memory
-    copyData rom
+    loadBootRom rom
 
-    let g fx = do
-          -- liftIO . print =<< load16 (Register16 PC)
+    -- liftIO . mapM_ print =<< runDisassembler (\addr -> addr >= 0x8000)
+
+    let runTillStop fx = do
           s <- interpret False fx
-          unless s $ g fx
-    let f fx = do
-            s <- interpret False fx
-            unless s $ do
-              bootflag <- disableBootRom
-              if bootflag
-                then do
-                -- mapM_ (liftIO . print <=< getBackgroundMap) =<< lcdConfig
-                -- surf <- drawCompleteBackground
+          unless s $ runTillStop fx
 
-                -- c <- lcdConfig
-                -- forM_ c $ \conf -> do
-                --   forM_ [0..26] $ \k -> do
-                --     t <- getTileData conf k
-                --     liftIO $ do
-                --       putStrLn $ printf "Tile %d contains" k
-                --       forM t $ putStr . printf "0x%04x "
-                --       putStr "\n"
-                --       getLine
+    let bootStrap fx = do
+          s <- interpret False fx
+          bootflag <- disableBootRom
+          unless (s || bootflag) $ bootStrap fx
 
-                --   -- let k = 25
-                --     surf <- drawTile conf k
-                --     text <- createTextureFromSurface (renderer fx) surf
-                --     renderGraphics (fx { image = text })
-                --     void $ liftIO $ getLine
-
-                writeCartridge cart >> g fx
-                -- return ()
-                else f fx
     gfx <- initializeGraphics
-    f gfx
-
-    -- liftIO $ 
-
-    -- surf <- drawCompleteBackground
-    -- text <- createTextureFromSurface (renderer gfx) surf
-    -- renderGraphics (gfx { image = text })
+    bootStrap gfx
+    unloadBootRom (cartridgeData cart)
+    runTillStop gfx

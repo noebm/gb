@@ -22,4 +22,10 @@ readBootRom = do
 loadBootRom :: MonadIO m => BootRom -> GB m ()
 loadBootRom (BootRom rom) = do
   mem <- unsafeMemory
-  liftIO $ stToIO $ VU.copy (VUM.slice 0 0xFF mem) $ byteStringToVector rom
+  liftIO $ stToIO $ VU.copy (VUM.slice 0 0x100 mem) $ byteStringToVector rom
+
+unloadBootRom :: MonadIO m => ByteString -> GB m ()
+unloadBootRom bs = do
+  mem <- unsafeMemory
+  let bs' = B.take 0x100 bs
+  liftIO $ stToIO $ VU.copy (VUM.slice 0 0x100 mem) $ byteStringToVector bs'
