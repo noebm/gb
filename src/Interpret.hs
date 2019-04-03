@@ -232,6 +232,9 @@ interpretM instr@(Instruction b op args) = case op of
           when t $ pop >>= store16 (Register16 PC)
     [] -> pop >>= store16 (Register16 PC)
     _ -> msg
+  RST -> do
+    load16 (Register16 PC) >>= push
+    store16 (Register16 PC) $ fromIntegral $ (b .&. 7) * 8
   PUSH -> case getArgM <$> args of
     [ Right g ] -> g >>= push
     _ -> msg
