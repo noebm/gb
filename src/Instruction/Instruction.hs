@@ -260,8 +260,8 @@ parseInstruction b =
 
     (3,4,0) -> o LD  [ ArgPointerImmFF, ArgDirect8 A ]
     (3,6,0) -> o LD  [ ArgDirect8 A, ArgPointerImmFF ]
-    (3,5,0) -> o ADD [ ArgDirect16 SP, AddressRel ]
-    (3,7,0) -> o LD  [ ArgDirect16 HL, ArgDirect16 SP, AddressRel ]
+    (3,5,0) -> o ADD [ ArgDirect16 SP, Immediate8 ]
+    (3,7,0) -> o LD  [ ArgDirect16 HL, ArgDirect16 SP, Immediate8 ]
     (3,y,0) -> o RET [ ArgFlag $! flag y ]
 
     (3,0,1) -> o POP [ ArgDirect16 BC ]

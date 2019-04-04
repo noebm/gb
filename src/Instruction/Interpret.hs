@@ -152,11 +152,16 @@ interpretM instr@(Instruction b op args) = case op of
       (Left s , Left g) -> s =<< g
       (Right s , Right g) -> s =<< g
       _ -> error $ printf "interpretM: %s - cannot match type" (show instr)
-    l@[_,_,_] | [ ArgDirect16 HL, ArgDirect16 SP, AddressRel] <- toArg <$> l -> do
-      sp <- load16 (Register16 SP)
-      r <- sbyte
+    l@[ rHL, rSP, ptrRel ]
+      | [ ArgDirect16 HL, ArgDirect16 SP, Immediate8 ] <- toArg <$> l
+      , Right sHL <- setArgumentM rHL
+      , Right gSP <- getArgumentM rSP
+      , Left  getRel <- getArgumentM ptrRel
+        -> do
+      sp <- gSP
+      r <- fromIntegral <$> getRel
       let v = addRelative sp r
-      store16 (Register16 HL) v
+      sHL v
       modifyFlags $ \_ -> if r >= 0
         then 0x00
         & flagC .~ ((v .&. 0xFF) < (sp .&. 0xFF))
@@ -284,6 +289,19 @@ interpretM instr@(Instruction b op args) = case op of
           let v' = v + dv
           s v'
           modifyFlags $ \f -> f
+            & flagN .~ False
+            & flagC .~ ((v' .&. 0xFF) < (v .&. 0xFF))
+            & flagH .~ ((v' .&. 0x0F) < (v .&. 0x0F))
+      | ArgDirect16 SP <- toArg to
+      , Right s <- setArgumentM to
+      , Right gs <- getArgumentM to
+      , Left getRel <- getArgumentM from -> do
+          v <- gs
+          dv <- fromIntegral <$> getRel
+          let v' = addRelative v dv
+          s v'
+          modifyFlags $ \f -> f
+            & flagZ .~ False
             & flagN .~ False
             & flagC .~ ((v' .&. 0xFF) < (v .&. 0xFF))
             & flagH .~ ((v' .&. 0x0F) < (v .&. 0x0F))
