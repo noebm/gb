@@ -35,17 +35,15 @@ import Instruction.Interpret
 import Instruction.Instruction (parseInstructionM, Instruction, Arg)
 import Instruction.Disassembler
 
-update :: (MonadEmulator m, MonadIO m) => GraphicsContext -> m Bool
+update :: (MonadEmulator m, MonadIO m) => GraphicsContext -> m (Bool , Instruction ArgWithData)
 update gfx = do
-  mapM_ (advCycles <=< enterInterrupt) =<< handleInterrupt
+  -- mapM_ (advCycles <=< enterInterrupt) =<< handleInterrupt
 
-  if True
-    then do
-    i <- parseInstructionM byte
-    interpretM i
-    advCycles 4
-    else
-    advCycles =<< Instruction.instruction =<< byte
+  pc <- load16 (Register16 PC)
+  -- i <- parseInstructionM byte
+  i <- disassemble
+  interpretM i
+  advCycles 20
 
   lcd <- lcdConfig
   forM_ lcd $ \conf -> do
@@ -54,13 +52,15 @@ update gfx = do
       DrawLine  -> genPixelRow (image gfx) conf
       DrawImage -> renderGraphics gfx
 
-  stop
-  -- (,) i <$> stop
+  flip (,) i <$> stop
 
-interpret :: (MonadEmulator m, MonadIO m) => Bool -> GraphicsContext -> m Bool
-interpret enablePrinting gfx = do
+interpret :: (MonadEmulator m, MonadIO m)
+          => Maybe (Word16 -> Instruction ArgWithData -> IO ())
+          -> GraphicsContext -> m Bool
+interpret print gfx = do
   pc <- load16 (Register16 PC)
-  s <- update gfx
+  (s , i) <- update gfx
+  forM_ print $ \f -> liftIO $ f pc i
   return s
 
 disableBootRom :: MonadEmulator m => m Bool
@@ -128,12 +128,17 @@ someFunc fp' = do
 
     -- liftIO . mapM_ print =<< runDisassembler (\addr -> addr >= 0x8000)
 
+    let
+      logger :: Maybe (Word16 -> Instruction ArgWithData -> IO ())
+      logger = Just $ \addr i -> do
+        when (addr > 0xFF) $ putStrLn $ printf "0x%04x: %s" addr (show i)
+
     let runTillStop fx = do
-          s <- interpret False fx
+          s <- interpret logger fx
           unless s $ runTillStop fx
 
     let bootStrap fx = do
-          s <- interpret False fx
+          s <- interpret logger fx
           bootflag <- disableBootRom
           unless (s || bootflag) $ bootStrap fx
 

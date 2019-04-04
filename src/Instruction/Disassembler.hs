@@ -32,16 +32,32 @@ data ArgWithData = ArgWithData
 instance Argument ArgWithData where
   getArgumentM (ArgWithData t d)
     | Just v <- d = case v of
-        ArgByte b -> Left (return b)
-        ArgWord w -> Right (return w)
+        ArgByte b -> case t of
+          Immediate8      -> Left (return b)
+          ArgPointerImmFF -> Left (load8 . Addr8 $ addrFF b)
+          AddressRel      -> Left (return b)
+          _ -> error $ printf "ArgWithData.getArgumentM: %s has data when it shouldn't" (show t)
+        ArgWord w -> case t of
+          Immediate16     -> Right (return w)
+          Address         -> Right (return w)
+          ArgPointerImm8  -> Left  (load8 (Addr8 w))
+          ArgPointerImm16 -> Right (load16 (Addr16 w))
+          _ -> error $ printf "ArgWithData.getArgumentM: %s has data when it shouldn't" (show t)
     | otherwise = getArgumentM t
-  setArgumentM (ArgWithData t _) = setArgumentM t
+  setArgumentM (ArgWithData t d)
+    | Just (ArgWord w) <- d , ArgPointerImm8  <- t = Left  (\b -> (`store8` b) $ Addr8 w)
+    | Just (ArgByte b) <- d , ArgPointerImmFF <- t = Left (\b' -> (`store8` b') $ Addr8 $ addrFF b)
+    | Just (ArgWord w) <- d , ArgPointerImm16 <- t = Right (\b -> (`store16` b) $ Addr16 w)
+    | otherwise  = setArgumentM t
   toArg = removeArgData
 
 data DisassembledInstruction = DisassembledInstruction
   { address :: Word16
   , instruction :: Instruction ArgWithData
   }
+
+-- whatHappened :: MonadEmulator m => DisassembledInstruction -> m String
+-- whatHappened (DisassembledInstruction addr instr) = 
 
 disassemble :: MonadEmulator m => m (Instruction ArgWithData)
 disassemble = do
@@ -51,7 +67,7 @@ disassemble = do
 hasTargetAddress :: [ ArgWithData ] -> Word16 -> Maybe Word16
 hasTargetAddress args addr = case find (isAddress . removeArgData) args of
   Just (ArgWithData Address    (Just (ArgWord addr'))) -> Just addr'
-  Just (ArgWithData AddressRel (Just (ArgByte r)))     -> Just (addRelative addr $ fromIntegral r)
+  Just (ArgWithData AddressRel (Just (ArgByte rel  ))) -> Just $ addRelative addr (fromIntegral rel)
   _ -> Nothing
   where
     isAddress Address = True
@@ -62,8 +78,8 @@ isConditional :: Arg -> Bool
 isConditional (ArgFlag _) = True
 isConditional _ = False
 
-isCall :: Mnemonic -> Bool
-isCall CALL = True
+isCall :: Instruction a -> Bool
+isCall (Instruction _ CALL _) = True
 isCall _ = False
 
 runDisassembler :: MonadEmulator m => (Word16 -> Bool) -> m [ DisassembledInstruction ]
@@ -79,10 +95,10 @@ runDisassembler stopPlease
           if isControlStatement instr
             then do
             -- a conditional control statement guards additional code
-            let (Instruction _ op _) = instr
-            when (any (isConditional . removeArgData) instr || isCall op) parse
+            addr' <- load16 (Register16 PC)
+            when (any (isConditional . removeArgData) instr || isCall instr) parse
             -- after finding the remaining code jump to next address
-            mapM_ (const parse <=< store16 (Register16 PC)) (hasTargetAddress (toList instr) (addr + 2))
+            mapM_ (const parse <=< store16 (Register16 PC)) (hasTargetAddress (toList instr) addr')
             else
             parse
 
