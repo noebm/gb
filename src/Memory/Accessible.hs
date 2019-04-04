@@ -85,7 +85,8 @@ store8 x@(Addr8 addr)
       modifyRomBank (\k -> (k .&. 0xE0) .|. index)
   | addr < 0x6000 = \w -> do
       modifyRomBank (\k -> (k .&. 0x1F) .|. (w .&. 0xE0))
-  | addr < 0x8000 = \w -> error "MBC1 mode switching not implemented!"
+  -- | addr < 0x8000 = \w -> error "MBC1 mode switching not implemented!"
+  | addr < 0x8000 = \_ -> return () -- XXX ignore for now
 
   | alwaysStoreable addr = X.store8 x
   | echoRam addr         = X.store8 . Addr8 $ addr - 0x2000
