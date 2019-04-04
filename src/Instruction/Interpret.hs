@@ -27,18 +27,16 @@ getFlag FlagZ = view flagZ
 getFlag FlagNC = views flagC not
 getFlag FlagNZ = views flagZ not
 
-{-# INLINE addRelative #-}
-addRelative :: Word16 -> Int8 -> Word16
-addRelative addr x = fromIntegral $ (fromIntegral addr :: Int) + fromIntegral x
 
 {-# INLINE addrFF #-}
 addrFF :: Word8 -> Word16
 addrFF k = (0xFF , k) ^. word16
-{-# INLINE addrRel #-}
-addrRel :: MonadEmulator m => Int8 -> m Word16
-addrRel k = do
-  pc <- load16 (Register16 PC)
-  return $ addRelative pc k
+
+-- {-# INLINE addrRel #-}
+-- addrRel :: MonadEmulator m => Int8 -> m Word16
+-- addrRel k = do
+--   pc <- load16 (Register16 PC)
+--   return $ addRelative pc k
 
 {-# INLINE getArgM #-}
 getArgM :: MonadEmulator m => Arg -> Either (m Word8) (m Word16)
@@ -52,7 +50,8 @@ getArgM arg = case arg of
 
   -- addresses
   Address    -> Right word
-  AddressRel -> Right (addrRel =<< sbyte)
+  -- AddressRel -> Right (addrRel =<< sbyte)
+  AddressRel -> Left byte
 
   -- pointers
   ArgPointerImmFF   -> Left (load8 . Addr8 . addrFF =<< byte)
@@ -212,13 +211,15 @@ interpretM instr@(Instruction b op args) = case op of
     _ -> msg
   JR -> case args of
     [ arg ]
-      | Right g <- getArgumentM arg ->
-          g >>= store16 (Register16 PC)
+      | Left g <- getArgumentM arg -> do
+          r <- fromIntegral <$> g
+          jumpRelative r
     [ argf , arg ]
-      | Right g <- getArgumentM arg
+      | Left g <- getArgumentM arg
       , ArgFlag f <- toArg argf -> do
           t <- getFlag f <$> load8 (Register8 F)
-          g >>= when t . store16 (Register16 PC)
+          r <- fromIntegral <$> g
+          when t $ jumpRelative r
     _ -> msg
   JP -> case args of
     [ arg ]

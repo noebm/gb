@@ -10,6 +10,7 @@ module MonadEmulator
   , load16LE, store16LE
   , flagC, flagH, flagN, flagZ
   , byte, word, sbyte
+  , addRelative
   , jump, jumpRelative
   , push, pop
   , call, ret
@@ -170,12 +171,14 @@ sbyte = fromIntegral <$> byte
 jump :: MonadEmulator m => Word16 -> m ()
 jump = store16 (Register16 PC)
 
+{-# INLINE addRelative #-}
+addRelative :: Word16 -> Int8 -> Word16
+addRelative addr x = fromIntegral $ (fromIntegral addr :: Int) + fromIntegral x
+
 jumpRelative :: MonadEmulator m => Int8 -> m ()
 jumpRelative addrdiff = do
-  let aux :: Int8 -> Word16 -> Word16
-      aux x addr = fromIntegral $ (fromIntegral addr :: Int) + fromIntegral x
   pc <- load16 (Register16 PC)
-  store16 (Register16 PC) $ aux addrdiff pc
+  store16 (Register16 PC) $ addRelative pc addrdiff
 
 push :: MonadEmulator m => Word16 -> m ()
 push w = do
