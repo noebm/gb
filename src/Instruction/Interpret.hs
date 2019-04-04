@@ -308,22 +308,18 @@ interpretM instr@(Instruction b op args) = case op of
     _ -> msg
   CALL -> case args of
     [ arg ]
-      | Right g <- getArgumentM arg -> do
-          push =<< load16 (Register16 PC)
-          g >>= store16 (Register16 PC)
+      | Right g <- getArgumentM arg ->
+          call =<< g
     [ argf , arg ]
       | Right g <- getArgumentM arg
       , ArgFlag f <- toArg argf -> do
           t <- getFlag f <$> load8 (Register8 F)
-          addr <- g
-          when t $ do
-            push =<< load16 (Register16 PC)
-            store16 (Register16 PC) addr
+          when t . call =<< g
     _ -> msg
   RET -> case toArg <$> args of
     [ ArgFlag f ] -> do
           t <- getFlag f <$> load8 (Register8 F)
-          when t $ ret
+          when t ret
     [] -> ret
     _ -> msg
   RETI -> do
