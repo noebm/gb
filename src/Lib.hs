@@ -22,7 +22,6 @@ import Control.Monad
 import Graphics
 import MonadEmulator
 import GB
-import Instruction
 import Cartridge
 import BootRom
 import Memory.MMIO

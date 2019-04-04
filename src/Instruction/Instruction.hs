@@ -1,13 +1,18 @@
 module Instruction.Instruction where
 
 import MonadEmulator
-import Instruction
 
 import Data.Traversable
 
 import Text.Printf
 import Data.Word
 import Data.Bits
+
+-- | decompose byte to xxyyyzzz
+byteCodeDecompose :: Word8 -> (Word8, Word8, Word8)
+byteCodeDecompose b =
+  ((b `shiftR` 6) .&. 0x3, (b `shiftR` 3) .&. 0x7, b .&. 0x7)
+{-# INLINE byteCodeDecompose #-}
 
 data Mnemonic
   = LD

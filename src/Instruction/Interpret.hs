@@ -13,7 +13,11 @@ import Text.Printf
 import Instruction.Instruction
 import Memory.Accessible
 
-import Instruction (byteCodeDecompose, modifyFlags)
+modifyFlags :: MonadEmulator m => (Word8 -> Word8) -> m ()
+modifyFlags g = do
+  let rF = Register8 F
+  flags <- load8 rF
+  store8 rF $ g flags
 
 {-# INLINE isControlStatement #-}
 isControlStatement :: Instruction a -> Bool
