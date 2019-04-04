@@ -39,7 +39,7 @@ update :: (MonadEmulator m, MonadIO m) => GraphicsContext -> m Bool
 update gfx = do
   -- mapM_ (advCycles <=< enterInterrupt) =<< handleInterrupt
 
-  if False
+  if True
     then do
     i <- parseInstructionM byte
     interpretM i

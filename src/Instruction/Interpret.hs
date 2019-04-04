@@ -200,6 +200,7 @@ interpretM instr@(Instruction b op args) = case op of
         & flagZ .~ (a' == 0)
     _ -> msg
 
+  {- 0xCB instructions and specialization for A -}
   BIT -> case getArgumentM <$> args of
     [ Left gb, Left g ] -> do
       y <- gb
@@ -209,6 +210,75 @@ interpretM instr@(Instruction b op args) = case op of
         & flagN .~ False
         & flagH .~ True
     _ -> msg
+
+  SWAP -> case args of
+    [ arg ]
+      | Left g <- getArgumentM arg
+      , Left s <- setArgumentM arg -> do
+          x <- g
+          let x' = ((x `shiftL` 4) .&. 0xF0) .|. ((x `shiftR` 4) .&. 0x0F)
+          s x'
+          modifyFlags $ \_ -> 0x00 & flagZ .~ (x' == 0)
+    _ -> msg
+
+  RES -> case args of
+    [ whatBit , arg ]
+      | Left getbit <- getArgumentM whatBit
+      , Left s <- setArgumentM arg
+      , Left g <- getArgumentM arg -> do
+          bidx <- getbit
+          s . (`clearBit` fromIntegral bidx) =<< g
+    _ -> msg
+  SET -> case args of
+    [ whatBit , arg ]
+      | Left getbit <- getArgumentM whatBit
+      , Left s <- setArgumentM arg
+      , Left g <- getArgumentM arg -> do
+          bidx <- getbit
+          s . (`setBit` fromIntegral bidx) =<< g
+    _ -> msg
+
+  RL -> case args of
+    [ arg ] | Left g <- getArgumentM arg
+            , Left s <- setArgumentM arg -> do
+                v <- g
+                let v' = v `rotateL` 1
+                let c' = v' `testBit` 0
+                f <- load8 (Register8 F)
+                let c = f ^. flagC
+                s (v' & bitAt 0 .~ c)
+                store8 (Register8 F) (f & flagC .~ c')
+    _ -> msg
+  RLA -> do
+    v <- load8 (Register8 A)
+    let v' = v `rotateL` 1
+    let c' = v' `testBit` 0
+    f <- load8 (Register8 F)
+    let c = f ^. flagC
+    store8 (Register8 A) (v' & bitAt 0 .~ c)
+    store8 (Register8 F) (f & flagC .~ c')
+
+  RR -> case args of
+    [ arg ] | Left g <- getArgumentM arg
+            , Left s <- setArgumentM arg -> do
+                v <- g
+                let v' = v `rotateR` 1
+                let c' = v' `testBit` 7
+                f <- load8 (Register8 F)
+                let c = f ^. flagC
+                s (v' & bitAt 7 .~ c)
+                store8 (Register8 F) (f & flagC .~ c')
+    _ -> msg
+  RRA -> do
+    v <- load8 (Register8 A)
+    let v' = v `rotateR` 1
+    let c' = v' `testBit` 7
+    f <- load8 (Register8 F)
+    let c = f ^. flagC
+    store8 (Register8 A) (v' & bitAt 7 .~ c)
+    store8 (Register8 F) (f & flagC .~ c')
+
+
   JR -> case args of
     [ arg ]
       | Left g <- getArgumentM arg -> do
@@ -352,46 +422,6 @@ interpretM instr@(Instruction b op args) = case op of
                 subFlags v v'
     _ -> msg
 
-
-  RL -> case args of
-    [ arg ] | Left g <- getArgumentM arg
-            , Left s <- setArgumentM arg -> do
-                v <- g
-                let v' = v `rotateL` 1
-                let c' = v' `testBit` 0
-                f <- load8 (Register8 F)
-                let c = f ^. flagC
-                s (v' & bitAt 0 .~ c)
-                store8 (Register8 F) (f & flagC .~ c')
-    _ -> msg
-  RLA -> do
-    v <- load8 (Register8 A)
-    let v' = v `rotateL` 1
-    let c' = v' `testBit` 0
-    f <- load8 (Register8 F)
-    let c = f ^. flagC
-    store8 (Register8 A) (v' & bitAt 0 .~ c)
-    store8 (Register8 F) (f & flagC .~ c')
-
-  RR -> case args of
-    [ arg ] | Left g <- getArgumentM arg
-            , Left s <- setArgumentM arg -> do
-                v <- g
-                let v' = v `rotateR` 1
-                let c' = v' `testBit` 7
-                f <- load8 (Register8 F)
-                let c = f ^. flagC
-                s (v' & bitAt 7 .~ c)
-                store8 (Register8 F) (f & flagC .~ c')
-    _ -> msg
-  RRA -> do
-    v <- load8 (Register8 A)
-    let v' = v `rotateR` 1
-    let c' = v' `testBit` 7
-    f <- load8 (Register8 F)
-    let c = f ^. flagC
-    store8 (Register8 A) (v' & bitAt 7 .~ c)
-    store8 (Register8 F) (f & flagC .~ c')
 
   DI -> setIEM False
   EI -> setIEM True
