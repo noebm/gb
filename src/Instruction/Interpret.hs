@@ -319,9 +319,13 @@ interpretM instr@(Instruction b op args) = case op of
   RET -> case toArg <$> args of
     [ ArgFlag f ] -> do
           t <- getFlag f <$> load8 (Register8 F)
-          when t $ pop >>= store16 (Register16 PC)
-    [] -> pop >>= store16 (Register16 PC)
+          when t $ ret
+    [] -> ret
     _ -> msg
+  RETI -> do
+    setIEM True
+    ret
+
   RST -> case getArgumentM <$> args of
     [ Left g ] -> do
       restart . (* 8) =<< g

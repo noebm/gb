@@ -37,7 +37,7 @@ import Instruction.Disassembler
 
 update :: (MonadEmulator m, MonadIO m) => GraphicsContext -> m Bool
 update gfx = do
-  -- mapM_ (advCycles <=< enterInterrupt) =<< handleInterrupt
+  mapM_ (advCycles <=< enterInterrupt) =<< handleInterrupt
 
   if True
     then do
