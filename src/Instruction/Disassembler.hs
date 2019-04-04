@@ -29,6 +29,15 @@ data ArgWithData = ArgWithData
   , argumentData :: Maybe ArgData
   }
 
+instance Argument ArgWithData where
+  getArgumentM (ArgWithData t d)
+    | Just v <- d = case v of
+        ArgByte b -> Left (return b)
+        ArgWord w -> Right (return w)
+    | otherwise = getArgumentM t
+  setArgumentM (ArgWithData t _) = setArgumentM t
+  toArg = removeArgData
+
 data DisassembledInstruction = DisassembledInstruction
   { address :: Word16
   , instruction :: Instruction ArgWithData
