@@ -36,7 +36,7 @@ import Instruction.Disassembler
 
 update :: (MonadEmulator m, MonadIO m) => GraphicsContext -> m (Bool , Instruction ArgWithData)
 update gfx = do
-  -- mapM_ (advCycles <=< enterInterrupt) =<< handleInterrupt
+  mapM_ (advCycles <=< enterInterrupt) =<< handleInterrupt
 
   pc <- load16 (Register16 PC)
   -- i <- parseInstructionM byte
@@ -64,14 +64,6 @@ interpret print gfx = do
 
 disableBootRom :: MonadEmulator m => m Bool
 disableBootRom = (`testBit` 0) <$> load8 (Addr8 0xFF50)
-
--- not quite correct (only works for games without mbc)
-writeCartridge cart = copyData (cartridgeData cart)
-
-copyData bs = do
-  mem <- unsafeMemory
-  liftIO $ forM_ [0..B.length bs - 1] $ \idx ->
-    V.write mem idx (bs `B.index` idx)
 
 getTileData :: MonadEmulator m => LCDConfig -> Word8 -> m [Word16]
 getTileData conf idx = do
