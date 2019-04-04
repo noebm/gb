@@ -44,9 +44,7 @@ windowX           = Addr8 0xFF4B
 bootRomEnabled :: MonadEmulator m => m Bool
 bootRomEnabled = not . (`testBit` 0) <$> load8 (Addr8 0xFF50)
 
-data DrawInstruction = DrawLine | DrawImage
-
-updateGPU :: MonadEmulator m => m (Maybe DrawInstruction)
+updateGPU :: MonadEmulator m => m (Maybe Word8)
 updateGPU = do
   t <- resetCycles
   stat <- load8 status
@@ -72,10 +70,7 @@ updateGPU = do
   when (vblankIF && ie `testBit` 0) $
     store8 interruptFlag . (`setBit` 0) =<< load8 interruptFlag
 
-  case True of
-    _ | mode' == Just HBlank && mode == VRAM   -> return (Just DrawLine)
-      | mode' == Just VBlank && mode == HBlank -> return (Just DrawImage)
-      | otherwise -> return Nothing
+  return mode'
 {-
 Bit7  LCD operation                           | ON            | OFF
 Bit6  Window Tile Table address               | 9C00-9FFF     | 9800-9BFF

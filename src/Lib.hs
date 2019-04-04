@@ -48,8 +48,9 @@ update gfx = do
   forM_ lcd $ \conf -> do
     gpuInstr <- updateGPU
     forM_ gpuInstr $ \case
-      DrawLine  -> genPixelRow (image gfx) conf
-      DrawImage -> renderGraphics gfx
+      HBlank -> genPixelRow (image gfx) conf
+      VBlank -> renderGraphics gfx
+      _ -> return ()
 
   flip (,) i <$> stop
 
