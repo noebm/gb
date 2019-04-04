@@ -43,6 +43,15 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - gb-rewrite
+  gb-asm:
+    main:                Main.hs
+    source-dirs:         asm
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - gb-rewrite
 
 tests:
   gb-rewrite-test:
