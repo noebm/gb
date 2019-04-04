@@ -63,9 +63,11 @@ copyBankAux target k memory cart = do
 makeGBState :: Cartridge -> ST s (GBState s)
 makeGBState cart = do
   memory <- V.replicate (0xFFFF + 0xC) 0x00
-  let copyBank k = copyBankAux (0x4000 * k) k memory (cartridgeData cart)
-  copyBank 0
-  copyBank 1
+  -- let copyBank k = copyBankAux (0x4000 * k) k memory (cartridgeData cart)
+  -- copyBank 0
+  -- copyBank 1
+  VU.copy (V.slice 0 0x8000 memory) (byteStringToVector $ cartridgeData cart)
+
   externalRam <- V.replicate (0x2000 * fromIntegral (cartridgeRamBanks cart)) 0x00
   GBState
     <$> pure memory
