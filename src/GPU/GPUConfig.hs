@@ -3,11 +3,11 @@ module GPU.GPUConfig where
 import Data.Word
 import Data.Bits
 
+import GPU.Palette
+
 -- should go from 0 to 3
 data GPUMode = ModeHBlank | ModeVBlank | ModeOAM | ModeVRAM
   deriving (Enum)
-
-newtype Palette = Palette { getPalette :: Word8 }
 
 data GPUConfig = GPUConfig
   { gpuMode       :: GPUMode
