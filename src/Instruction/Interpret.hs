@@ -385,9 +385,7 @@ interpretM instr@(Instruction b op args) = case op of
           dv <- fromIntegral <$> getRel
           let v' = addRelative v dv
           s v'
-          modifyFlags $ \f -> f
-            & flagZ .~ False
-            & flagN .~ False
+          modifyFlags $ \f -> 0x00
             & flagC .~ ((v' .&. 0xFF) < (v .&. 0xFF))
             & flagH .~ ((v' .&. 0x0F) < (v .&. 0x0F))
     _ -> msg
