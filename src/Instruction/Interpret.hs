@@ -282,6 +282,16 @@ interpretM instr@(Instruction b op args) = case op of
     store8 (Register8 A) (v' & bitAt 7 .~ c)
     store8 (Register8 F) (f & flagC .~ c')
 
+  SRL -> case args of
+    [ arg ] | Left g <- getArgumentM arg
+            , Left s <- setArgumentM arg -> do
+                v <- g
+                let v' = v `shiftR` 1
+                s v'
+                modifyFlags $ \f -> 0x00
+                  & flagC .~ (v `testBit` 0)
+                  & flagZ .~ (v' == 0)
+
 
   JR -> case args of
     [ arg ]
