@@ -30,26 +30,25 @@ paletteValue palette paletteIndex = palette `shiftR` fromIntegral (2 * paletteIn
 -- | Given the address of the tile and x / y pixel coordinates,
 -- find the palette index of the pixel.
 tile :: MonadEmulator m => Word16 -> Word8 -> Word8 -> m Word8
-tile tileAddress y x = colorcode <$> load8 (Addr8 $ tileAddress + yOffset)
-                                 <*> load8 (Addr8 $ tileAddress + yOffset + 1)
+tile tileAddress y x = colorcode <$> load8 (Addr8 $ addr)
+                                 <*> load8 (Addr8 $ addr + 1)
   where
-  yOffset = fromIntegral ((y .&. 7) `shiftL` 1) -- every line contains 2 bytes
+  addr = tileAddress + fromIntegral ((y .&. 7) `shiftL` 1) -- every line contains 2 bytes
   xOffset = fromIntegral (complement x .&. 7)
   colorcode b0 b1
-    = (if b1 `testBit` xOffset then (`setBit` 1) else id)
-    $ (if b0 `testBit` xOffset then (`setBit` 0) else id)
-    $ zeroBits
+    = (if b1 `testBit` xOffset then 0x02 else 0x00) .|.
+      (if b0 `testBit` xOffset then 0x01 else 0x00)
 
 bgPalette :: MonadEmulator m => m (Word8 -> Word8)
 bgPalette = paletteColor <$> load8 backgroundPalette
 
-drawLineBackground :: (MonadIO m, MonadEmulator m) => LCDConfig -> m (Word8 -> Word8 -> m Word8)
-drawLineBackground lcd = do
+drawLineBackground :: (MonadIO m, MonadEmulator m) => LCDConfig -> Word8 -> m (Word8 -> m Word8)
+drawLineBackground lcd y = do
   bgrdPal <- bgPalette
   sy <- load8 scrollY
   sx <- load8 scrollX
-  return $ \y x -> do
-    let y' = sy + y
+  let y' = sy + y
+  return $ \x -> do
     let x' = sx + x
     idx <- load8 $ backgroundTileIndex lcd y' x'
     bgrdPal <$> tile (tileAddr lcd idx) y' x'
@@ -58,7 +57,7 @@ drawLineBackground lcd = do
 genPixelRow :: (MonadIO m, MonadEmulator m) => Texture -> LCDConfig -> m ()
 genPixelRow im conf = do
   y <- load8 currentLine
-  fBgrd <- ($ y) <$> drawLineBackground conf
+  fBgrd <- drawLineBackground conf y
   (ptr', _) <- lockTexture im (Just $ fromIntegral <$> Rectangle (P $ V2 0 y) (V2 160 1))
   let ptr = castPtr ptr' :: Ptr Word8
   forM_ [0..159] $ \x -> do
