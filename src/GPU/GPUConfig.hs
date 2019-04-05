@@ -16,7 +16,7 @@ import GPU.Palette
 
 -- should go from 0 to 3
 data GPUMode = ModeHBlank | ModeVBlank | ModeOAM | ModeVRAM
-  deriving (Eq)
+  deriving (Eq, Show)
 
 data GPUConfig = GPUConfig
   { gpuMode       :: GPUMode
@@ -49,6 +49,7 @@ data GPUConfig = GPUConfig
   , gpuWindowX :: Word8
   , gpuWindowY :: Word8
   }
+  deriving (Show)
 
 defaultGPUConfig :: GPUConfig
 defaultGPUConfig = GPUConfig
@@ -99,7 +100,7 @@ gpuNextConfig g = case gpuMode g of
                 then g { gpuMode = ModeVBlank }
                 else g { gpuMode = ModeOAM , gpuYCoordinate = y + 1 }
   ModeVBlank -> if gpuYCoordinate g == 154
-                then g { gpuMode = ModeOAM }
+                then g { gpuMode = ModeOAM , gpuYCoordinate = 0 }
                 else g { gpuYCoordinate = y + 1 }
   ModeOAM    -> g { gpuMode = ModeVRAM   }
   ModeVRAM   -> g { gpuMode = ModeHBlank }

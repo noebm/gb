@@ -4,6 +4,7 @@ import Data.Word
 import Data.Bits
 
 newtype Palette = Palette { getPalette :: Word8 }
+  deriving Show
 
 defaultPalette :: Palette
 defaultPalette = Palette 0x00

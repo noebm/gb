@@ -56,16 +56,10 @@ updateGPUState cycles s = do
   (cycles' , s') <- updateGPUConfigState cycles s
   return (cycles' , updateVideoRAMState $ updateOAMState s')
 
-inVideoRAM :: Word16 -> Bool
+inVideoRAM, inOAM, inGPUMMIO, inGPURange :: (Num a, Ord a) => a -> Bool
 inVideoRAM addr = 0x8000 <= addr && addr < 0xA000
-
-inOAM :: Word16 -> Bool
-inOAM addr = 0xFE00 <= addr && addr < 0xFF00
-
-inGPUMMIO :: Word16 -> Bool
-inGPUMMIO addr =  0xFF40 <= addr && addr < 0xFF50
-
-inGPURange :: Word16 -> Bool
+inOAM      addr = 0xFE00 <= addr && addr < 0xFF00
+inGPUMMIO  addr = 0xFF40 <= addr && addr < 0xFF50
 inGPURange addr = inVideoRAM addr || inOAM addr || inGPUMMIO addr
 {-# INLINE inVideoRAM #-}
 {-# INLINE inOAM #-}
