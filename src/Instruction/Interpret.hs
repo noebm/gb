@@ -115,20 +115,6 @@ instance Argument Arg where
   getArgumentM = getArgM
   toArg = id
 
-addFlags :: MonadEmulator m => Word8 -> Word8 -> m ()
-addFlags vold vnew = modifyFlags $ \f -> f
-  & flagC .~ (vnew < vold)                 -- register overflows
-  & flagZ .~ (vnew == 0)                   -- new value is zero
-  & flagN .~ False                         -- not a subtraction
-  & flagH .~ (vnew .&. 0xF < vold .&. 0xF) -- lower half of register overflows
-
-subFlags :: MonadEmulator m => Word8 -> Word8 -> m ()
-subFlags vold vnew = modifyFlags $ \f -> f
-  & flagC .~ (vnew > vold)                 -- register underflows
-  & flagZ .~ (vnew == 0)                   -- new value is zero
-  & flagN .~ True                          -- is a subtraction
-  & flagH .~ (vnew .&. 0xF > vold .&. 0xF) -- lower half of register underflows
-
 daa :: MonadEmulator m => m ()
 daa = do
   f <- load8 (Register8 F)
@@ -465,9 +451,9 @@ interpretM instr@(Instruction b op args) = case op of
   CP -> case args of
     [ arg ] | Left g <- getArgumentM arg -> do
                 k <- g
-                v <- load8 (Register8 A)
-                let v' = v - k
-                subFlags v v'
+                a <- load8 (Register8 A)
+                let (_, f) = sub a k False
+                store8 (Register8 F) f
     _ -> msg
   INC -> case args of
     [ arg ] | Right g <- getArgumentM arg
@@ -477,7 +463,10 @@ interpretM instr@(Instruction b op args) = case op of
                 v <- g
                 let v' = v + 1
                 s v'
-                addFlags v v'
+                modifyFlags $ \f -> f
+                  & flagZ .~ (v == 0xFF)
+                  & flagN .~ False
+                  & flagH .~ (v .&. 0x0F == 0x0F)
     _ -> msg
 
   DEC -> case args of
@@ -488,7 +477,10 @@ interpretM instr@(Instruction b op args) = case op of
                 v <- g
                 let v' = v - 1
                 s v'
-                subFlags v v'
+                modifyFlags $ \f -> f
+                  & flagZ .~ (v == 0x01)
+                  & flagN .~ True
+                  & flagH .~ (v .&. 0x0F == 0x00)
     _ -> msg
 
 
