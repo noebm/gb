@@ -4,6 +4,7 @@ module GPU.GPUState
   , updateGPUState
   , loadGPU
   , storeGPU
+  , inGPURange
   , VideoRAM
   , OAM
   )
@@ -54,27 +55,43 @@ updateGPUState cycles s = do
   (cycles' , s') <- updateGPUConfigState cycles s
   return (cycles' , updateVideoRAMState $ updateOAMState s')
 
+inVideoRAM :: Word16 -> Bool
+inVideoRAM addr = 0x8000 <= addr && addr < 0xA000
+
+inOAM :: Word16 -> Bool
+inOAM addr = 0xFE00 <= addr && addr < 0xFF00
+
+inGPUMMIO :: Word16 -> Bool
+inGPUMMIO addr =  0xFF40 <= addr && addr < 0xFF50
+
+inGPURange :: Word16 -> Bool
+inGPURange addr = inVideoRAM addr || inOAM addr || inGPUMMIO addr
+{-# INLINE inVideoRAM #-}
+{-# INLINE inOAM #-}
+{-# INLINE inGPUMMIO #-}
+{-# INLINE inGPURange #-}
+
 loadGPU :: GPUState -> Word16 -> (Word8 , Maybe GPUState)
 loadGPU g addr
-  | 0x8000 <= addr && addr < 0xA000 =
+  | inVideoRAM addr =
     let g' = updateVideoRAMState g
         ram' = gpuVideoRAM g'
     in maybe (0xff, Nothing) (\x -> (x , Just g')) $ loadVideoRAM conf ram' addr
-  | 0xFE00 <= addr && addr < 0xFF00 =
+  | inOAM addr =
     let g' = updateOAMState g
         oam' = gpuOAM g'
     in maybe (0xff, Nothing) (\x -> (x , Just g')) $ loadOAM conf oam' addr
-  | 0xFF40 <= addr && addr < 0xFF50 = (loadGPUConfig conf addr , Nothing)
+  | inGPUMMIO addr = (loadGPUConfig conf addr , Nothing)
   | otherwise = error "loadGPU: not in range"
   where conf = gpuConfig g
 
 storeGPU :: GPUState -> Word16 -> Word8 -> GPUState
 storeGPU g@(GPUState { gpuConfig = conf }) addr b
-  | 0x8000 <= addr && addr < 0xA000 =
+  | inVideoRAM addr =
     maybe g (\x -> g { gpuVideoRAMUpdates = x : gpuVideoRAMUpdates g })
     $ storeVideoRAM conf addr b
-  | 0xFE00 <= addr && addr < 0xFF00 =
+  | inOAM addr =
     maybe g (\x -> g { gpuOAMUpdates = x : gpuOAMUpdates g })
     $ storeOAM conf addr b
-  | 0xFF40 <= addr && addr < 0xFF50 = g { gpuConfig = storeGPUConfig conf addr b }
+  | inGPUMMIO addr = g { gpuConfig = storeGPUConfig conf addr b }
   | otherwise = error "storeGPU: not in range"
