@@ -375,8 +375,8 @@ interpretM instr@(Instruction b op args) = case op of
           s v'
           modifyFlags $ \f -> f
             & flagN .~ False
-            & flagC .~ ((v' .&. 0xFF) < (v .&. 0xFF))
-            & flagH .~ ((v' .&. 0x0F) < (v .&. 0x0F))
+            & flagC .~ (v' < v)
+            & flagH .~ ((v' .&. 0x0FFF) < (v .&. 0x0FFF))
       | ArgDirect16 SP <- toArg to
       , Right s <- setArgumentM to
       , Right gs <- getArgumentM to
