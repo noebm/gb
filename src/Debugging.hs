@@ -62,3 +62,46 @@ drawCompleteBackground = do
         VS.unsafeWrite ar (i + 1) c
         VS.unsafeWrite ar (i + 2) c
   createRGBSurfaceFrom ar (V2 256 256) (256 * 3) RGB888
+
+
+getTileData :: MonadEmulator m => LCDConfig -> Word8 -> m [Word16]
+getTileData conf idx = do
+  let addr = tileAddr conf idx
+  forM [0,2..8*2 - 1] $ \k ->
+    load16 (Addr16 $ addr + k)
+
+drawTile :: (MonadIO m, MonadEmulator m) => LCDConfig -> Word8 -> m Surface
+drawTile conf idx = do
+  let addr = tileAddr conf idx
+  let sx = 8
+  let sy = 8
+  let depth = 3
+  ar <- liftIO $ VS.new $ fromIntegral sx * fromIntegral sy * depth
+  bgrdPal <- paletteValue <$> load8 backgroundPalette
+  forM_ [0..sy - 1 :: Word8] $ \y ->
+    forM_ [0..sx - 1 :: Word8] $ \x -> do
+      colorNumber <- bgrdPal <$> tile addr y x
+      -- let i = fromIntegral $ (y * sx + x) * depth
+      let i = (fromIntegral y * fromIntegral sx + fromIntegral x) * depth
+      -- liftIO $ do
+      --   putStrLn $ printf "x: %d y: %d i: %03d" x y i
+      liftIO $ case colorNumber of
+        0 -> do
+          VS.unsafeWrite ar (i + 0) 0
+          VS.unsafeWrite ar (i + 1) 0
+          VS.unsafeWrite ar (i + 2) 0
+        1 -> do
+          VS.unsafeWrite ar (i + 0) 0xFF
+          VS.unsafeWrite ar (i + 1) 0
+          VS.unsafeWrite ar (i + 2) 0
+        2 -> do
+          VS.unsafeWrite ar (i + 0) 0
+          VS.unsafeWrite ar (i + 1) 0xFF
+          VS.unsafeWrite ar (i + 2) 0
+        3 -> do
+          VS.unsafeWrite ar (i + 0) 0
+          VS.unsafeWrite ar (i + 1) 0
+          VS.unsafeWrite ar (i + 2) 0xFF
+        _ -> error "impossible"
+      -- liftIO $ VS.unsafeWrite ar (i + 3) 0xFF
+  createRGBSurfaceFrom ar (fromIntegral <$> V2 sx sy) (fromIntegral sx * fromIntegral depth - 1) RGB888
