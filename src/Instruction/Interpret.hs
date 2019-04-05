@@ -282,6 +282,38 @@ interpretM instr@(Instruction b op args) = case op of
     store8 (Register8 A) (v' & bitAt 7 .~ c)
     store8 (Register8 F) (f & flagC .~ c')
 
+  RLCA -> do
+    v <- load8 (Register8 A)
+    let v' = v `rotateL` 1
+    store8 (Register8 A) v'
+    modifyFlags $ \f -> 0x00
+      & flagC .~ v `testBit` 7
+  RRCA -> do
+    v <- load8 (Register8 A)
+    let v' = v `rotateR` 1
+    store8 (Register8 A) v'
+    modifyFlags $ \f -> 0x00
+      & flagC .~ v `testBit` 0
+
+  RLC -> case args of
+    [ arg ]
+      | Left g <- getArgumentM arg
+      , Left s <- setArgumentM arg -> do
+          v <- g
+          let v' = v `rotateL` 1
+          s v'
+          modifyFlags $ \f -> 0x00 & flagC .~ v `testBit` 7
+  RRC -> case args of
+    [ arg ]
+      | Left g <- getArgumentM arg
+      , Left s <- setArgumentM arg -> do
+          v <- g
+          let v' = v `rotateR` 1
+          s v'
+          modifyFlags $ \f -> 0x00 & flagC .~ v `testBit` 0
+
+
+
   SRL -> case args of
     [ arg ] | Left g <- getArgumentM arg
             , Left s <- setArgumentM arg -> do
@@ -347,16 +379,6 @@ interpretM instr@(Instruction b op args) = case op of
     [ Right s ] -> pop >>= s
     _ -> msg
 
-  INC -> case args of
-    [ arg ] | Right g <- getArgumentM arg
-            , Right s <- setArgumentM arg -> s . (+1) =<< g
-            | Left g <- getArgumentM arg
-            , Left s <- setArgumentM arg -> do
-                v <- g
-                let v' = v + 1
-                s v'
-                addFlags v v'
-    _ -> msg
   ADD -> case args of
     [ arg ] | Left g <- getArgumentM arg -> do
                 k <- g
@@ -421,6 +443,16 @@ interpretM instr@(Instruction b op args) = case op of
                 v <- load8 (Register8 A)
                 let v' = v - k
                 subFlags v v'
+    _ -> msg
+  INC -> case args of
+    [ arg ] | Right g <- getArgumentM arg
+            , Right s <- setArgumentM arg -> s . (+1) =<< g
+            | Left g <- getArgumentM arg
+            , Left s <- setArgumentM arg -> do
+                v <- g
+                let v' = v + 1
+                s v'
+                addFlags v v'
     _ -> msg
 
   DEC -> case args of
