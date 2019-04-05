@@ -1,13 +1,21 @@
-module GPU.GPUConfig where
+module GPU.GPUConfig
+  ( GPUMode (..)
+  , GPUConfig (..)
+  , updateGPUConfig
+  , loadGPUConfig
+  , storeGPUConfig
+  )
+where
 
 import Data.Word
 import Data.Bits
+import Control.Monad
 
 import GPU.Palette
 
 -- should go from 0 to 3
 data GPUMode = ModeHBlank | ModeVBlank | ModeOAM | ModeVRAM
-  deriving (Enum)
+  deriving (Eq)
 
 data GPUConfig = GPUConfig
   { gpuMode       :: GPUMode
@@ -41,6 +49,31 @@ data GPUConfig = GPUConfig
   , gpuWindowY :: Word8
   }
 
+{-# INLINE gpuModeDuration #-}
+gpuModeDuration :: GPUMode -> Word
+gpuModeDuration ModeHBlank = 204
+gpuModeDuration ModeVBlank = 456
+gpuModeDuration ModeOAM    = 80
+gpuModeDuration ModeVRAM   = 172
+
+updateGPUConfig :: Word -> GPUConfig -> Maybe (Word, GPUConfig)
+updateGPUConfig cycles g = do
+  let cyclesMode = gpuModeDuration (gpuMode g)
+  guard (cycles >= cyclesMode)
+  return (cycles - cyclesMode, gpuNextConfig g)
+
+gpuNextConfig :: GPUConfig -> GPUConfig
+gpuNextConfig g = case gpuMode g of
+  ModeHBlank -> if y == 144
+                then g { gpuMode = ModeVBlank }
+                else g { gpuMode = ModeOAM , gpuYCoordinate = y + 1 }
+  ModeVBlank -> if gpuYCoordinate g == 154
+                then g { gpuMode = ModeOAM }
+                else g { gpuYCoordinate = y + 1 }
+  ModeOAM    -> g { gpuMode = ModeVRAM   }
+  ModeVRAM   -> g { gpuMode = ModeHBlank }
+  where y = gpuYCoordinate g
+
 {-# INLINE gpuModeNumber #-}
 gpuModeNumber :: GPUConfig -> Word8
 gpuModeNumber GPUConfig { gpuMode = m } = case m of
@@ -49,12 +82,13 @@ gpuModeNumber GPUConfig { gpuMode = m } = case m of
   ModeOAM    -> 2
   ModeVRAM   -> 3
 
+{-# INLINE gpuYAtCompare #-}
 gpuYAtCompare :: GPUConfig -> Bool
 gpuYAtCompare GPUConfig { gpuYCoordinate = ly , gpuYCompare = lyc }
   = ly == lyc
 
-storeGPU :: GPUConfig -> Word16 -> Word8 -> GPUConfig
-storeGPU g 0xFF40 b = g
+storeGPUConfig :: GPUConfig -> Word16 -> Word8 -> GPUConfig
+storeGPUConfig g 0xFF40 b = g
   { gpuEnabled             = b `testBit` 7
   , gpuWindowTileMapSelect = b `testBit` 6
   , gpuWindowDisplay       = b `testBit` 5
@@ -64,25 +98,26 @@ storeGPU g 0xFF40 b = g
   , gpuOBJDisplay          = b `testBit` 1
   , gpuPriority            = b `testBit` 0
   }
-storeGPU g 0xFF41 b = g
+storeGPUConfig g 0xFF41 b = g
   { gpuYCompareInterrupt = b `testBit` 6
   , gpuOAMInterrupt      = b `testBit` 5
   , gpuVblankInterrupt   = b `testBit` 4
   , gpuHblankInterrupt   = b `testBit` 3
   }
-storeGPU g 0xFF42 b = g { gpuScrollY = b }
-storeGPU g 0xFF43 b = g { gpuScrollX = b }
-storeGPU g 0xFF44 _ = g
-storeGPU g 0xFF45 b = g { gpuYCompare = b }
-storeGPU g 0xFF46 _ = g -- ??? dma transfer ... should be handled separately
-storeGPU g 0xFF47 b = g { gpuBGPalette   = Palette b } -- non CBG mode only
-storeGPU g 0xFF48 b = g { gpuOBJ0Palette = Palette b } -- non CBG mode only
-storeGPU g 0xFF49 b = g { gpuOBJ1Palette = Palette b } -- non CBG mode only
-storeGPU g 0xFF4A b = g { gpuWindowY = b }
-storeGPU g 0xFF4B b = g { gpuWindowX = b }
+storeGPUConfig g 0xFF42 b = g { gpuScrollY = b }
+storeGPUConfig g 0xFF43 b = g { gpuScrollX = b }
+storeGPUConfig g 0xFF44 _ = g
+storeGPUConfig g 0xFF45 b = g { gpuYCompare = b }
+storeGPUConfig g 0xFF46 _ = g -- ??? dma transfer ... should be handled separately
+storeGPUConfig g 0xFF47 b = g { gpuBGPalette   = Palette b } -- non CBG mode only
+storeGPUConfig g 0xFF48 b = g { gpuOBJ0Palette = Palette b } -- non CBG mode only
+storeGPUConfig g 0xFF49 b = g { gpuOBJ1Palette = Palette b } -- non CBG mode only
+storeGPUConfig g 0xFF4A b = g { gpuWindowY = b }
+storeGPUConfig g 0xFF4B b = g { gpuWindowX = b }
+storeGPUConfig _ _ _ = error "storeGPUConfig: not in range"
 
-loadGPU :: GPUConfig -> Word16 -> Word8
-loadGPU g 0xFF40 = foldl (.|.) 0x00
+loadGPUConfig :: GPUConfig -> Word16 -> Word8
+loadGPUConfig g 0xFF40 = foldl (.|.) 0x00
    [ if gpuEnabled             g then bit 7 else 0x00
    , if gpuWindowTileMapSelect g then bit 6 else 0x00
    , if gpuWindowDisplay       g then bit 5 else 0x00
@@ -92,7 +127,7 @@ loadGPU g 0xFF40 = foldl (.|.) 0x00
    , if gpuOBJDisplay          g then bit 1 else 0x00
    , if gpuPriority            g then bit 0 else 0x00
    ]
-loadGPU g 0xFF41 = foldl (.|.) 0x00
+loadGPUConfig g 0xFF41 = foldl (.|.) 0x00
   [ if gpuYCompareInterrupt g then bit 6 else 0x00
   , if gpuOAMInterrupt      g then bit 5 else 0x00
   , if gpuVblankInterrupt   g then bit 4 else 0x00
@@ -100,13 +135,14 @@ loadGPU g 0xFF41 = foldl (.|.) 0x00
   , if gpuYAtCompare        g then bit 2 else 0x00
   , gpuModeNumber g
   ]
-loadGPU g 0xFF42 = gpuScrollY g
-loadGPU g 0xFF43 = gpuScrollX g
-loadGPU g 0xFF44 = gpuYCoordinate g
-loadGPU g 0xFF45  = gpuYCompare g
--- loadGPU g 0xFF46 = g -- ??? dma transfer ... should be handled separately
-loadGPU g 0xFF47 = getPalette $ gpuBGPalette   g -- non CBG mode only
-loadGPU g 0xFF48 = getPalette $ gpuOBJ0Palette g -- non CBG mode only
-loadGPU g 0xFF49 = getPalette $ gpuOBJ1Palette g -- non CBG mode only
-loadGPU g 0xFF4A = gpuWindowY g
-loadGPU g 0xFF4B = gpuWindowX g
+loadGPUConfig g 0xFF42 = gpuScrollY g
+loadGPUConfig g 0xFF43 = gpuScrollX g
+loadGPUConfig g 0xFF44 = gpuYCoordinate g
+loadGPUConfig g 0xFF45  = gpuYCompare g
+-- loadGPUConfig g 0xFF46 = g -- ??? dma transfer ... should be handled separately
+loadGPUConfig g 0xFF47 = getPalette $ gpuBGPalette   g -- non CBG mode only
+loadGPUConfig g 0xFF48 = getPalette $ gpuOBJ0Palette g -- non CBG mode only
+loadGPUConfig g 0xFF49 = getPalette $ gpuOBJ1Palette g -- non CBG mode only
+loadGPUConfig g 0xFF4A = gpuWindowY g
+loadGPUConfig g 0xFF4B = gpuWindowX g
+loadGPUConfig _ _ = error "loadGPUConfig: not in range"
