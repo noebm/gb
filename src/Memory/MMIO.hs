@@ -2,10 +2,8 @@
 module Memory.MMIO where
 
 import Control.Monad
-import Data.Foldable
 import Data.Bits
 import Data.Word
-import Data.Int
 
 import MonadEmulator
 
@@ -56,12 +54,21 @@ updateGPU = do
 
   lyC <- load8 compareLine
   let lyF = l' == lyC
-  for_ mode' $ \m -> store8 status (m .|. (stat .&. 0xF8) .|. if lyF then 0x04 else 0x00)
+  let stat' = (stat `clearBit` 2) .|. if lyF then 0x04 else 0x00
+
+  case mode' of
+    Just m  -> store8 status (m .|. (stat' .&. 0xF8))
+    Nothing -> store8 status stat'
 
   let lyIF     = lyF && stat `testBit` 6
   let oamIF    = mode' == Just OAM    && stat `testBit` 5
   let vblankIF = mode' == Just VBlank && stat `testBit` 4
   let hblankIF = mode' == Just HBlank && stat `testBit` 3
+
+  -- let updateI = lyIF
+  --       || isJust (mode' >>= \m ->
+  --                   guard (not $ m `testBit` 0) >> -- not VRAM or VBlank
+  --                   guard (stat `testBit` (3 + fromIntegral m)))
 
   ie <- load8 interruptEnable
   when (any id [ lyIF, oamIF, hblankIF ] && ie `testBit` 1) $
@@ -71,6 +78,13 @@ updateGPU = do
     store8 interruptFlag . (`setBit` 0) =<< load8 interruptFlag
 
   return mode'
+
+-- update GPU state as long as it produces state changes
+updateGPUTillDone :: MonadEmulator m => m [ Word8 ]
+updateGPUTillDone = fmap reverse $ do
+  x <- updateGPU
+  maybe (return []) (\y -> (y :) <$> updateGPUTillDone) x
+
 {-
 Bit7  LCD operation                           | ON            | OFF
 Bit6  Window Tile Table address               | 9C00-9FFF     | 9800-9BFF
