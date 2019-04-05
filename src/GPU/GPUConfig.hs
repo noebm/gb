@@ -1,6 +1,7 @@
 module GPU.GPUConfig
   ( GPUMode (..)
   , GPUConfig (..)
+  , defaultGPUConfig
   , updateGPUConfig
   , loadGPUConfig
   , storeGPUConfig
@@ -47,6 +48,36 @@ data GPUConfig = GPUConfig
   , gpuScrollY :: Word8
   , gpuWindowX :: Word8
   , gpuWindowY :: Word8
+  }
+
+defaultGPUConfig :: GPUConfig
+defaultGPUConfig = GPUConfig
+  { gpuMode                = ModeHBlank
+  , gpuEnabled             = False
+  , gpuWindowTileMapSelect = False
+  , gpuWindowDisplay       = False
+  , gpuTileDataSelect      = False
+  , gpuBGTileMapSelect     = False
+  , gpuOBJSizeLarge        = False
+  , gpuOBJDisplay          = False
+  , gpuPriority            = False
+
+  , gpuYCompareInterrupt = False
+  , gpuOAMInterrupt      = False
+  , gpuVblankInterrupt   = False
+  , gpuHblankInterrupt   = False
+
+  , gpuYCoordinate = 0
+  , gpuYCompare    = 0
+
+  , gpuBGPalette   = Palette 0
+  , gpuOBJ0Palette = Palette 0
+  , gpuOBJ1Palette = Palette 0
+
+  , gpuScrollX = 0
+  , gpuScrollY = 0
+  , gpuWindowX = 0
+  , gpuWindowY = 0
   }
 
 {-# INLINE gpuModeDuration #-}

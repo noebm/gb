@@ -1,6 +1,7 @@
 module GPU.GPUState
   ( module X
   , GPUState (..)
+  , defaultGPUState
   , updateGPUState
   , loadGPU
   , storeGPU
@@ -11,17 +12,6 @@ module GPU.GPUState
 where
 
 import GPU.Memory
-  ( MemoryUpdate
-  , VideoRAM
-  , loadVideoRAM
-  , storeVideoRAM
-  , updateVideoRAM
-
-  , OAM
-  , loadOAM
-  , storeOAM
-  , updateOAM
-  )
 import GPU.GPUConfig as X
 
 import Data.Word
@@ -35,11 +25,22 @@ data GPUState = GPUState
   , gpuConfig          :: GPUConfig
   }
 
+defaultGPUState :: GPUState
+defaultGPUState = GPUState
+  { gpuVideoRAM        = defaultVideoRAM
+  , gpuVideoRAMUpdates = []
+  , gpuOAM             = defaultOAM
+  , gpuOAMUpdates      = []
+  , gpuConfig          = defaultGPUConfig
+  }
+
+{-# INLINE updateVideoRAMState  #-}
+{-# INLINE updateOAMState       #-}
+{-# INLINE updateGPUConfigState #-}
 updateGPUConfigState :: Word -> GPUState -> Maybe (Word, GPUState)
 updateGPUConfigState cycles s
    = (\(cycles' , conf) -> (cycles' , s { gpuConfig = conf }))
   <$> updateGPUConfig cycles (gpuConfig s)
-
 updateVideoRAMState, updateOAMState :: GPUState -> GPUState
 updateVideoRAMState g = g
   { gpuVideoRAM = updateVideoRAM (gpuVideoRAMUpdates g) (gpuVideoRAM g)

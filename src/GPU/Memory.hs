@@ -13,10 +13,12 @@ module GPU.Memory
   , updateOAM
 
   , VideoRAM
+  , defaultVideoRAM
   , loadVideoRAM
   , storeVideoRAM
 
   , OAM
+  , defaultOAM
   , loadOAM
   , storeOAM
 
@@ -38,6 +40,12 @@ import GPU.VideoAddr
 newtype OAM = OAM { getOAM :: Vector Word8 }
 
 newtype VideoRAM = VideoRAM { getVideoRAM :: Vector Word8 }
+
+defaultVideoRAM :: VideoRAM
+defaultVideoRAM = VideoRAM $ VU.replicate 0x2000 0x00
+
+defaultOAM :: OAM
+defaultOAM = OAM $ VU.replicate 0xa0 0x00
 
 updateVideoRAM :: [ MemoryUpdate ] -> VideoRAM -> VideoRAM
 updateVideoRAM xs (VideoRAM m) = VideoRAM $! m VU.// xs
