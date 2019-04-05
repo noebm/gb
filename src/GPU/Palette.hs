@@ -5,7 +5,7 @@ import Data.Bits
 
 newtype Palette = Palette { getPalette :: Word8 }
 
-paletteGrayscale :: Palette -> Word8 -> Word8
+paletteGrayscale :: Palette -> ColorCode -> Word8
 paletteGrayscale p i = case paletteValue p i of
   0 -> 255
   1 -> 192
