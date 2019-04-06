@@ -43,8 +43,9 @@ updateGraphics gfx = do
   forM_ mupdate $ \(cyc' , gpu') -> do
     _ <- resetCycles
     advCycles cyc'
-    case gpuMode $ gpuConfig gpu' of
-      ModeVBlank -> renderGraphics gfx
+    let conf = gpuConfig gpu'
+    case gpuMode conf of
+      ModeVBlank | gpuYCoordinate conf == 145 -> renderGraphics gfx
       ModeHBlank -> genPixelRow (image gfx) gpu'
       _ -> return ()
 
