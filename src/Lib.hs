@@ -44,17 +44,12 @@ updateCPU = do
 
   return i
 
-updateGraphics gfx = do
-  cyc <- getCycles
-  mupdate <- updateGBGraphics (updateGPUState cyc)
-  forM_ mupdate $ \(cyc' , gpu') -> do
-    _ <- resetCycles
-    advCycles cyc'
-    let conf = gpuConfig gpu'
-    case gpuMode conf of
-      ModeVBlank | gpuYCoordinate conf == 145 -> renderGraphics gfx
-      ModeHBlank -> genPixelRow (image gfx) gpu'
-      _ -> return ()
+updateGraphics gfx = updateGPU $ \gpu -> do
+  let conf = gpuConfig gpu
+  case gpuMode conf of
+    ModeVBlank | gpuYCoordinate conf == 145 -> renderGraphics gfx
+    ModeHBlank -> genPixelRow (image gfx) gpu
+    _ -> return ()
 
 disableBootRom :: MonadEmulator m => m Bool
 disableBootRom = (`testBit` 0) <$> load8 (Addr8 0xFF50)
