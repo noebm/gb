@@ -11,7 +11,6 @@ import Control.Monad
 import Data.Bits
 import Data.Monoid
 
-import Memory.MMIO
 
 newtype Interrupt = Interrupt Int
 
@@ -22,6 +21,9 @@ enterInterrupt (Interrupt k) = do
   let addr = 0x0040 + 8 * fromIntegral k
   store16 (Register16 PC) addr    -- 1 cycle
   return 20 -- 4 * 5
+
+interruptEnable = Addr8 0xFFFF
+interruptFlag   = Addr8 0xFF0F
 
 handleInterrupt :: MonadEmulator m => m (Maybe Interrupt)
 handleInterrupt = do

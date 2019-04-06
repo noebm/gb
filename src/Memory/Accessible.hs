@@ -16,7 +16,6 @@ import Text.Printf
 import Data.Word
 import Data.Bits
 
-import Memory.MMIO
 
 
 {-# INLINE alwaysLoadable #-}
@@ -42,10 +41,6 @@ vram addr = 0x8000 <= addr && addr < 0xA000
 {-# INLINE externalRam #-}
 externalRam :: Word16 -> Bool
 externalRam addr = 0xA000 <= addr && addr < 0xC000
-
-vramCheck, oamCheck :: MonadEmulator m => m Bool
-vramCheck = (/= 3) . (.&. 3) <$> X.load8 status
-oamCheck = not . (`testBit` 1) <$> X.load8 status
 
 load8 :: MonadEmulator m => LoadStore8 -> m Word8
 load8 x@(Addr8 addr)
@@ -104,12 +99,7 @@ store16 x@(Addr16 addr)
 
   | alwaysStoreable addr = X.store16 x
   | echoRam addr         = X.store16 . Addr16 $ addr - 0x2000
-  | vram addr            = tryWrite vramCheck
   | externalRam addr     = X.store16 x
-  | oam addr             = tryWrite oamCheck
   | otherwise            = error $ printf "store16 access to 0x%04x" addr
-  where tryWrite check w = do
-          f <- check
-          when f $ X.store16 x w
 store16 x@(Register16 AF) = X.store16 x . (.&. 0xFFF0)
 store16 x = X.store16 x
