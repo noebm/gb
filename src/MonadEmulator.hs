@@ -4,6 +4,7 @@ module MonadEmulator
   , LoadStore8 (..)
   , LoadStore16 (..)
   , MonadEmulator (..)
+  , updateGPU
   , showRegisters
   , getCycles
   , word16
@@ -28,6 +29,8 @@ import Data.Bits.Lens
 import Data.Bits
 import Data.Word
 import Data.Int
+
+import GPU.GPUState
 
 data Reg8 = A | B | C | D | E | F | H | L
   deriving (Eq, Show)
@@ -84,6 +87,9 @@ class Monad m => MonadEmulator m where
   setStop :: m ()
   stop :: m Bool
 
+  getGPU :: m GPUState
+  putGPU :: GPUState -> m ()
+
   getIEM :: m Bool
   setIEM :: Bool -> m ()
 
@@ -99,6 +105,15 @@ class Monad m => MonadEmulator m where
 
   -- bootRom :: Word8 -> m Word8
 
+updateGPU :: MonadEmulator m => (GPUState -> m a) -> m (Maybe a)
+updateGPU f = do
+  cyc <- getCycles
+  mupdate <- updateGPUState cyc <$> getGPU
+  forM mupdate $ \(cyc' , gpu') -> do
+    putGPU gpu'
+    _ <- resetCycles
+    advCycles cyc'
+    f gpu'
 
 {-# INLINE aux0 #-}
 {-# INLINE aux1 #-}
@@ -119,6 +134,9 @@ instance MonadEmulator m => MonadEmulator (StateT s m) where
 
   advCycles = aux1 advCycles
   resetCycles = aux0 resetCycles
+
+  getGPU = aux0 getGPU
+  putGPU = aux1 putGPU
 
   setStop = aux0 setStop
   stop    = aux0 stop

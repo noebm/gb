@@ -5,7 +5,7 @@ import Control.Monad
 import Data.Bits
 import Data.Word
 
-import MonadEmulator
+import MonadEmulator hiding (updateGPU)
 
 -- status mode
 pattern HBlank = 0

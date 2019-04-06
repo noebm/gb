@@ -3,8 +3,6 @@ module GB
 ( MonadEmulator(..)
 , GB
 , runGB
-, getGPU
-, putGPU
 , showRegisters
 , unsafeMemory
 )
@@ -58,12 +56,6 @@ type GB = GBT RealWorld
 
 unsafeMemory :: Monad m => GBT s m (MVector s Word8)
 unsafeMemory = GBT $ asks addressSpace
-
-getGPU :: MonadIO m => GB m GPUState
-getGPU = GBT $ liftIO . stToIO . readSTRef =<< asks gbGPU
-
-putGPU :: MonadIO m => GPUState -> GB m ()
-putGPU gpu = GBT $ liftIO . stToIO . (`writeSTRef` gpu) =<< asks gbGPU
 
 copyBankAux :: Int -> Int -> V.MVector s Word8 -> B.ByteString -> ST s ()
 copyBankAux target k memory cart = do
@@ -181,6 +173,9 @@ instance MonadIO m => MonadEmulator (GB m) where
       v <- readSTRef c
       writeSTRef c 0
       return v
+
+  getGPU = GBT $ liftIO . stToIO . readSTRef =<< asks gbGPU
+  putGPU gpu = GBT $ liftIO . stToIO . (`writeSTRef` gpu) =<< asks gbGPU
 
   setStop = GBT $ do
     s <- asks shouldStop

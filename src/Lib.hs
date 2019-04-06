@@ -37,16 +37,6 @@ updateCPU = do
 
   return i
 
-updateGPU :: MonadIO m => (GPUState -> GB m a) -> GB m (Maybe a)
-updateGPU f = do
-  cyc <- getCycles
-  mupdate <- updateGPUState cyc <$> getGPU
-  forM mupdate $ \(cyc' , gpu') -> do
-    putGPU gpu'
-    _ <- resetCycles
-    advCycles cyc'
-    f gpu'
-
 updateGraphics gfx = updateGPU $ \gpu -> do
   let conf = gpuConfig gpu
   case gpuMode conf of
