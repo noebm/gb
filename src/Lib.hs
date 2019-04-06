@@ -18,17 +18,24 @@ import GB
 import Cartridge
 import BootRom
 
-import Interrupt
-
 import Instruction.Interpret
 import Instruction.Instruction
 import Instruction.Disassembler
+import Interrupt.Interrupt
 
 import GPU.GPUState
 import GPU.Drawing
 
+processInterrupts :: MonadIO m => GB m ()
+processInterrupts = do
+  int <- handleInterrupt <$> getInterrupt
+  forM_ int $ \(i , s) -> do
+    putInterrupt s
+    call (interruptAddress i)
+    advCycles 20
+
 updateCPU = do
-  mapM_ (advCycles <=< enterInterrupt) =<< handleInterrupt
+  processInterrupts
 
   i <- parseInstructionM byte
   -- i <- disassemble

@@ -4,6 +4,8 @@ module GB
 , GB
 , runGB
 , getGPU
+, getInterrupt
+, putInterrupt
 , showRegisters
 , updateGBGraphics
 , unsafeMemory
@@ -28,13 +30,14 @@ import Cartridge
 import VectorUtils
 
 import GPU.GPUState
+import Interrupt.Interrupt hiding (getInterrupt)
 
 data GBState s = GBState
   { addressSpace :: MVector s Word8
   , clock        :: STRef s Word
   , shouldStop   :: STRef s Bool
 
-  , gbIEM :: STRef s Bool
+  , gbInterrupt :: STRef s InterruptState
 
   , gbCartridge   :: Cartridge
   , gbGPU         :: STRef s GPUState
@@ -92,7 +95,7 @@ makeGBState cart = do
     <$> pure memory
     <*> newSTRef 0
     <*> newSTRef False
-    <*> newSTRef False
+    <*> newSTRef defaultInterruptState
     <*> pure cart
     <*> newSTRef defaultGPUState
     <*> newSTRef Nothing
@@ -146,6 +149,9 @@ loadAddr idx
       forM_ mgpu' $ \gpu' -> do
         liftIO . stToIO . (`writeSTRef` gpu') =<< asks gbGPU
       return b
+  | inInterruptRange (fromIntegral idx) = do
+      s <- getInterrupt
+      return $ loadInterrupt s (fromIntegral idx)
   | otherwise = GBT $ do
       addrspace <- asks addressSpace
       liftIO $ V.unsafeRead addrspace idx
@@ -156,9 +162,18 @@ storeAddr idx b
       gpu <- liftIO . stToIO . readSTRef =<< asks gbGPU
       let gpu' = storeGPU gpu (fromIntegral idx) b
       liftIO . stToIO . (`writeSTRef` gpu') =<< asks gbGPU
+  | inInterruptRange (fromIntegral idx) = do
+      s <- getInterrupt
+      putInterrupt $ storeInterrupt s (fromIntegral idx) b
   | otherwise = GBT $ do
       addrspace <- asks addressSpace
       liftIO $ V.unsafeWrite addrspace idx b
+
+getInterrupt :: MonadIO m => GB m InterruptState
+getInterrupt = GBT $ liftIO . stToIO . readSTRef =<< asks gbInterrupt
+
+putInterrupt :: MonadIO m => InterruptState -> GB m ()
+putInterrupt s = GBT $ liftIO . stToIO . (`writeSTRef` s) =<< asks gbInterrupt
 
 instance MonadIO m => MonadEmulator (GB m) where
   {-# INLINE store8 #-}
@@ -177,8 +192,10 @@ instance MonadIO m => MonadEmulator (GB m) where
     let (idx0, idx1) = ls16ToIndex ls
     in load16LE (loadAddr idx0) (loadAddr idx1)
 
-  getIEM   = GBT $ liftIO . stToIO . readSTRef =<< asks gbIEM
-  setIEM b = GBT $ liftIO . stToIO . (`writeSTRef` b) =<< asks gbIEM
+  getIEM   = interruptStateEnabled <$> getInterrupt
+  setIEM b = do
+    s <- getInterrupt
+    putInterrupt $ s { interruptStateEnabled = b }
 
   advCycles dt = GBT $ do
     c <- asks clock

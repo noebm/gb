@@ -1,4 +1,15 @@
-module Interrupt.Interrupt where
+module Interrupt.Interrupt
+  ( InterruptState (..)
+  , defaultInterruptState
+
+  , handleInterrupt
+  , interruptAddress
+
+  , inInterruptRange
+  , loadInterrupt
+  , storeInterrupt
+  )
+where
 
 import Interrupt.InterruptType
 
