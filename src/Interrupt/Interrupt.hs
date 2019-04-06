@@ -72,13 +72,13 @@ interruptBit INTJOYPAD = 4
 setInterruptBit :: Interrupt -> (InterruptType -> Bool) -> InterruptType -> Word8
 setInterruptBit i f s = if f s then bit (interruptBit i) else zeroBits
 
-getInterruptState :: (InterruptType -> Bool) -> InterruptState -> Word8
-getInterruptState f s = foldl (\acc i -> acc .|. g i) 0x00 [INTVBLANK ..]
+getInterruptState :: Word8 -> (InterruptType -> Bool) -> InterruptState -> Word8
+getInterruptState b f s = foldl (\acc i -> acc .|. g i) b [INTVBLANK ..]
   where g i = setInterruptBit i f (getInterrupt i s)
 
 loadInterrupt :: InterruptState -> Word16 -> Word8
-loadInterrupt s 0xff0f = getInterruptState interruptFlag    s
-loadInterrupt s 0xffff = getInterruptState interruptEnabled s
+loadInterrupt s 0xff0f = getInterruptState 0xe0 interruptFlag    s
+loadInterrupt s 0xffff = getInterruptState 0x00 interruptEnabled s
 loadInterrupt _ _ = error "loadInterrupt: not an interrupt address"
 
 getInterruptBit :: Interrupt
