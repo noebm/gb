@@ -17,16 +17,16 @@ import MonadEmulator
 import GB
 import Cartridge
 import BootRom
-import Memory.MMIO
 
 import Interrupt
-import Drawing
 
 import Instruction.Interpret
 import Instruction.Instruction
 import Instruction.Disassembler
 
--- update :: (MonadEmulator m, MonadIO m) => GraphicsContext -> m (Bool , Instruction ArgWithData)
+import GPU.GPUState
+import GPU.Drawing
+
 updateCPU = do
   mapM_ (advCycles <=< enterInterrupt) =<< handleInterrupt
 
@@ -37,19 +37,16 @@ updateCPU = do
 
   return i
 
-handleGraphicsUpdate :: (MonadIO m, MonadEmulator m)
-    => GraphicsContext -> LCDConfig -> Word8 -> m ()
-handleGraphicsUpdate gfx conf = \case
-  HBlank -> genPixelRow (image gfx) conf
-  VBlank -> renderGraphics gfx
-  _ -> return ()
-
-updateGraphics :: (MonadEmulator m, MonadIO m)
-               => GraphicsContext -> m ()
 updateGraphics gfx = do
-  lcd <- lcdConfig
-  forM_ lcd $ \conf ->
-    mapM_ (handleGraphicsUpdate gfx conf) =<< updateGPU
+  cyc <- getCycles
+  mupdate <- updateGBGraphics (updateGPUState cyc)
+  forM_ mupdate $ \(cyc' , gpu') -> do
+    _ <- resetCycles
+    advCycles cyc'
+    case gpuMode $ gpuConfig gpu' of
+      ModeVBlank -> renderGraphics gfx
+      ModeHBlank -> genPixelRow (image gfx) gpu'
+      _ -> return ()
 
 disableBootRom :: MonadEmulator m => m Bool
 disableBootRom = (`testBit` 0) <$> load8 (Addr8 0xFF50)

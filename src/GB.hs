@@ -1,11 +1,13 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, RankNTypes, FlexibleInstances #-}
 module GB
-  ( MonadEmulator(..)
-  , GB
-  , runGB
-  , showRegisters
-  , unsafeMemory
-  )
+( MonadEmulator(..)
+, GB
+, runGB
+, getGPU
+, showRegisters
+, updateGBGraphics
+, unsafeMemory
+)
 where
 
 import qualified Data.Vector.Unboxed.Mutable as V
@@ -25,6 +27,8 @@ import MonadEmulator
 import Cartridge
 import VectorUtils
 
+import GPU.GPUState
+
 data GBState s = GBState
   { addressSpace :: MVector s Word8
   , clock        :: STRef s Word
@@ -33,6 +37,7 @@ data GBState s = GBState
   , gbIEM :: STRef s Bool
 
   , gbCartridge   :: Cartridge
+  , gbGPU         :: STRef s GPUState
   , activeRomBank :: STRef s (Maybe Word8)
 
   , gbBankingMode :: STRef s Bool
@@ -54,6 +59,20 @@ type GB = GBT RealWorld
 unsafeMemory :: Monad m => GBT s m (MVector s Word8)
 unsafeMemory = GBT $ asks addressSpace
 
+updateGBGraphics :: MonadIO m => (GPUState -> Maybe (a , GPUState)) -> GB m (Maybe (a , GPUState))
+updateGBGraphics f = GBT $ do
+  gpu <- liftIO . stToIO . readSTRef =<< asks gbGPU
+  if gpuEnabled $ gpuConfig gpu
+    then do
+    let mgpu' = f gpu
+    forM_ mgpu' $ \(_ , gpu') ->
+      liftIO . stToIO . (`writeSTRef` gpu') =<< asks gbGPU
+    return mgpu'
+    else
+    return Nothing
+
+getGPU :: MonadIO m => GB m GPUState
+getGPU = GBT $ liftIO . stToIO . readSTRef =<< asks gbGPU
 
 copyBankAux :: Int -> Int -> V.MVector s Word8 -> B.ByteString -> ST s ()
 copyBankAux target k memory cart = do
@@ -75,6 +94,7 @@ makeGBState cart = do
     <*> newSTRef False
     <*> newSTRef False
     <*> pure cart
+    <*> newSTRef defaultGPUState
     <*> newSTRef Nothing
     <*> newSTRef False
     <*> newSTRef False
@@ -118,35 +138,44 @@ ls16ToIndex (Register16 r) = reg16decomp r & each +~ rbase
 
 ls16ToIndex (Addr16 addr) = (fromIntegral addr , fromIntegral addr + 1)
 
+loadAddr :: MonadIO m => Int -> GB m Word8
+loadAddr idx
+  | inGPURange idx = GBT $ do
+      gpu <- liftIO . stToIO . readSTRef =<< asks gbGPU
+      let (b , mgpu') = loadGPU gpu (fromIntegral idx)
+      forM_ mgpu' $ \gpu' -> do
+        liftIO . stToIO . (`writeSTRef` gpu') =<< asks gbGPU
+      return b
+  | otherwise = GBT $ do
+      addrspace <- asks addressSpace
+      liftIO $ V.unsafeRead addrspace idx
+
+storeAddr :: MonadIO m => Int -> Word8 -> GB m ()
+storeAddr idx b
+  | inGPURange idx = GBT $ do
+      gpu <- liftIO . stToIO . readSTRef =<< asks gbGPU
+      let gpu' = storeGPU gpu (fromIntegral idx) b
+      liftIO . stToIO . (`writeSTRef` gpu') =<< asks gbGPU
+  | otherwise = GBT $ do
+      addrspace <- asks addressSpace
+      liftIO $ V.unsafeWrite addrspace idx b
+
 instance MonadIO m => MonadEmulator (GB m) where
   {-# INLINE store8 #-}
-  store8 ls b = GBT $ do
-    addrspace <- asks addressSpace
-    liftIO $ V.unsafeWrite addrspace (ls8ToIndex ls) b
+  store8 ls = storeAddr (ls8ToIndex ls)
 
   {-# INLINE store16 #-}
-  store16 ls w = GBT $ do
-    addrspace <- asks addressSpace
-    liftIO $ do
-      let (idx0, idx1) = ls16ToIndex ls
-      store16LE
-        (V.unsafeWrite addrspace idx0)
-        (V.unsafeWrite addrspace idx1)
-        w
+  store16 ls w =
+    let (idx0, idx1) = ls16ToIndex ls
+    in store16LE (storeAddr idx0) (storeAddr idx1) w
 
   {-# INLINE load8 #-}
-  load8 ls = GBT $ do
-    addrspace <- asks addressSpace
-    liftIO $ V.unsafeRead addrspace (ls8ToIndex ls)
+  load8 ls = loadAddr (ls8ToIndex ls)
 
   {-# INLINE load16 #-}
-  load16 ls = GBT $ do
-    addrspace <- asks addressSpace
-    liftIO $ do
-      let (idx0, idx1) = ls16ToIndex ls
-      load16LE
-        (V.unsafeRead addrspace idx0)
-        (V.unsafeRead addrspace idx1)
+  load16 ls =
+    let (idx0, idx1) = ls16ToIndex ls
+    in load16LE (loadAddr idx0) (loadAddr idx1)
 
   getIEM   = GBT $ liftIO . stToIO . readSTRef =<< asks gbIEM
   setIEM b = GBT $ liftIO . stToIO . (`writeSTRef` b) =<< asks gbIEM
