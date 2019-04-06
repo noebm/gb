@@ -16,11 +16,13 @@ module GPU.Memory
   , defaultVideoRAM
   , loadVideoRAM
   , storeVideoRAM
+  , dumpVideoRAM
 
   , OAM
   , defaultOAM
   , loadOAM
   , storeOAM
+  , dumpOAM
 
   , dmaTransfer
   )
@@ -37,9 +39,9 @@ import GPU.GPUConfig
 import GPU.Palette
 import GPU.VideoAddr
 
-newtype OAM = OAM { getOAM :: Vector Word8 }
+newtype OAM = OAM (Vector Word8)
 
-newtype VideoRAM = VideoRAM { getVideoRAM :: Vector Word8 }
+newtype VideoRAM = VideoRAM (Vector Word8)
 
 defaultVideoRAM :: VideoRAM
 defaultVideoRAM = VideoRAM $ VU.replicate 0x2000 0x00
@@ -48,13 +50,18 @@ defaultOAM :: OAM
 defaultOAM = OAM $ VU.replicate 0xa0 0x00
 
 updateVideoRAM :: [ MemoryUpdate ] -> VideoRAM -> VideoRAM
-updateVideoRAM xs (VideoRAM m) = VideoRAM $! m VU.// xs
+updateVideoRAM xs (VideoRAM m) = VideoRAM $! m VU.// reverse xs
 
 updateOAM :: [ MemoryUpdate ] -> OAM -> OAM
-updateOAM xs (OAM m) = OAM $! m VU.// xs
+updateOAM xs (OAM m) = OAM $! m VU.// reverse xs
+
+dumpOAM :: OAM -> [ Word8 ]
+dumpOAM (OAM m) = VU.toList m
+
+dumpVideoRAM :: VideoRAM -> [ Word8 ]
+dumpVideoRAM (VideoRAM m) = VU.toList m
 
 type MemoryUpdate = (Int, Word8)
-
 
 newtype Tile = Tile (Vector Word8)
 

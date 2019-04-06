@@ -30,6 +30,7 @@ genPixelRow im g = do
   (ptr', _) <- lockTexture im (Just $ fromIntegral <$> Rectangle (P $ V2 0 y) (V2 160 1))
   let ptr = castPtr ptr' :: Ptr Word8
   let aux i x = do
+        liftIO $ print i
         let idx = 4 * fromIntegral i
         let c = paletteGrayscale (gpuBGPalette (gpuConfig g)) x
         liftIO $ do
@@ -37,5 +38,5 @@ genPixelRow im g = do
           poke (ptr `plusPtr` (idx + 1)) c
           poke (ptr `plusPtr` (idx + 2)) c
           poke (ptr `plusPtr` (idx + 3)) (0xFF :: Word8)
-  -- VU.imapM_ aux $ backgroundLine (gpuConfig g) (gpuVideoRAM g) y
+  VU.imapM_ aux $ backgroundLine (gpuConfig g) (gpuVideoRAM g) y
   unlockTexture im
