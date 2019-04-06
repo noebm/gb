@@ -3,8 +3,6 @@ module GB
 ( MonadEmulator(..)
 , GB
 , runGB
-, getInterrupt
-, putInterrupt
 , showRegisters
 , unsafeMemory
 )
@@ -28,7 +26,7 @@ import Cartridge
 import VectorUtils
 
 import GPU.GPUState
-import Interrupt.Interrupt hiding (getInterrupt)
+import Interrupt.Interrupt
 
 data GBState s = GBState
   { addressSpace :: MVector s Word8
@@ -36,9 +34,9 @@ data GBState s = GBState
   , shouldStop   :: STRef s Bool
 
   , gbInterrupt :: STRef s InterruptState
+  , gbGPU       :: STRef s GPUState
 
   , gbCartridge   :: Cartridge
-  , gbGPU         :: STRef s GPUState
   , activeRomBank :: STRef s (Maybe Word8)
 
   , gbBankingMode :: STRef s Bool
@@ -79,8 +77,8 @@ makeGBState cart = do
     <*> newSTRef 0
     <*> newSTRef False
     <*> newSTRef defaultInterruptState
-    <*> pure cart
     <*> newSTRef defaultGPUState
+    <*> pure cart
     <*> newSTRef Nothing
     <*> newSTRef False
     <*> newSTRef False
@@ -152,12 +150,6 @@ storeAddr idx b
       addrspace <- asks addressSpace
       liftIO $ V.unsafeWrite addrspace idx b
 
-getInterrupt :: MonadIO m => GB m InterruptState
-getInterrupt = GBT $ liftIO . stToIO . readSTRef =<< asks gbInterrupt
-
-putInterrupt :: MonadIO m => InterruptState -> GB m ()
-putInterrupt s = GBT $ liftIO . stToIO . (`writeSTRef` s) =<< asks gbInterrupt
-
 instance MonadIO m => MonadEmulator (GB m) where
   {-# INLINE store8 #-}
   store8 ls = storeAddr (ls8ToIndex ls)
@@ -175,11 +167,6 @@ instance MonadIO m => MonadEmulator (GB m) where
     let (idx0, idx1) = ls16ToIndex ls
     in load16LE (loadAddr idx0) (loadAddr idx1)
 
-  getIEM   = interruptStateEnabled <$> getInterrupt
-  setIEM b = do
-    s <- getInterrupt
-    putInterrupt $ s { interruptStateEnabled = b }
-
   advCycles dt = GBT $ do
     c <- asks clock
     liftIO $ stToIO $ modifySTRef' c (+ dt)
@@ -193,6 +180,9 @@ instance MonadIO m => MonadEmulator (GB m) where
 
   getGPU = GBT $ liftIO . stToIO . readSTRef =<< asks gbGPU
   putGPU gpu = GBT $ liftIO . stToIO . (`writeSTRef` gpu) =<< asks gbGPU
+
+  getInterrupt = GBT $ liftIO . stToIO . readSTRef =<< asks gbInterrupt
+  putInterrupt s = GBT $ liftIO . stToIO . (`writeSTRef` s) =<< asks gbInterrupt
 
   setStop = GBT $ do
     s <- asks shouldStop

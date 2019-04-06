@@ -4,13 +4,21 @@ module MonadEmulator
   , LoadStore8 (..)
   , LoadStore16 (..)
   , MonadEmulator (..)
+
   , updateGPU
+  , processInterrupts
+  , getIEM , setIEM
   , showRegisters
   , getCycles
+
   , word16
+
   , load16LE, store16LE
+
   , flagC, flagH, flagN, flagZ
+
   , byte, word, sbyte
+
   , addRelative
   , jump, jumpRelative
   , push, pop
@@ -31,6 +39,7 @@ import Data.Word
 import Data.Int
 
 import GPU.GPUState
+import Interrupt.Interrupt
 
 data Reg8 = A | B | C | D | E | F | H | L
   deriving (Eq, Show)
@@ -90,8 +99,8 @@ class Monad m => MonadEmulator m where
   getGPU :: m GPUState
   putGPU :: GPUState -> m ()
 
-  getIEM :: m Bool
-  setIEM :: Bool -> m ()
+  getInterrupt :: m InterruptState
+  putInterrupt :: InterruptState -> m ()
 
   -- selectRomBank :: Word8 -> m ()
   modifyRomBank :: (Word8 -> Word8) -> m ()
@@ -104,6 +113,14 @@ class Monad m => MonadEmulator m where
   -- selectRamBank :: Word8 -> m ()
 
   -- bootRom :: Word8 -> m Word8
+
+getIEM :: MonadEmulator m => m Bool
+getIEM   = interruptStateEnabled <$> getInterrupt
+
+setIEM :: MonadEmulator m => Bool -> m ()
+setIEM b = do
+  s <- getInterrupt
+  putInterrupt $ s { interruptStateEnabled = b }
 
 updateGPU :: MonadEmulator m => (GPUState -> m a) -> m (Maybe a)
 updateGPU f = do
@@ -138,6 +155,9 @@ instance MonadEmulator m => MonadEmulator (StateT s m) where
   getGPU = aux0 getGPU
   putGPU = aux1 putGPU
 
+  getInterrupt = aux0 getInterrupt
+  putInterrupt = aux1 putInterrupt
+
   setStop = aux0 setStop
   stop    = aux0 stop
 
@@ -145,14 +165,19 @@ instance MonadEmulator m => MonadEmulator (StateT s m) where
   selectRamBank = aux1 selectRamBank
   setRamBank    = aux1 setRamBank
 
-  getIEM = aux0 getIEM
-  setIEM = aux1 setIEM
-
 getCycles :: MonadEmulator m => m Word
 getCycles = do
   t <- resetCycles
   advCycles t
   return t
+
+processInterrupts :: MonadEmulator m => m ()
+processInterrupts = do
+  int <- handleInterrupt <$> getInterrupt
+  forM_ int $ \(i , s) -> do
+    putInterrupt s
+    call (interruptAddress i)
+    advCycles 20
 
 {-# INLINE word16 #-}
 word16 :: Iso' (Word8, Word8) Word16
