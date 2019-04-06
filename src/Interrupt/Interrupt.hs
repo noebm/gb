@@ -96,3 +96,7 @@ storeInterrupt s0 0xff0f b = updateInterruptState f s0 b
 storeInterrupt s0 0xffff b = updateInterruptState f s0 b
   where f it x = it { interruptEnabled = x }
 storeInterrupt _ _ _ = error "storeInterrupt: not an interrupt address"
+
+{-# INLINE inInterruptRange #-}
+inInterruptRange :: Word16 -> Bool
+inInterruptRange addr = addr == 0xff0f || addr == 0xffff
