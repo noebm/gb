@@ -39,8 +39,9 @@ updateCPU = do
 
 updateGraphics gfx = do
   cyc <- getCycles
-  mupdate <- updateGBGraphics (updateGPUState cyc)
+  mupdate <- updateGPUState cyc <$> getGPU
   forM_ mupdate $ \(cyc' , gpu') -> do
+    putGPU gpu'
     _ <- resetCycles
     advCycles cyc'
     let conf = gpuConfig gpu'

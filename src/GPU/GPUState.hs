@@ -14,6 +14,7 @@ where
 import GPU.Memory
 import GPU.GPUConfig as X
 
+import Control.Monad
 import Data.Word
 
 -- stores updates as deltas until needed
@@ -53,6 +54,7 @@ updateOAMState g = g
 
 updateGPUState :: Word -> GPUState -> Maybe (Word, GPUState)
 updateGPUState cycles s = do
+  guard (gpuEnabled (gpuConfig s))
   (cycles' , s') <- updateGPUConfigState cycles s
   return (cycles' , updateVideoRAMState $ updateOAMState s')
 
