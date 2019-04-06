@@ -14,7 +14,7 @@ data InterruptState = InterruptState
   , interruptSerial :: InterruptType
   , interruptJoypad :: InterruptType
   , interruptStateEnabled :: Bool
-  }
+  } deriving (Show)
 
 defaultInterruptState :: InterruptState
 defaultInterruptState = InterruptState d d d d d False

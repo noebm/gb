@@ -3,7 +3,7 @@ module Interrupt.InterruptType where
 data InterruptType = InterruptType
   { interruptEnabled :: Bool
   , interruptFlag    :: Bool
-  }
+  } deriving (Show)
 
 defaultInterruptType :: InterruptType
 defaultInterruptType = InterruptType False False
