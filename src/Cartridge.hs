@@ -51,7 +51,7 @@ headerRamBanks bs = case bs `B.index` 0x149 of
 
 cartridgeTypeSupported :: Word8 -> Bool
 cartridgeTypeSupported 0x00 = True
--- cartridgeTypeSupported 0x01 = True
+cartridgeTypeSupported 0x01 = True
 cartridgeTypeSupported _ = False
 
 loadCartridge :: FilePath -> IO (Either String Cartridge)

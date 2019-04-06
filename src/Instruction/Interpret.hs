@@ -115,20 +115,6 @@ instance Argument Arg where
   getArgumentM = getArgM
   toArg = id
 
-addFlags :: MonadEmulator m => Word8 -> Word8 -> m ()
-addFlags vold vnew = modifyFlags $ \f -> f
-  & flagC .~ (vnew < vold)                 -- register overflows
-  & flagZ .~ (vnew == 0)                   -- new value is zero
-  & flagN .~ False                         -- not a subtraction
-  & flagH .~ (vnew .&. 0xF < vold .&. 0xF) -- lower half of register overflows
-
-subFlags :: MonadEmulator m => Word8 -> Word8 -> m ()
-subFlags vold vnew = modifyFlags $ \f -> f
-  & flagC .~ (vnew > vold)                 -- register underflows
-  & flagZ .~ (vnew == 0)                   -- new value is zero
-  & flagN .~ True                          -- is a subtraction
-  & flagH .~ (vnew .&. 0xF > vold .&. 0xF) -- lower half of register underflows
-
 daa :: MonadEmulator m => m ()
 daa = do
   f <- load8 (Register8 F)
@@ -146,6 +132,46 @@ daa = do
     & flagH .~ False
     & flagC .~ (f ^. flagC || (not (f ^. flagN) && v > 0x99))
     & flagZ .~ (v' == 0)
+
+{-# INLINE add #-}
+add :: Word8 -> Word8 -> Bool -> (Word8 , Word8)
+add a v c =
+  (s , 0x00 & flagZ .~ (s == 0) & flagH .~ (carry_info `testBit` 4) & flagC .~ (carry_info `testBit` 8))
+  where
+    v' = fromIntegral v
+    a' = fromIntegral a
+    s' = a' + v' :: Int
+    s'' = s' + fromEnum c
+
+    carry_info = let f = xor (a' `xor` v') in (f s' .|. f s'')
+    s = fromIntegral s''
+
+{-# INLINE sub #-}
+sub :: Word8 -> Word8 -> Bool -> (Word8 , Word8)
+sub a v c =
+  (s , 0x40 & flagZ .~ (s == 0) & flagH .~ (carry_info `testBit` 4) & flagC .~ (carry_info `testBit` 8))
+  where
+    v' = fromIntegral v
+    a' = fromIntegral a
+    s' = a' - v' :: Int
+    s'' = s' - fromEnum c
+
+    carry_info = let f = xor (a' `xor` v') in (f s' .|. f s'')
+    s = fromIntegral s''
+
+{-# INLINE arith #-}
+arith :: MonadEmulator m
+      => (Word8 -> Word8 -> Bool -> (Word8 , Word8))
+      -> m Word8
+      -> Bool
+      -> m ()
+arith fun g useCarry = do
+  k <- g
+  a <- load8 (Register8 A)
+  cf <- if useCarry then view flagC <$> load8 (Register8 F) else return False
+  let (a' , f) = fun a k cf
+  store8 (Register8 A) a'
+  store8 (Register8 F) f
 
 interpretM :: (MonadEmulator m, Argument a, Show a) => Instruction a -> m ()
 interpretM instr@(Instruction b op args) = case op of
@@ -282,6 +308,48 @@ interpretM instr@(Instruction b op args) = case op of
     store8 (Register8 A) (v' & bitAt 7 .~ c)
     store8 (Register8 F) (f & flagC .~ c')
 
+  RLCA -> do
+    v <- load8 (Register8 A)
+    let v' = v `rotateL` 1
+    store8 (Register8 A) v'
+    modifyFlags $ \f -> 0x00
+      & flagC .~ v `testBit` 7
+  RRCA -> do
+    v <- load8 (Register8 A)
+    let v' = v `rotateR` 1
+    store8 (Register8 A) v'
+    modifyFlags $ \f -> 0x00
+      & flagC .~ v `testBit` 0
+
+  RLC -> case args of
+    [ arg ]
+      | Left g <- getArgumentM arg
+      , Left s <- setArgumentM arg -> do
+          v <- g
+          let v' = v `rotateL` 1
+          s v'
+          modifyFlags $ \f -> 0x00 & flagC .~ v `testBit` 7
+  RRC -> case args of
+    [ arg ]
+      | Left g <- getArgumentM arg
+      , Left s <- setArgumentM arg -> do
+          v <- g
+          let v' = v `rotateR` 1
+          s v'
+          modifyFlags $ \f -> 0x00 & flagC .~ v `testBit` 0
+
+
+
+  SRL -> case args of
+    [ arg ] | Left g <- getArgumentM arg
+            , Left s <- setArgumentM arg -> do
+                v <- g
+                let v' = v `shiftR` 1
+                s v'
+                modifyFlags $ \f -> 0x00
+                  & flagC .~ (v `testBit` 0)
+                  & flagZ .~ (v' == 0)
+
 
   JR -> case args of
     [ arg ]
@@ -337,23 +405,8 @@ interpretM instr@(Instruction b op args) = case op of
     [ Right s ] -> pop >>= s
     _ -> msg
 
-  INC -> case args of
-    [ arg ] | Right g <- getArgumentM arg
-            , Right s <- setArgumentM arg -> s . (+1) =<< g
-            | Left g <- getArgumentM arg
-            , Left s <- setArgumentM arg -> do
-                v <- g
-                let v' = v + 1
-                s v'
-                addFlags v v'
-    _ -> msg
   ADD -> case args of
-    [ arg ] | Left g <- getArgumentM arg -> do
-                k <- g
-                v <- load8 (Register8 A)
-                let v' = v + k
-                store8 (Register8 A) v'
-                addFlags v v'
+    [ arg ] | Left g <- getArgumentM arg -> arith add g False
     [ to , from ]
       | ArgDirect16 HL <- toArg to
       , Right s  <- setArgumentM to
@@ -365,8 +418,8 @@ interpretM instr@(Instruction b op args) = case op of
           s v'
           modifyFlags $ \f -> f
             & flagN .~ False
-            & flagC .~ ((v' .&. 0xFF) < (v .&. 0xFF))
-            & flagH .~ ((v' .&. 0x0F) < (v .&. 0x0F))
+            & flagC .~ (v' < v)
+            & flagH .~ ((v' .&. 0x0FFF) < (v .&. 0x0FFF))
       | ArgDirect16 SP <- toArg to
       , Right s <- setArgumentM to
       , Right gs <- getArgumentM to
@@ -375,44 +428,38 @@ interpretM instr@(Instruction b op args) = case op of
           dv <- fromIntegral <$> getRel
           let v' = addRelative v dv
           s v'
-          modifyFlags $ \f -> f
-            & flagZ .~ False
-            & flagN .~ False
+          modifyFlags $ \f -> 0x00
             & flagC .~ ((v' .&. 0xFF) < (v .&. 0xFF))
             & flagH .~ ((v' .&. 0x0F) < (v .&. 0x0F))
     _ -> msg
   SUB -> case args of
-    [ arg ] | Left g <- getArgumentM arg -> do
-                k <- g
-                v <- load8 (Register8 A)
-                let v' = v - k
-                store8 (Register8 A) v'
-                subFlags v v'
+    [ arg ] | Left g <- getArgumentM arg -> arith sub g False
     _ -> msg
   ADC -> case args of
-    [ arg ] | Left g <- getArgumentM arg -> do
-                k <- g
-                v <- load8 (Register8 A)
-                c <- fromIntegral . fromEnum . view flagC <$> load8 (Register8 F)
-                let v' = v + k + c
-                store8 (Register8 A) v'
-                addFlags v v'
+    [ arg ] | Left g <- getArgumentM arg -> arith add g True
     _ -> msg
   SBC -> case args of
-    [ arg ] | Left g <- getArgumentM arg -> do
-                k <- g
-                v <- load8 (Register8 A)
-                c <- fromIntegral . fromEnum . view flagC <$> load8 (Register8 F)
-                let v' = v - k - c
-                store8 (Register8 A) v'
-                subFlags v v'
+    [ arg ] | Left g <- getArgumentM arg -> arith sub g True
     _ -> msg
   CP -> case args of
     [ arg ] | Left g <- getArgumentM arg -> do
                 k <- g
-                v <- load8 (Register8 A)
-                let v' = v - k
-                subFlags v v'
+                a <- load8 (Register8 A)
+                let (_, f) = sub a k False
+                store8 (Register8 F) f
+    _ -> msg
+  INC -> case args of
+    [ arg ] | Right g <- getArgumentM arg
+            , Right s <- setArgumentM arg -> s . (+1) =<< g
+            | Left g <- getArgumentM arg
+            , Left s <- setArgumentM arg -> do
+                v <- g
+                let v' = v + 1
+                s v'
+                modifyFlags $ \f -> f
+                  & flagZ .~ (v == 0xFF)
+                  & flagN .~ False
+                  & flagH .~ (v .&. 0x0F == 0x0F)
     _ -> msg
 
   DEC -> case args of
@@ -423,7 +470,10 @@ interpretM instr@(Instruction b op args) = case op of
                 v <- g
                 let v' = v - 1
                 s v'
-                subFlags v v'
+                modifyFlags $ \f -> f
+                  & flagZ .~ (v == 0x01)
+                  & flagN .~ True
+                  & flagH .~ (v .&. 0x0F == 0x00)
     _ -> msg
 
 
