@@ -16,6 +16,10 @@ data InterruptState = InterruptState
   , interruptStateEnabled :: Bool
   }
 
+defaultInterruptState :: InterruptState
+defaultInterruptState = InterruptState d d d d d False
+  where d = defaultInterruptType
+
 disableInterruptState :: InterruptState -> InterruptState
 disableInterruptState s = s { interruptStateEnabled = False }
 
