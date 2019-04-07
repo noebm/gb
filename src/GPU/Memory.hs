@@ -70,6 +70,7 @@ tile :: VideoRAM -> VideoAddr -> Tile
 tile (VideoRAM vram) (VideoAddr addr) = Tile $ VU.slice addr tilesize vram
   where tilesize = 2 * 8 -- byte
 
+{-# INLINE loadTile #-}
 loadTile :: Tile -> Word8 -> Word8 -> ColorCode
 loadTile (Tile t) x y = fromIntegral $ foldr (\v acc -> (acc `shiftL` 1) .|. v) 0x00
   [ fromEnum (b `testBit` bitOffset) | b <- (t VU.!) <$> [byteOffset .. byteOffset + 1] ]
