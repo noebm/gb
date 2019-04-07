@@ -125,11 +125,10 @@ ls16ToIndex (Addr16 addr) = (fromIntegral addr , fromIntegral addr + 1)
 {-# INLINE loadAddr #-}
 loadAddr :: MonadIO m => Int -> GB m Word8
 loadAddr idx
-  | inGPURange idx = GBT $ do
-      gpu <- liftIO . stToIO . readSTRef =<< asks gbGPU
+  | inGPURange idx = do
+      gpu <- getGPU
       let (b , mgpu') = loadGPU gpu (fromIntegral idx)
-      forM_ mgpu' $ \gpu' -> do
-        liftIO . stToIO . (`writeSTRef` gpu') =<< asks gbGPU
+      forM_ mgpu' putGPU
       return b
   | inInterruptRange (fromIntegral idx) = do
       s <- getInterrupt
