@@ -1,15 +1,30 @@
-module VectorUtils where
+{-# LANGUAGE FlexibleContexts #-}
+module VectorUtils
+  ( byteStringToVector
+  , vectorToByteString
+  )
+where
 
-import qualified Data.ByteString             as B
-import qualified Data.Vector.Unboxed         as VU
--- import qualified Data.Vector.Unboxed.Mutable as VUM
+import qualified Data.ByteString.Internal    as B
 import qualified Data.Vector.Storable as VS
+import qualified Data.Vector.Generic  as VG
 
 import Data.Word
 
-byteStringToVector :: B.ByteString -> VU.Vector Word8
-byteStringToVector bs = VU.generate (B.length bs) $ B.index bs
+{-# INLINE byteStringToVector #-}
+byteStringToVector :: VG.Vector v Word8 => B.ByteString -> v Word8
+byteStringToVector = VS.convert . vector
 
-vectorV4ToByteString :: VS.Vector Word8 -> B.ByteString
-vectorV4ToByteString xs = B.pack $ VS.toList xs
+{-# INLINE vectorToByteString #-}
+vectorToByteString :: VG.Vector v Word8 => v Word8 -> B.ByteString
+vectorToByteString = byteString . VS.convert
+
+{-# INLINE vector #-}
+vector :: B.ByteString -> VS.Vector Word8
+vector (B.PS ptr off l) = VS.unsafeFromForeignPtr ptr off l
+
+{-# INLINE byteString #-}
+byteString :: VS.Vector Word8 -> B.ByteString
+byteString xs = B.PS ptr off l
+  where (ptr, off, l) = VS.unsafeToForeignPtr xs
 

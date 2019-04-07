@@ -28,5 +28,5 @@ genPixelRow im g = do
   let y = gpuYCoordinate $ gpuConfig g
   let vs = VS.unsafeCast $ backgroundLine (gpuConfig g) (gpuVideoRAM g) y
   _ <- updateTexture im (Just $ fromIntegral <$> Rectangle (P $ V2 0 y) (V2 160 1))
-    (vectorV4ToByteString vs) (fromIntegral $ VS.length vs)
+    (vectorToByteString vs) (fromIntegral $ VS.length vs)
   return ()
