@@ -122,6 +122,7 @@ ls16ToIndex (Register16 r) = reg16decomp r & each +~ rbase
 
 ls16ToIndex (Addr16 addr) = (fromIntegral addr , fromIntegral addr + 1)
 
+{-# INLINE loadAddr #-}
 loadAddr :: MonadIO m => Int -> GB m Word8
 loadAddr idx
   | inGPURange idx = GBT $ do
@@ -137,6 +138,7 @@ loadAddr idx
       addrspace <- asks addressSpace
       liftIO $ V.unsafeRead addrspace idx
 
+{-# INLINE storeAddr #-}
 storeAddr :: MonadIO m => Int -> Word8 -> GB m ()
 storeAddr idx b
   | inGPURange idx = GBT $ do
