@@ -312,13 +312,13 @@ interpretM instr@(Instruction b op args) = case op of
     v <- load8 (Register8 A)
     let v' = v `rotateL` 1
     store8 (Register8 A) v'
-    modifyFlags $ \f -> 0x00
+    modifyFlags $ \_ -> 0x00
       & flagC .~ v `testBit` 7
   RRCA -> do
     v <- load8 (Register8 A)
     let v' = v `rotateR` 1
     store8 (Register8 A) v'
-    modifyFlags $ \f -> 0x00
+    modifyFlags $ \_ -> 0x00
       & flagC .~ v `testBit` 0
 
   RLC -> case args of
@@ -328,7 +328,8 @@ interpretM instr@(Instruction b op args) = case op of
           v <- g
           let v' = v `rotateL` 1
           s v'
-          modifyFlags $ \f -> 0x00 & flagC .~ v `testBit` 7
+          modifyFlags $ \_ -> 0x00 & flagC .~ v `testBit` 7
+    _ -> msg
   RRC -> case args of
     [ arg ]
       | Left g <- getArgumentM arg
@@ -336,21 +337,18 @@ interpretM instr@(Instruction b op args) = case op of
           v <- g
           let v' = v `rotateR` 1
           s v'
-          modifyFlags $ \f -> 0x00 & flagC .~ v `testBit` 0
-
-
-
+          modifyFlags $ \_ -> 0x00 & flagC .~ v `testBit` 0
+    _ -> msg
   SRL -> case args of
     [ arg ] | Left g <- getArgumentM arg
             , Left s <- setArgumentM arg -> do
                 v <- g
                 let v' = v `shiftR` 1
                 s v'
-                modifyFlags $ \f -> 0x00
+                modifyFlags $ \_ -> 0x00
                   & flagC .~ (v `testBit` 0)
                   & flagZ .~ (v' == 0)
-
-
+    _ -> msg
   JR -> case args of
     [ arg ]
       | Left g <- getArgumentM arg -> do
