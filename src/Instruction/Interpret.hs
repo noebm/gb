@@ -180,6 +180,13 @@ rotateLeft v c =
       c' = v' `testBit` 0
   in (v' & bitAt 0 .~ c, c')
 
+{-# INLINE rotateRight #-}
+rotateRight :: Word8 -> Bool -> (Word8, Bool)
+rotateRight v c =
+  let v' = v `rotateR` 1
+      c' = v' `testBit` 7
+  in (v' & bitAt 7 .~ c, c')
+
 interpretM :: (MonadEmulator m, Argument a, Show a) => Instruction a -> m ()
 interpretM instr@(Instruction b op args) = case op of
   NOP -> return ()
@@ -290,27 +297,21 @@ interpretM instr@(Instruction b op args) = case op of
     let (v' , c') = rotateLeft v c
     store8 (Register8 A) v'
     store8 (Register8 F) (0x00 & flagC .~ c')
-
   RR -> case args of
     [ arg ] | Left g <- getArgumentM arg
             , Left s <- setArgumentM arg -> do
                 v <- g
-                let v' = v `rotateR` 1
-                let c' = v' `testBit` 7
-                f <- load8 (Register8 F)
-                let c = f ^. flagC
-                s (v' & bitAt 7 .~ c)
-                store8 (Register8 F) (f & flagC .~ c')
+                c <- view flagC <$> load8 (Register8 F)
+                let (v' , c') = rotateRight v c
+                s v'
+                store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
     _ -> msg
   RRA -> do
     v <- load8 (Register8 A)
-    let v' = v `rotateR` 1
-    let c' = v' `testBit` 7
-    f <- load8 (Register8 F)
-    let c = f ^. flagC
-    store8 (Register8 A) (v' & bitAt 7 .~ c)
-    store8 (Register8 F) (f & flagC .~ c')
-
+    c <- view flagC <$> load8 (Register8 F)
+    let (v' , c') = rotateRight v c
+    store8 (Register8 A) v'
+    store8 (Register8 F) (0x00 & flagC .~ c')
   RLCA -> do
     v <- load8 (Register8 A)
     let v' = v `rotateL` 1
