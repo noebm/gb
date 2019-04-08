@@ -56,6 +56,7 @@ data Arg = ArgDirect8 Reg8
 
          | ArgFlag Flag
          | ArgByteCode Word8 -- extract argument data embedded in instruction
+         deriving (Eq)
 
 instance Show Arg where
   show arg = case arg of
@@ -107,6 +108,7 @@ instructionSize :: Instruction Arg -> Int
 instructionSize (Instruction _ op args) = opcodeSize op + sum (argSize <$> args)
 
 data Flag = FlagZ | FlagC | FlagNZ | FlagNC
+  deriving (Eq)
 
 instance Show Flag where
   show FlagZ  = "Z"

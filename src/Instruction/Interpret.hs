@@ -437,7 +437,9 @@ interpretM instr@(Instruction b op args) = case op of
     [ Right g ] -> g >>= push
     _ -> msg
   POP -> case setArgumentM <$> args of
-    [ Right s ] -> pop >>= s
+    [ Right s ] -> do
+      pop >>= s
+      when (fmap toArg args == [ ArgDirect16 AF ]) (modifyFlags (.&. 0xF0))
     _ -> msg
 
   ADD -> case args of
