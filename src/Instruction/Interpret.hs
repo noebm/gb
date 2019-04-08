@@ -173,6 +173,13 @@ arith fun g useCarry = do
   store8 (Register8 A) a'
   store8 (Register8 F) f
 
+{-# INLINE rotateLeft #-}
+rotateLeft :: Word8 -> Bool -> (Word8, Bool)
+rotateLeft v c =
+  let v' = v `rotateL` 1
+      c' = v' `testBit` 0
+  in (v' & bitAt 0 .~ c, c')
+
 interpretM :: (MonadEmulator m, Argument a, Show a) => Instruction a -> m ()
 interpretM instr@(Instruction b op args) = case op of
   NOP -> return ()
@@ -272,21 +279,17 @@ interpretM instr@(Instruction b op args) = case op of
     [ arg ] | Left g <- getArgumentM arg
             , Left s <- setArgumentM arg -> do
                 v <- g
-                let v' = v `rotateL` 1
-                let c' = v' `testBit` 0
-                f <- load8 (Register8 F)
-                let c = f ^. flagC
-                s (v' & bitAt 0 .~ c)
-                store8 (Register8 F) (f & flagC .~ c')
+                c <- view flagC <$> load8 (Register8 F)
+                let (v' , c') = rotateLeft v c
+                s v'
+                store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
     _ -> msg
   RLA -> do
     v <- load8 (Register8 A)
-    let v' = v `rotateL` 1
-    let c' = v' `testBit` 0
-    f <- load8 (Register8 F)
-    let c = f ^. flagC
-    store8 (Register8 A) (v' & bitAt 0 .~ c)
-    store8 (Register8 F) (f & flagC .~ c')
+    c <- view flagC <$> load8 (Register8 F)
+    let (v' , c') = rotateLeft v c
+    store8 (Register8 A) v'
+    store8 (Register8 F) (0x00 & flagC .~ c')
 
   RR -> case args of
     [ arg ] | Left g <- getArgumentM arg
