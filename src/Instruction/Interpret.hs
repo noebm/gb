@@ -349,6 +349,8 @@ interpretM instr@(Instruction b op args) = case op of
                   & flagC .~ (v `testBit` 0)
                   & flagZ .~ (v' == 0)
     _ -> msg
+  SLA -> return ()
+  SRA -> return ()
   JR -> case args of
     [ arg ]
       | Left g <- getArgumentM arg -> do
