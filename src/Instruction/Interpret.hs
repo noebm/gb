@@ -227,13 +227,9 @@ interpretM instr@(Instruction b op args) = case op of
       r <- fromIntegral <$> getRel
       let v = addRelative sp r
       sHL v
-      modifyFlags $ \_ -> if r >= 0
-        then 0x00
+      store8 (Register8 F) $ 0x00
         & flagC .~ ((v .&. 0xFF) < (sp .&. 0xFF))
         & flagH .~ ((v .&. 0x0F) < (sp .&. 0x0F))
-        else 0x00
-        & flagC .~ ((v .&. 0xFF) >= (sp .&. 0xFF))
-        & flagH .~ ((v .&. 0x0F) >= (sp .&. 0x0F))
     _ -> msg
 
   AND -> case getArgumentM <$> args of
