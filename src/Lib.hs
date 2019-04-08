@@ -26,7 +26,6 @@ import Interrupt.Interrupt
 import GPU.GPUState
 import GPU.Drawing
 
-
 updateCPU = do
   processInterrupts
 
@@ -40,7 +39,10 @@ updateCPU = do
 updateGraphics gfx = updateGPU $ \gpu -> do
   let conf = gpuConfig gpu
   case gpuMode conf of
-    ModeVBlank | gpuYCoordinate conf == 145 -> renderGraphics gfx
+    ModeVBlank | gpuYCoordinate conf == 144 -> renderGraphics gfx
+    -- ModeVBlank -> do
+    --   liftIO $ print (gpuYCoordinate conf)
+    --   renderGraphics gfx
     ModeHBlank -> genPixelRow (image gfx) gpu
     _ -> return ()
 
@@ -59,8 +61,9 @@ someFunc fp' = do
 
     let
       -- logger :: Maybe (Word16 -> Instruction ArgWithData -> IO ())
-      logger = Just $ \addr i -> do
-        when (addr > 0xFF) $ putStrLn $ printf "0x%04x: %s" addr (show i)
+      logger = Nothing
+      -- logger = Just $ \addr i -> do
+      --   when (addr > 0xFF) $ putStrLn $ printf "0x%04x: %s" addr (show i)
 
     let update fx = do
           forM_ [0..0] $ \_ -> do
