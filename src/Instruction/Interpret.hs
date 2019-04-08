@@ -195,6 +195,20 @@ rotateLeftCarry v = rotateLeft v (v `testBit` 7)
 rotateRightCarry :: Word8 -> (Word8, Bool)
 rotateRightCarry v = rotateRight v (v `testBit` 0)
 
+{-# INLINE shiftLeftArithmetic #-}
+shiftLeftArithmetic :: Word8 -> (Word8, Bool)
+shiftLeftArithmetic v =
+  let v' = v `shiftL` 1
+      c' = v `testBit` 7
+  in (v', c')
+
+{-# INLINE shiftRightArithmetic #-}
+shiftRightArithmetic :: Word8 -> (Word8, Bool)
+shiftRightArithmetic v =
+  let v' = v `shiftR` 1
+      c' = v `testBit` 0
+  in (v' & bitAt 7 .~ (v `testBit` 7), c')
+
 interpretM :: (MonadEmulator m, Argument a, Show a) => Instruction a -> m ()
 interpretM instr@(Instruction b op args) = case op of
   NOP -> return ()
@@ -358,8 +372,24 @@ interpretM instr@(Instruction b op args) = case op of
                   & flagC .~ (v `testBit` 0)
                   & flagZ .~ (v' == 0)
     _ -> msg
-  SLA -> return ()
-  SRA -> return ()
+  SLA -> case args of
+    [ arg ]
+      | Left g <- getArgumentM arg
+      , Left s <- setArgumentM arg -> do
+          v <- g
+          let (v' , c') = shiftLeftArithmetic v
+          s v'
+          store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
+    _ -> msg
+  SRA -> case args of
+    [ arg ]
+      | Left g <- getArgumentM arg
+      , Left s <- setArgumentM arg -> do
+          v <- g
+          let (v' , c') = shiftRightArithmetic v
+          s v'
+          store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
+    _ -> msg
   JR -> case args of
     [ arg ]
       | Left g <- getArgumentM arg -> do
