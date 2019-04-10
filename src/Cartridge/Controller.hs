@@ -5,12 +5,14 @@ module Cartridge.Controller
   ( RomBank
   , makeRomBanks
   , selectRomBank
+  , loadRom
 
   -- | General ram banks.
   -- | Supports swapping and initialization with zeros.
   , RamBank
   , newRamBanks
   , selectRamBank
+  , loadRam
   )
 where
 
@@ -21,6 +23,7 @@ import qualified Data.Vector.Unboxed.Mutable as VUM
 import Control.Lens
 import Control.Monad
 import Control.Monad.Primitive
+import Data.Bits
 import Data.Word
 
 type Banks = V.Vector Bank
@@ -63,7 +66,7 @@ swapBank i' bs = do
 {-
   Rom bank code
 -}
-newtype RomBank s = RomBank (BankState s)
+data RomBank s = RomBank Bank (BankState s)
 
 splitRomBanks :: VU.Vector Word8 -> Maybe (VU.Vector Word8, VU.Vector Word8)
 splitRomBanks xs = do
@@ -74,12 +77,18 @@ splitRomBanks xs = do
 makeRomBanks :: PrimMonad m => VU.Vector Word8 -> m (RomBank (PrimState m))
 makeRomBanks xs = do
   let vs = V.unfoldr splitRomBanks xs
-  RomBank <$> makeBanks 1 vs
+  RomBank (vs V.! 0) <$> makeBanks 1 vs
 
 selectRomBank :: PrimMonad m => Int -> RomBank (PrimState m) -> m (RomBank (PrimState m))
-selectRomBank i (RomBank s) = do
+selectRomBank i (RomBank s0 s) = do
   let i' = if i == 0 then 1 else i
-  RomBank <$> swapBank i' s
+  RomBank s0 <$> swapBank i' s
+
+loadRom :: PrimMonad m => RomBank (PrimState m) -> Word16 -> m Word8
+loadRom (RomBank s0 s) addr
+  | addr < 0x4000 = return $ s0 VU.! fromIntegral addr
+  | addr < 0x8000 = VUM.read (s ^. activeBank) (fromIntegral addr)
+  | otherwise = error "loadRom: index out of range"
 
 {-
   Ram bank code
@@ -93,3 +102,8 @@ newRamBanks n = do
 
 selectRamBank :: PrimMonad m => Int -> RamBank (PrimState m) -> m (RamBank (PrimState m))
 selectRamBank i (RamBank s) = RamBank <$> swapBank i s
+
+loadRam :: PrimMonad m => RamBank (PrimState m) -> Word16 -> m Word8
+loadRam (RamBank s) addr
+  | 0xA000 <= addr && addr < 0xC000 = VUM.read (s ^. activeBank) (fromIntegral addr .&. 0x1fff)
+  | otherwise = error "loadRam: index out of range"
