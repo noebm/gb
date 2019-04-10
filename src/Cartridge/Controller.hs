@@ -1,0 +1,95 @@
+{-# LANGUAGE TemplateHaskell #-}
+module Cartridge.Controller
+  -- | General rom banks.
+  -- | Supports swapping and generation from cartridge data.
+  ( RomBank
+  , makeRomBanks
+  , selectRomBank
+
+  -- | General ram banks.
+  -- | Supports swapping and initialization with zeros.
+  , RamBank
+  , newRamBanks
+  , selectRamBank
+  )
+where
+
+import qualified Data.Vector as V
+import qualified Data.Vector.Unboxed as VU
+import qualified Data.Vector.Unboxed.Mutable as VUM
+
+import Control.Lens
+import Control.Monad
+import Control.Monad.Primitive
+import Data.Word
+
+type Banks = V.Vector Bank
+
+type Bank = VU.Vector Word8
+
+data BankState s = BankState
+  { _banks :: Banks
+  , _activeBankIndex :: Int
+  , _activeBank :: VUM.MVector s Word8
+  }
+
+makeLenses ''BankState
+
+-- makeBanks :: V.Vector Bank -> BankState s
+makeBanks :: PrimMonad m => Int -> V.Vector Bank -> m (BankState (PrimState m))
+makeBanks i xs = do
+  v <- VU.thaw $ xs ^. ix i
+  return $ BankState
+    { _banks = xs
+    , _activeBankIndex = i
+    , _activeBank = v
+    }
+
+putBank :: Bank -> Int -> Banks -> Banks
+putBank v i s = s & ix i .~ v
+
+getBank :: Int -> Banks -> Bank
+getBank i s = s ^. ix i
+
+swapBank :: PrimMonad m => Int -> BankState (PrimState m) -> m (BankState (PrimState m))
+swapBank i' bs = do
+  v  <- VU.freeze $ bs ^. activeBank
+  v' <- VU.thaw $ bs ^. banks.ix i'
+  return $ bs
+    & banks %~ putBank v (bs ^. activeBankIndex)
+    & activeBank .~ v'
+    & activeBankIndex .~ i'
+
+{-
+  Rom bank code
+-}
+newtype RomBank s = RomBank (BankState s)
+
+splitRomBanks :: VU.Vector Word8 -> Maybe (VU.Vector Word8, VU.Vector Word8)
+splitRomBanks xs = do
+  let (ys, zs) = VU.splitAt 0x4000 xs
+  when (VU.length ys /= 0x4000) $ error "splitRomBanks: invalid length"
+  return (ys , zs)
+
+makeRomBanks :: PrimMonad m => VU.Vector Word8 -> m (RomBank (PrimState m))
+makeRomBanks xs = do
+  let vs = V.unfoldr splitRomBanks xs
+  RomBank <$> makeBanks 1 vs
+
+selectRomBank :: PrimMonad m => Int -> RomBank (PrimState m) -> m (RomBank (PrimState m))
+selectRomBank i (RomBank s) = do
+  let i' = if i == 0 then 1 else i
+  RomBank <$> swapBank i' s
+
+{-
+  Ram bank code
+-}
+newtype RamBank s = RamBank (BankState s)
+
+newRamBanks :: PrimMonad m => Int -> m (RamBank (PrimState m))
+newRamBanks n = do
+  let vs = V.replicate n (VU.replicate 0x2000 0x00)
+  RamBank <$> makeBanks 0 vs
+
+selectRamBank :: PrimMonad m => Int -> RamBank (PrimState m) -> m (RamBank (PrimState m))
+selectRamBank i (RamBank s) = RamBank <$> swapBank i s
