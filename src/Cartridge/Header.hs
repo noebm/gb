@@ -1,5 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Cartridge.Header where
+module Cartridge.Header
+  ( Header(..)
+  , header
+  )
+where
 
 import qualified Data.ByteString as B
 import Data.ByteString (ByteString)
