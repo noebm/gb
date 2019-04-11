@@ -3,10 +3,15 @@ module Cartridge.Cartridge where
 import Cartridge.Header
 import Cartridge.Controller
 
+import qualified Data.ByteString as B
 import qualified Data.Vector.Unboxed as VU
 import Data.Word
+import Data.Bits
 
 import Control.Monad.Primitive
+import Control.Monad
+
+import VectorUtils
 
 data CartridgeState s = CartridgeState
   { header :: Header
@@ -30,3 +35,21 @@ loadCartridge s addr
     else return 0xff
   | otherwise = error "loadCartridge: out of range"
 
+newtype Rom = Rom (VU.Vector Word8)
+
+readRom :: FilePath -> IO (Either String Rom)
+readRom fp = do
+  bytes <- B.readFile fp
+  let vs = byteStringToVector bytes
+  return $ do
+    when (VU.length vs < 0x8000) $ Left "readRom: file too short"
+    when (VU.length vs .&. 0x3fff == 0) $ Left "readRom: file has invalid length"
+    return $ Rom vs
+
+readBootRom :: FilePath -> IO (Either String BootRom)
+readBootRom fp = do
+  bytes <- B.readFile fp
+  let vs = byteStringToVector bytes
+  return $ do
+    when (VU.length vs /= 0x100) $ Left "readBootRom: invalid length"
+    return $ BootRom vs
