@@ -12,6 +12,8 @@ import Text.Printf
 
 import Data.STRef
 
+import System.IO.Unsafe
+
 import Control.Monad.Primitive
 import Control.Monad
 
@@ -47,7 +49,7 @@ makeCartridge boot (Rom h xs) = do
   ram <- newRamBanks 0
 
   ramEnable <- stToPrim $ newSTRef False
-  bootEnable <- stToPrim $ newSTRef False
+  bootEnable <- stToPrim $ newSTRef (isJust boot)
 
   return $ CartridgeState (Just h) boot bootEnable rom ramEnable ram
 
@@ -68,20 +70,21 @@ loadCartridge s addr
       maybe (loadRom (romBanks s) addr) return $ do
         guard e
         loadBootRom addr <$> bootrom s
-  | addr < 0x8000 = loadRom (romBanks s) addr
+  | 0xff < addr && addr < 0x8000 = loadRom (romBanks s) addr
   | inRamRange addr = do
       e <- stToPrim $ readSTRef (ramBanksEnable s)
       if e
         then loadRam (ramBanks s) addr
         else return 0xff
-  | addr == 0xff50 = return $ fromIntegral . fromEnum . isJust $ bootrom s
+  | addr == 0xff50 =
+      fromIntegral . fromEnum . not <$> stToPrim ( readSTRef $ bootromEnable s)
   | otherwise = error "loadCartridge: out of range"
 
 storeCartridge :: PrimMonad m => Word16 -> Word8 -> CartridgeState (PrimState m) -> m ()
 storeCartridge addr b c
   | addr < 0x8000 = error "storeCartridge: address < 0x8000 not implemented"
   | inRamRange addr = storeRam addr b (ramBanks c)
-  | addr == 0xff50 = stToPrim $ writeSTRef (ramBanksEnable c) (b `testBit` 0)
+  | addr == 0xff50 = stToPrim $ writeSTRef (bootromEnable c) (b == 0)
   | otherwise = error "storeCartridge: out of range"
 
 data Rom = Rom Header.Header (VU.Vector Word8)
