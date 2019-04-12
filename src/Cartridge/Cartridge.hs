@@ -37,11 +37,18 @@ defaultCartridge = do
 loadBootRom :: Word16 -> BootRom -> Word8
 loadBootRom addr (BootRom xs) = xs VU.! fromIntegral addr
 
+{-# INLINE inCartridgeRange #-}
+inCartridgeRange :: Word16 -> Bool
+inCartridgeRange addr
+  = addr < 0x8000    -- cartridge
+  || inRamRange addr -- ram banks
+  || addr == 0xff50  -- boot rom disable
+
 loadCartridge :: PrimMonad m => CartridgeState (PrimState m) -> Word16 -> m Word8
 loadCartridge s addr
   | addr <= 0xff  = maybe (loadRom (romBanks s) addr) (return . loadBootRom addr) (bootrom s)
   | addr < 0x8000 = loadRom (romBanks s) addr
-  | 0x8000 <= addr && addr < 0xC000 = if ramBanksEnable s
+  | inRamRange addr = if ramBanksEnable s
     then loadRam (ramBanks s) addr
     else return 0xff
   | addr == 0xff50 = return $ fromIntegral . fromEnum . isJust $ bootrom s
@@ -50,6 +57,7 @@ loadCartridge s addr
 storeCartridge :: PrimMonad m => Word16 -> Word8 -> CartridgeState (PrimState m) -> m (CartridgeState (PrimState m))
 storeCartridge addr b c
   | addr < 0x8000 = error "storeCartridge: address < 0x8000 not implemented"
+  | inRamRange addr = storeRam addr b (ramBanks c) >> return c
   | addr == 0xff50 = return $ if b `testBit` 0 then c { bootrom = Nothing } else c
   | otherwise = error "storeCartridge: out of range"
 
