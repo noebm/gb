@@ -8,6 +8,7 @@ import qualified Data.Vector.Unboxed as VU
 import Data.Word
 import Data.Bits
 import Data.Maybe
+import Text.Printf
 
 import Data.STRef
 
@@ -62,7 +63,11 @@ inCartridgeRange addr
 
 loadCartridge :: PrimMonad m => CartridgeState (PrimState m) -> Word16 -> m Word8
 loadCartridge s addr
-  | addr <= 0xff  = maybe (loadRom (romBanks s) addr) (return . loadBootRom addr) (bootrom s)
+  | addr <= 0xff  = do
+      e <- stToPrim $ readSTRef (bootromEnable s)
+      maybe (loadRom (romBanks s) addr) return $ do
+        guard e
+        loadBootRom addr <$> bootrom s
   | addr < 0x8000 = loadRom (romBanks s) addr
   | inRamRange addr = do
       e <- stToPrim $ readSTRef (ramBanksEnable s)
@@ -87,7 +92,7 @@ readRom fp = do
   let vs = byteStringToVector bytes
   return $ do
     when (VU.length vs < 0x8000) $ Left "readRom: file too short"
-    when (VU.length vs .&. 0x3fff == 0) $ Left "readRom: file has invalid length"
+    when (VU.length vs `mod` 0x4000 /= 0) $ Left $ printf "readRom: file has invalid length 0x%x" (VU.length vs)
     h <- maybe (Left "readRom: reader parsing failed") Right $ Header.header bytes
     return (Rom h vs)
 

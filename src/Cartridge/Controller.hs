@@ -29,6 +29,7 @@ import Control.Monad
 import Control.Monad.Primitive
 import Data.Bits
 import Data.Word
+import Text.Printf
 
 type Banks = V.Vector Bank
 
@@ -78,7 +79,8 @@ defaultRomBank = makeRomBanks (VU.replicate 0x8000 0x00)
 splitRomBanks :: VU.Vector Word8 -> Maybe (VU.Vector Word8, VU.Vector Word8)
 splitRomBanks xs = do
   let (ys, zs) = VU.splitAt 0x4000 xs
-  when (VU.length ys /= 0x4000) $ error "splitRomBanks: invalid length"
+  guard (VU.length ys /= 0)
+  when (VU.length ys /= 0x4000) $ error $ printf "splitRomBanks: invalid length %x" (VU.length ys)
   return (ys , zs)
 
 makeRomBanks :: PrimMonad m => VU.Vector Word8 -> m (RomBank (PrimState m))
@@ -94,7 +96,7 @@ selectRomBank i (RomBank s0 s) = do
 loadRom :: PrimMonad m => RomBank (PrimState m) -> Word16 -> m Word8
 loadRom (RomBank s0 s) addr
   | addr < 0x4000 = return $ s0 VU.! fromIntegral addr
-  | addr < 0x8000 = VUM.read (s ^. activeBank) (fromIntegral addr)
+  | addr < 0x8000 = VUM.read (s ^. activeBank) (fromIntegral addr .&. 0x3fff)
   | otherwise = error "loadRom: index out of range"
 
 {-
