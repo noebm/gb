@@ -14,7 +14,9 @@ module Cartridge.Controller
   , emptyRamBank
   , newRamBanks
   , selectRamBank
+  , inRamRange
   , loadRam
+  , storeRam
   )
 where
 
@@ -111,7 +113,16 @@ newRamBanks n = do
 selectRamBank :: PrimMonad m => Int -> RamBank (PrimState m) -> m (RamBank (PrimState m))
 selectRamBank i (RamBank s) = RamBank <$> swapBank i s
 
+{-# INLINE inRamRange #-}
+inRamRange :: Word16 -> Bool
+inRamRange addr = 0xA000 <= addr && addr < 0xC000
+
 loadRam :: PrimMonad m => RamBank (PrimState m) -> Word16 -> m Word8
 loadRam (RamBank s) addr
-  | 0xA000 <= addr && addr < 0xC000 = VUM.read (s ^. activeBank) (fromIntegral addr .&. 0x1fff)
+  | inRamRange addr = VUM.read (s ^. activeBank) (fromIntegral addr .&. 0x1fff)
   | otherwise = error "loadRam: index out of range"
+
+storeRam :: PrimMonad m => Word16 -> Word8 -> RamBank (PrimState m) -> m ()
+storeRam addr b (RamBank s)
+  | inRamRange addr = VUM.write (s ^. activeBank) (fromIntegral addr .&. 0x1fff) b
+  | otherwise = error "storeRam: index out of range"
