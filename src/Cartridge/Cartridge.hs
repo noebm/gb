@@ -9,6 +9,8 @@ import Data.Word
 import Data.Bits
 import Data.Maybe
 
+import Data.STRef
+
 import Control.Monad.Primitive
 import Control.Monad
 
@@ -17,8 +19,9 @@ import VectorUtils
 data CartridgeState s = CartridgeState
   { header :: Maybe Header.Header
   , bootrom :: Maybe BootRom
+  , bootromEnable :: STRef s Bool
   , romBanks :: RomBank s
-  , ramBanksEnable :: Bool
+  , ramBanksEnable :: STRef s Bool
   , ramBanks :: RamBank s
   }
 
@@ -26,19 +29,32 @@ defaultCartridge :: PrimMonad m => m (CartridgeState (PrimState m))
 defaultCartridge = do
   rom <- defaultRomBank
   ram <- emptyRamBank
+  ramEnable <- stToPrim $ newSTRef False
+  bootEnable <- stToPrim $ newSTRef False
   return $ CartridgeState
     { header = Nothing
     , bootrom = Nothing
+    , bootromEnable = bootEnable
     , romBanks = rom
-    , ramBanksEnable = False
+    , ramBanksEnable = ramEnable
     , ramBanks = ram
     }
+
+makeCartridge :: PrimMonad m => Maybe BootRom -> Rom -> m (CartridgeState (PrimState m))
+makeCartridge boot (Rom h xs) = do
+  rom <- makeRomBanks xs
+  ram <- newRamBanks 0
+
+  ramEnable <- stToPrim $ newSTRef False
+  bootEnable <- stToPrim $ newSTRef False
+
+  return $ CartridgeState (Just h) boot bootEnable rom ramEnable ram
 
 loadBootRom :: Word16 -> BootRom -> Word8
 loadBootRom addr (BootRom xs) = xs VU.! fromIntegral addr
 
 {-# INLINE inCartridgeRange #-}
-inCartridgeRange :: Word16 -> Bool
+inCartridgeRange :: (Num a, Ord a, Eq a) => a -> Bool
 inCartridgeRange addr
   = addr < 0x8000    -- cartridge
   || inRamRange addr -- ram banks
@@ -48,24 +64,20 @@ loadCartridge :: PrimMonad m => CartridgeState (PrimState m) -> Word16 -> m Word
 loadCartridge s addr
   | addr <= 0xff  = maybe (loadRom (romBanks s) addr) (return . loadBootRom addr) (bootrom s)
   | addr < 0x8000 = loadRom (romBanks s) addr
-  | inRamRange addr = if ramBanksEnable s
-    then loadRam (ramBanks s) addr
-    else return 0xff
+  | inRamRange addr = do
+      e <- stToPrim $ readSTRef (ramBanksEnable s)
+      if e
+        then loadRam (ramBanks s) addr
+        else return 0xff
   | addr == 0xff50 = return $ fromIntegral . fromEnum . isJust $ bootrom s
   | otherwise = error "loadCartridge: out of range"
 
-storeCartridge :: PrimMonad m => Word16 -> Word8 -> CartridgeState (PrimState m) -> m (CartridgeState (PrimState m))
+storeCartridge :: PrimMonad m => Word16 -> Word8 -> CartridgeState (PrimState m) -> m ()
 storeCartridge addr b c
   | addr < 0x8000 = error "storeCartridge: address < 0x8000 not implemented"
-  | inRamRange addr = storeRam addr b (ramBanks c) >> return c
-  | addr == 0xff50 = return $ if b `testBit` 0 then c { bootrom = Nothing } else c
+  | inRamRange addr = storeRam addr b (ramBanks c)
+  | addr == 0xff50 = stToPrim $ writeSTRef (ramBanksEnable c) (b `testBit` 0)
   | otherwise = error "storeCartridge: out of range"
-
-makeCartridge :: PrimMonad m => Maybe BootRom -> Rom -> m (CartridgeState (PrimState m))
-makeCartridge boot (Rom h xs) = do
-  rom <- makeRomBanks xs
-  ram <- newRamBanks 0
-  return $ CartridgeState (Just h) boot rom False ram
 
 data Rom = Rom Header.Header (VU.Vector Word8)
 

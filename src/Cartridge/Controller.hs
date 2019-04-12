@@ -114,7 +114,7 @@ selectRamBank :: PrimMonad m => Int -> RamBank (PrimState m) -> m (RamBank (Prim
 selectRamBank i (RamBank s) = RamBank <$> swapBank i s
 
 {-# INLINE inRamRange #-}
-inRamRange :: Word16 -> Bool
+inRamRange :: (Num a, Ord a) => a -> Bool
 inRamRange addr = 0xA000 <= addr && addr < 0xC000
 
 loadRam :: PrimMonad m => RamBank (PrimState m) -> Word16 -> m Word8
