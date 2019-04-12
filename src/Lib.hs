@@ -15,13 +15,13 @@ import Control.Monad
 import Graphics
 import MonadEmulator
 import GB
-import Cartridge
-import BootRom
 
 import Instruction.Interpret
 import Instruction.Instruction
 import Instruction.Disassembler
 import Interrupt.Interrupt
+
+import Cartridge.Cartridge
 
 import GPU.GPUState
 import GPU.Drawing
@@ -46,19 +46,22 @@ updateGraphics gfx = updateGPU $ \gpu -> do
     ModeHBlank -> genPixelRow (image gfx) gpu
     _ -> return ()
 
-disableBootRom :: MonadEmulator m => m Bool
-disableBootRom = (`testBit` 0) <$> load8 (Addr8 0xFF50)
+-- setupCartridge :: Maybe FilePath -> Maybe FilePath -> IO (CartridgeState )
+setupCartridge fpBoot fpRom = do
+  let eitherError = either error id
+  rom      <- fmap eitherError <$> mapM readRom fpRom
+  bootrom' <- fmap eitherError <$> mapM readBootRom fpBoot
+  c <- mapM (makeCartridge bootrom') rom
+  c' <- defaultCartridge
+  return $ maybe c' id c
 
 someFunc :: Maybe FilePath -> IO ()
 someFunc fp' = do
-  rom <- readBootRom
-  cart <- maybe (return emptyCartridge)
-    (\fp -> do
-        cartOrError <- loadCartridge fp
-        return $ either error id cartOrError) fp'
-  runGB cart $ do
-    loadBootRom rom
 
+  let bootStrapName = "DMG_ROM.bin"
+  cart <- setupCartridge (Just $ "./" ++ bootStrapName) fp'
+
+  runGB cart $ do
     let
       -- logger :: Maybe (Word16 -> Instruction ArgWithData -> IO ())
       logger = Nothing
@@ -77,15 +80,5 @@ someFunc fp' = do
           s <- stop
           unless s $ runTillStop fx
 
-    let bootStrap fx = do
-          update fx
-
-          bootflag <- disableBootRom
-          s <- stop
-          unless (s || bootflag) $ bootStrap fx
-
-
     gfx <- initializeGraphics
-    bootStrap gfx
-    unloadBootRom (cartridgeData cart)
     runTillStop gfx

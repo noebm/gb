@@ -62,16 +62,16 @@ load16 x = X.load16 x
 store8 :: MonadEmulator m => LoadStore8 -> Word8 -> m ()
 store8 x@(Addr8 addr)
   -- enable / disable ram banking
-  | addr < 0x2000 = \w -> setRamBank (w .&. 0xA > 0)
-  -- select rom bank
-  | addr < 0x4000 = \w -> do
-      let w' = w .&. 0x1F
-      let index = if w' == 0 then 1 else w'
-      modifyRomBank (\k -> (k .&. 0xE0) .|. index)
-  | addr < 0x6000 = \w -> do
-      modifyRomBank (\k -> (k .&. 0x1F) .|. (w .&. 0xE0))
-  -- | addr < 0x8000 = \w -> error "MBC1 mode switching not implemented!"
-  | addr < 0x8000 = \_ -> return () -- XXX ignore for now
+  -- | addr < 0x2000 = \w -> setRamBank (w .&. 0xA > 0)
+  -- -- select rom bank
+  -- | addr < 0x4000 = \w -> do
+  --     let w' = w .&. 0x1F
+  --     let index = if w' == 0 then 1 else w'
+  --     modifyRomBank (\k -> (k .&. 0xE0) .|. index)
+  -- | addr < 0x6000 = \w -> do
+  --     modifyRomBank (\k -> (k .&. 0x1F) .|. (w .&. 0xE0))
+  -- -- | addr < 0x8000 = \w -> error "MBC1 mode switching not implemented!"
+  -- | addr < 0x8000 = \_ -> return () -- XXX ignore for now
 
   | alwaysStoreable addr = X.store8 x
   | echoRam addr         = X.store8 . Addr8 $ addr - 0x2000
@@ -87,15 +87,15 @@ store8 x = X.store8 x
 store16 :: MonadEmulator m => LoadStore16 -> Word16 -> m ()
 store16 x@(Addr16 addr)
   -- enable / disable ram banking
-  | addr < 0x2000 = \w -> setRamBank (w .&. 0xA > 0)
-  -- select rom bank
-  | addr < 0x4000 = \w -> do
-      let w' = w .&. 0x1F
-      let index = fromIntegral $ if w' == 0 then 1 else w'
-      modifyRomBank (\k -> (k .&. 0xE0) .|. index)
-  | addr < 0x6000 = \w -> do
-      modifyRomBank (\k -> (k .&. 0x1F) .|. (fromIntegral w .&. 0xE0))
-  | addr < 0x8000 = \w -> error "MBC1 mode switching not implemented!"
+  -- | addr < 0x2000 = \w -> setRamBank (w .&. 0xA > 0)
+  -- -- select rom bank
+  -- | addr < 0x4000 = \w -> do
+  --     let w' = w .&. 0x1F
+  --     let index = fromIntegral $ if w' == 0 then 1 else w'
+  --     modifyRomBank (\k -> (k .&. 0xE0) .|. index)
+  -- | addr < 0x6000 = \w -> do
+  --     modifyRomBank (\k -> (k .&. 0x1F) .|. (fromIntegral w .&. 0xE0))
+  -- | addr < 0x8000 = \w -> error "MBC1 mode switching not implemented!"
 
   | alwaysStoreable addr = X.store16 x
   | echoRam addr         = X.store16 . Addr16 $ addr - 0x2000

@@ -41,6 +41,7 @@ runTest = do
           when (idx < 0xFF) (printInstr >> loop)
     loop
 
+{-
 runInterpretTest :: IO ()
 runInterpretTest = do
   rom <- readBootRom
@@ -77,3 +78,4 @@ runInterpretTestOptimized = do
             pc <- load16 (Register16 PC)
             when (pc < 0xFF) (f pc >> loop f)
       loop run
+-}

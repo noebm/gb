@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, RankNTypes, FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, RankNTypes, FlexibleInstances, TypeFamilies #-}
 module GB
 ( MonadEmulator(..)
 , GB
@@ -9,24 +9,19 @@ module GB
 where
 
 import qualified Data.Vector.Unboxed.Mutable as V
-import qualified Data.Vector.Unboxed         as VU
-import qualified Data.ByteString as B
 import Data.Vector.Unboxed.Mutable (MVector)
 import Data.STRef
 import Data.Word
-
-import Text.Printf
 
 import Control.Lens
 import Control.Monad.ST
 import Control.Monad.Reader
 
 import MonadEmulator
-import Cartridge
-import VectorUtils
 
 import GPU.GPUState
 import Interrupt.Interrupt
+import Cartridge.Cartridge
 
 data GBState s = GBState
   { addressSpace :: MVector s Word8
@@ -36,15 +31,7 @@ data GBState s = GBState
   , gbInterrupt :: STRef s InterruptState
   , gbGPU       :: STRef s GPUState
 
-  , gbCartridge   :: Cartridge
-  , activeRomBank :: STRef s (Maybe Word8)
-
-  , gbBankingMode :: STRef s Bool
-
-  , gbEnableERam  :: STRef s Bool
-  , activeRamBank :: STRef s (Maybe Word8)
-
-  , ramBanks      :: MVector s Word8
+  , gbCartridge   :: CartridgeState s
   }
 
 newtype GBT s m a = GBT (ReaderT (GBState s) m a)
@@ -58,20 +45,9 @@ type GB = GBT RealWorld
 unsafeMemory :: Monad m => GBT s m (MVector s Word8)
 unsafeMemory = GBT $ asks addressSpace
 
-copyBankAux :: Int -> Int -> V.MVector s Word8 -> B.ByteString -> ST s ()
-copyBankAux target k memory cart = do
-  let bank = B.take 0x4000 $ B.drop (0x4000 * (k - 1)) cart
-  VU.copy (V.slice target 0x4000 memory) $ byteStringToVector bank
-
-makeGBState :: Cartridge -> ST s (GBState s)
+makeGBState :: CartridgeState s -> ST s (GBState s)
 makeGBState cart = do
   memory <- V.replicate (0xFFFF + 0xC) 0x00
-  -- let copyBank k = copyBankAux (0x4000 * k) k memory (cartridgeData cart)
-  -- copyBank 0
-  -- copyBank 1
-  VU.copy (V.slice 0 0x8000 memory) (byteStringToVector $ cartridgeData cart)
-
-  externalRam <- V.replicate (0x2000 * fromIntegral (cartridgeRamBanks cart)) 0x00
   GBState
     <$> pure memory
     <*> newSTRef 0
@@ -79,13 +55,8 @@ makeGBState cart = do
     <*> newSTRef defaultInterruptState
     <*> newSTRef defaultGPUState
     <*> pure cart
-    <*> newSTRef Nothing
-    <*> newSTRef False
-    <*> newSTRef False
-    <*> newSTRef Nothing
-    <*> pure externalRam
 
-runGB :: MonadIO m => Cartridge -> GB m a -> m a
+runGB :: MonadIO m => CartridgeState RealWorld -> GB m a -> m a
 runGB cart (GBT x) = do
   gbState <- liftIO $ stToIO $ makeGBState cart
   runReaderT x gbState
@@ -133,20 +104,32 @@ loadAddr idx
   | inInterruptRange (fromIntegral idx) = do
       s <- getInterrupt
       return $ loadInterrupt s (fromIntegral idx)
+  | inCartridgeRange idx = GBT $ do
+      cart <- asks gbCartridge
+      liftIO $ loadCartridge cart (fromIntegral idx)
   | otherwise = GBT $ do
       addrspace <- asks addressSpace
       liftIO $ V.unsafeRead addrspace idx
+
+getSTRef :: (MonadIO m, s ~ RealWorld) => (GBState s -> STRef s a) -> ReaderT (GBState s) m a
+getSTRef f = liftIO . stToIO . readSTRef =<< asks f
+
+putSTRef :: (MonadIO m, s ~ RealWorld) => (GBState s -> STRef s a) -> a -> ReaderT (GBState s) m ()
+putSTRef f x = liftIO . stToIO . (`writeSTRef` x) =<< asks f
 
 {-# INLINE storeAddr #-}
 storeAddr :: MonadIO m => Int -> Word8 -> GB m ()
 storeAddr idx b
   | inGPURange idx = GBT $ do
-      gpu <- liftIO . stToIO . readSTRef =<< asks gbGPU
+      gpu <- getSTRef gbGPU
       let gpu' = storeGPU gpu (fromIntegral idx) b
-      liftIO . stToIO . (`writeSTRef` gpu') =<< asks gbGPU
+      putSTRef gbGPU gpu'
   | inInterruptRange (fromIntegral idx) = do
       s <- getInterrupt
       putInterrupt $ storeInterrupt s (fromIntegral idx) b
+  | inCartridgeRange idx = GBT $ do
+      cart <- asks gbCartridge
+      liftIO $ storeCartridge (fromIntegral idx) b cart
   | otherwise = GBT $ do
       addrspace <- asks addressSpace
       liftIO $ V.unsafeWrite addrspace idx b
@@ -192,53 +175,3 @@ instance MonadIO m => MonadEmulator (GB m) where
   stop = GBT $ do
     s <- asks shouldStop
     liftIO $ stToIO $ readSTRef s
-
-  modifyRomBank f = GBT $ do
-    romBank <- liftIO . stToIO . readSTRef =<< asks activeRomBank
-    forM_ romBank $ \k -> do
-      let k' = f k
-      let idx = fromIntegral k'
-      memory <- asks addressSpace
-      cart   <- asks (cartridgeData . gbCartridge)
-      cartBanks <- asks (cartridgeRomBanks . gbCartridge)
-      if idx < fromIntegral cartBanks
-        then liftIO $ stToIO $ copyBankAux 0x4000 idx memory cart
-        else error $ printf "Access to rom bank out of range %d" idx
-
-  selectRamBank k = do
-    storeERAM
-    let idx = fromIntegral k
-    active <- GBT $ asks activeRamBank
-    cartBanks <- GBT $ asks (cartridgeRamBanks . gbCartridge)
-    f <- GBT $ liftIO . stToIO . readSTRef =<< asks gbEnableERam
-    if f && idx < fromIntegral cartBanks
-      then do
-      liftIO $ stToIO $ writeSTRef active (Just idx)
-      loadERAM
-      else error $ printf "Access to ram bank out of range (Enabled: %d) %d" (fromEnum f) idx
-
-  setRamBank f = GBT $
-    liftIO . stToIO . (`writeSTRef` f) =<< asks gbEnableERam
-
-accessERAM :: MonadIO m
-           => GBT RealWorld m (V.MVector RealWorld Word8, Maybe (V.MVector RealWorld Word8))
-accessERAM = GBT $ do
-  memory <- asks addressSpace
-  ram    <- asks ramBanks
-  currentRamBank <- liftIO . stToIO . readSTRef =<< asks activeRamBank
-  let eram = V.slice 0xA000 0x2000 memory
-  let bankslice = do
-        bank <- currentRamBank
-        return $ V.slice (0x2000 * fromIntegral bank) 0x2000 ram
-  return (eram, bankslice)
-
-storeERAM :: MonadIO m => GBT RealWorld m ()
-storeERAM = do
-  (eram , bankslice) <- accessERAM
-  liftIO $ stToIO $ forM_ bankslice $ \b -> V.copy b eram
-
-loadERAM :: MonadIO m => GBT RealWorld m ()
-loadERAM = do
-  (eram , bankslice) <- accessERAM
-  liftIO $ stToIO $ forM_ bankslice $ \b -> V.copy eram b
-

@@ -102,18 +102,6 @@ class Monad m => MonadEmulator m where
   getInterrupt :: m InterruptState
   putInterrupt :: InterruptState -> m ()
 
-  -- selectRomBank :: Word8 -> m ()
-  modifyRomBank :: (Word8 -> Word8) -> m ()
-
-  selectRamBank :: Word8 -> m ()
-  setRamBank :: Bool -> m ()
-
-  -- externalRam   :: Bool -> m ()
-  -- selectRomBank :: Word8 -> m ()
-  -- selectRamBank :: Word8 -> m ()
-
-  -- bootRom :: Word8 -> m Word8
-
 getIEM :: MonadEmulator m => m Bool
 getIEM   = interruptStateEnabled <$> getInterrupt
 
@@ -160,10 +148,6 @@ instance MonadEmulator m => MonadEmulator (StateT s m) where
 
   setStop = aux0 setStop
   stop    = aux0 stop
-
-  modifyRomBank = aux1 modifyRomBank
-  selectRamBank = aux1 selectRamBank
-  setRamBank    = aux1 setRamBank
 
 getCycles :: MonadEmulator m => m Word
 getCycles = do

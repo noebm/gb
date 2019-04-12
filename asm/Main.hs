@@ -4,15 +4,13 @@ import Control.Monad.IO.Class
 import System.Environment
 
 import Instruction.Disassembler
-import Cartridge
+-- import Cartridge
 import GB
+import Lib
 
 runAsm :: Maybe FilePath -> IO ()
 runAsm fp' = do
-  cart <- maybe (return emptyCartridge)
-    (\fp -> do
-        cartOrError <- loadCartridge fp
-        return $ either error id cartOrError) fp'
+  cart <- setupCartridge Nothing fp'
   runGB cart $ do
     liftIO . mapM_ print =<< runDisassembler (>= 0x8000)
 
