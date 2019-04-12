@@ -4,7 +4,6 @@ module GB
 , GB
 , runGB
 , showRegisters
-, unsafeMemory
 )
 where
 
@@ -41,9 +40,6 @@ instance MonadIO m => MonadIO (GBT s m) where
   liftIO f = GBT $ liftIO f
 
 type GB = GBT RealWorld
-
-unsafeMemory :: Monad m => GBT s m (MVector s Word8)
-unsafeMemory = GBT $ asks addressSpace
 
 makeGBState :: CartridgeState s -> ST s (GBState s)
 makeGBState cart = do
