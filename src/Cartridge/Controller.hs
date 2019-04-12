@@ -3,6 +3,7 @@ module Cartridge.Controller
   -- | General rom banks.
   -- | Supports swapping and generation from cartridge data.
   ( RomBank
+  , defaultRomBank
   , makeRomBanks
   , selectRomBank
   , loadRom
@@ -10,6 +11,7 @@ module Cartridge.Controller
   -- | General ram banks.
   -- | Supports swapping and initialization with zeros.
   , RamBank
+  , emptyRamBank
   , newRamBanks
   , selectRamBank
   , loadRam
@@ -68,6 +70,9 @@ swapBank i' bs = do
 -}
 data RomBank s = RomBank Bank (BankState s)
 
+defaultRomBank :: PrimMonad m => m (RomBank (PrimState m))
+defaultRomBank = makeRomBanks (VU.replicate 0x8000 0x00)
+
 splitRomBanks :: VU.Vector Word8 -> Maybe (VU.Vector Word8, VU.Vector Word8)
 splitRomBanks xs = do
   let (ys, zs) = VU.splitAt 0x4000 xs
@@ -94,6 +99,9 @@ loadRom (RomBank s0 s) addr
   Ram bank code
 -}
 newtype RamBank s = RamBank (BankState s)
+
+emptyRamBank :: PrimMonad m => m (RamBank (PrimState m))
+emptyRamBank = newRamBanks 0
 
 newRamBanks :: PrimMonad m => Int -> m (RamBank (PrimState m))
 newRamBanks n = do

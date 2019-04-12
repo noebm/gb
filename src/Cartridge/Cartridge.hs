@@ -1,12 +1,13 @@
 module Cartridge.Cartridge where
 
-import Cartridge.Header
+import qualified Cartridge.Header as Header
 import Cartridge.Controller
 
 import qualified Data.ByteString as B
 import qualified Data.Vector.Unboxed as VU
 import Data.Word
 import Data.Bits
+import Data.Maybe
 
 import Control.Monad.Primitive
 import Control.Monad
@@ -14,14 +15,24 @@ import Control.Monad
 import VectorUtils
 
 data CartridgeState s = CartridgeState
-  { header :: Header
+  { header :: Maybe Header.Header
   , bootrom :: Maybe BootRom
   , romBanks :: RomBank s
   , ramBanksEnable :: Bool
   , ramBanks :: RamBank s
   }
 
-newtype BootRom = BootRom (VU.Vector Word8)
+defaultCartridge :: PrimMonad m => m (CartridgeState (PrimState m))
+defaultCartridge = do
+  rom <- defaultRomBank
+  ram <- emptyRamBank
+  return $ CartridgeState
+    { header = Nothing
+    , bootrom = Nothing
+    , romBanks = rom
+    , ramBanksEnable = False
+    , ramBanks = ram
+    }
 
 loadBootRom :: Word16 -> BootRom -> Word8
 loadBootRom addr (BootRom xs) = xs VU.! fromIntegral addr
@@ -33,9 +44,22 @@ loadCartridge s addr
   | 0x8000 <= addr && addr < 0xC000 = if ramBanksEnable s
     then loadRam (ramBanks s) addr
     else return 0xff
+  | addr == 0xff50 = return $ fromIntegral . fromEnum . isJust $ bootrom s
   | otherwise = error "loadCartridge: out of range"
 
-newtype Rom = Rom (VU.Vector Word8)
+storeCartridge :: PrimMonad m => Word16 -> Word8 -> CartridgeState (PrimState m) -> m (CartridgeState (PrimState m))
+storeCartridge addr b c
+  | addr < 0x8000 = error "storeCartridge: address < 0x8000 not implemented"
+  | addr == 0xff50 = return $ if b `testBit` 0 then c { bootrom = Nothing } else c
+  | otherwise = error "storeCartridge: out of range"
+
+makeCartridge :: PrimMonad m => Maybe BootRom -> Rom -> m (CartridgeState (PrimState m))
+makeCartridge boot (Rom h xs) = do
+  rom <- makeRomBanks xs
+  ram <- newRamBanks 0
+  return $ CartridgeState (Just h) boot rom False ram
+
+data Rom = Rom Header.Header (VU.Vector Word8)
 
 readRom :: FilePath -> IO (Either String Rom)
 readRom fp = do
@@ -44,7 +68,10 @@ readRom fp = do
   return $ do
     when (VU.length vs < 0x8000) $ Left "readRom: file too short"
     when (VU.length vs .&. 0x3fff == 0) $ Left "readRom: file has invalid length"
-    return $ Rom vs
+    h <- maybe (Left "readRom: reader parsing failed") Right $ Header.header bytes
+    return (Rom h vs)
+
+newtype BootRom = BootRom (VU.Vector Word8)
 
 readBootRom :: FilePath -> IO (Either String BootRom)
 readBootRom fp = do
