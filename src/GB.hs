@@ -89,6 +89,10 @@ ls16ToIndex (Register16 r) = reg16decomp r & each +~ rbase
 
 ls16ToIndex (Addr16 addr) = (fromIntegral addr , fromIntegral addr + 1)
 
+{-# INLINE echoRam #-}
+echoRam :: Int -> Bool
+echoRam addr = 0xE000 <= addr && addr < 0xFE00
+
 {-# INLINE loadAddr #-}
 loadAddr :: MonadIO m => Int -> GB m Word8
 loadAddr idx
@@ -103,6 +107,8 @@ loadAddr idx
   | inCartridgeRange idx = GBT $ do
       cart <- asks gbCartridge
       liftIO $ loadCartridge cart (fromIntegral idx)
+  | echoRam idx          = loadAddr (idx - 0x2000)
+  | 0xFEA0 <= idx && idx < 0xFF00 = return 0xff
   | otherwise = GBT $ do
       addrspace <- asks addressSpace
       liftIO $ V.unsafeRead addrspace idx
@@ -126,6 +132,8 @@ storeAddr idx b
   | inCartridgeRange idx = GBT $ do
       cart <- asks gbCartridge
       liftIO $ storeCartridge (fromIntegral idx) b cart
+  | echoRam idx          = storeAddr (idx - 0x2000) b
+  | 0xFEA0 <= idx && idx < 0xFF00 = return ()
   | otherwise = GBT $ do
       addrspace <- asks addressSpace
       liftIO $ V.unsafeWrite addrspace idx b

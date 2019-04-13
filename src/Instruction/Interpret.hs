@@ -11,7 +11,7 @@ import Control.Monad
 import Text.Printf
 
 import Instruction.Instruction
-import Memory.Accessible
+import MonadEmulator
 
 modifyFlags :: MonadEmulator m => (Word8 -> Word8) -> m ()
 modifyFlags g = do
