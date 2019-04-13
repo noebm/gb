@@ -11,6 +11,7 @@ where
 import Data.Word
 import Data.Bits
 import Control.Monad
+import Text.Printf
 
 import GPU.Palette
 
@@ -177,4 +178,5 @@ loadGPUConfig g 0xFF48 = getPalette $ gpuOBJ0Palette g -- non CBG mode only
 loadGPUConfig g 0xFF49 = getPalette $ gpuOBJ1Palette g -- non CBG mode only
 loadGPUConfig g 0xFF4A = gpuWindowY g
 loadGPUConfig g 0xFF4B = gpuWindowX g
-loadGPUConfig _ _ = error "loadGPUConfig: not in range"
+loadGPUConfig _ 0xff4d = 0xff
+loadGPUConfig _ addr = error $ printf "loadGPUConfig: not in range 0x%04x" addr
