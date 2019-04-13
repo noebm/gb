@@ -1,7 +1,14 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, TemplateHaskell #-}
 module Cartridge.Header
   ( Header(..)
   , header
+
+  , MBCType (..)
+  , _HasRAM, _IsPersistent
+  , mbcType
+
+  , CartridgeOptions (..)
+  , CartridgeType (..)
   )
 where
 
@@ -9,11 +16,33 @@ import qualified Data.ByteString as B
 import Data.ByteString (ByteString)
 import Data.Word
 
+import Control.Lens
 import Control.Monad
+
+data CartridgeOptions
+  = HasRAM
+  | IsPersistent
+  deriving Show
+
+makePrisms ''CartridgeOptions
+
+data MBCType
+  = OnlyROM
+  | MBC1
+  | MBC2
+  deriving Show
+
+data CartridgeType = CartridgeType
+  { _mbcType :: MBCType
+  , _cartridgeOptions :: [ CartridgeOptions ]
+  }
+  deriving Show
+
+makeLenses ''CartridgeType
 
 data Header = Header
   { headerTitle    :: ByteString
-  , headerType     :: Word8
+  , headerType     :: CartridgeType
   , headerRomBanks :: Word
   , headerRamBanks :: Word
   , headerLocale   :: Word8
@@ -27,7 +56,7 @@ header bs = do
   guard (crc == crc')
   return $ Header
     { headerTitle = title bs
-    , headerType = type' bs
+    , headerType = cartridgeType (bs `B.index` 0x147)
     , headerRomBanks = romBanks bs
     , headerRamBanks = ramBanks bs
     , headerLocale = locale bs
@@ -42,8 +71,17 @@ checksumHeader bs = (foldl (\x y -> x - y - 1) 0 checksumData, headerChecksum)
 title :: ByteString -> ByteString
 title = B.take 16 . B.takeWhile (/= 0) . B.drop 0x134
 
-type' :: ByteString -> Word8
-type' bs = bs `B.index` 0x147
+cartridgeType :: Word8 -> CartridgeType
+cartridgeType 0 = CartridgeType OnlyROM []
+cartridgeType 8 = CartridgeType OnlyROM [ HasRAM ]
+cartridgeType 9 = CartridgeType OnlyROM [ HasRAM, IsPersistent ]
+
+cartridgeType 1 = CartridgeType MBC1 []
+cartridgeType 2 = CartridgeType MBC1 [ HasRAM ]
+cartridgeType 3 = CartridgeType MBC1 [ HasRAM, IsPersistent ]
+
+cartridgeType 5 = CartridgeType MBC2 []
+cartridgeType 6 = CartridgeType MBC2 [ IsPersistent ]
 
 romBanks :: ByteString -> Word
 romBanks bs = 4 * fromIntegral (bs `B.index` 0x148)
@@ -63,4 +101,5 @@ ramBanks bs = case bs `B.index` 0x149 of
 -- cartridgeTypeSupported 0x00 = True
 -- cartridgeTypeSupported 0x01 = True
 -- cartridgeTypeSupported _ = False
+
 

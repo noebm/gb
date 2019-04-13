@@ -1,6 +1,7 @@
 module Cartridge.Cartridge where
 
 import qualified Cartridge.Header as Header
+import Cartridge.Header ( MBCType(..) )
 import Cartridge.Controller
 
 import qualified Data.ByteString as B
@@ -12,15 +13,14 @@ import Text.Printf
 
 import Data.STRef
 
-import System.IO.Unsafe
-
+import Control.Lens
 import Control.Monad.Primitive
 import Control.Monad
 
 import VectorUtils
 
 data CartridgeState s = CartridgeState
-  { header :: Maybe Header.Header
+  { header :: Header.Header
   , bootrom :: Maybe BootRom
   , bootromEnable :: STRef s Bool
   , romBanks :: RomBank s
@@ -35,7 +35,7 @@ defaultCartridge = do
   ramEnable <- stToPrim $ newSTRef False
   bootEnable <- stToPrim $ newSTRef False
   return $ CartridgeState
-    { header = Nothing
+    { header = error "no default header implementation"
     , bootrom = Nothing
     , bootromEnable = bootEnable
     , romBanks = rom
@@ -51,7 +51,7 @@ makeCartridge boot (Rom h xs) = do
   ramEnable <- stToPrim $ newSTRef False
   bootEnable <- stToPrim $ newSTRef (isJust boot)
 
-  return $ CartridgeState (Just h) boot bootEnable rom ramEnable ram
+  return $ CartridgeState h boot bootEnable rom ramEnable ram
 
 loadBootRom :: Word16 -> BootRom -> Word8
 loadBootRom addr (BootRom xs) = xs VU.! fromIntegral addr
@@ -82,7 +82,7 @@ loadCartridge s addr
 
 storeCartridge :: PrimMonad m => Word16 -> Word8 -> CartridgeState (PrimState m) -> m ()
 storeCartridge addr b c
-  | addr < 0x8000 = error "storeCartridge: address < 0x8000 not implemented"
+  | addr < 0x8000 = storeMBC (view Header.mbcType $ Header.headerType (header c)) addr b c
   | inRamRange addr = storeRam addr b (ramBanks c)
   | addr == 0xff50 = stToPrim $ writeSTRef (bootromEnable c) (b == 0)
   | otherwise = error "storeCartridge: out of range"
@@ -108,3 +108,14 @@ readBootRom fp = do
   return $ do
     when (VU.length vs /= 0x100) $ Left "readBootRom: invalid length"
     return $ BootRom vs
+
+storeMBC :: PrimMonad m => MBCType -> Word16 -> Word8 -> CartridgeState (PrimState m) -> m () -- RomBank s
+storeMBC OnlyROM addr _ _
+  | addr < 0x8000 = return ()
+  | otherwise = error "storeMBC: out of range"
+storeMBC MBC1 addr b s
+  | addr < 0x2000 = error "storeMBC: MBC1 enable ram"
+  | addr < 0x4000 = error "storeMBC: MBC1 lower rom bits"
+  | addr < 0x6000 = error "storeMBC: MBC1 higher rom/ram bits"
+  | addr < 0x8000 = error "storeMBC: MBC1 rom/ram mode select"
+  | otherwise = error "storeMBC: out of range"
