@@ -166,11 +166,11 @@ instance MonadIO m => MonadEmulator (GB m) where
       writeSTRef c 0
       return v
 
-  getGPU = GBT $ liftIO . stToIO . readSTRef =<< asks gbGPU
-  putGPU gpu = GBT $ liftIO . stToIO . (`writeSTRef` gpu) =<< asks gbGPU
+  getGPU = GBT $ getSTRef gbGPU
+  putGPU = GBT . putSTRef gbGPU
 
-  getInterrupt = GBT $ liftIO . stToIO . readSTRef =<< asks gbInterrupt
-  putInterrupt s = GBT $ liftIO . stToIO . (`writeSTRef` s) =<< asks gbInterrupt
+  getInterrupt = GBT $ getSTRef gbInterrupt
+  putInterrupt = GBT . putSTRef gbInterrupt
 
   setStop = GBT $ do
     s <- asks shouldStop
