@@ -17,7 +17,7 @@ data CodePath m = CodePath
 getCodePath :: MonadEmulator m => Int -> m (Maybe (CodePath m))
 getCodePath threshold = do
   entry <- load16 (Register16 PC)
-  let skipOpcode (Instruction _ op _) =
+  let skipOpcode (Instruction _ op _ _) =
         store16 (Register16 PC) . (+ fromIntegral (opcodeSize op)) =<< load16 (Register16 PC)
   let getOp = do
         i <- parseInstructionM byte

@@ -79,7 +79,7 @@ isConditional (ArgFlag _) = True
 isConditional _ = False
 
 isCall :: Instruction a -> Bool
-isCall (Instruction _ CALL _) = True
+isCall (Instruction _ CALL _ _) = True
 isCall _ = False
 
 runDisassembler :: MonadEmulator m => (Word16 -> Bool) -> m [ DisassembledInstruction ]
