@@ -59,31 +59,37 @@ joypadIndex b = case b of
 data JoypadSelect = SelectDirection | SelectButton
 
 data JoypadState = JoypadState
-  { _select :: JoypadSelect
+  { _select :: Maybe JoypadSelect
   , _pressed :: Set.Set Joypad
   }
 
 makeLenses ''JoypadState
 
 defaultJoypadState :: JoypadState
-defaultJoypadState = JoypadState SelectDirection Set.empty
+defaultJoypadState = JoypadState Nothing Set.empty
 
-updateJoypad :: (Joypad -> Bool) -> JoypadState -> JoypadState
-updateJoypad f = pressed .~ Set.filter f joypadAll
+updateJoypad :: (Joypad -> Bool) -> JoypadState -> (JoypadState , Bool)
+updateJoypad f s =
+  let s' = s & pressed .~ Set.filter f joypadAll
+  in (,) s' $ case s ^. select of
+    Just SelectButton    -> (s ^.. pressed.folded.filtered button)    == (s' ^.. pressed.folded.filtered button)
+    Just SelectDirection -> (s ^.. pressed.folded.filtered direction) == (s' ^.. pressed.folded.filtered direction)
+    _ -> False
 
 inJoypadRange :: Word16 -> Bool
 inJoypadRange addr = addr == 0xff00
 
 storeJoypad :: Word16 -> Word8 -> JoypadState -> JoypadState
 storeJoypad 0xff00 b s
-  | not (b `testBit` 4) = s & select .~ SelectButton
-  | not (b `testBit` 5) = s & select .~ SelectDirection
+  | not (b `testBit` 4) = s & select ?~ SelectButton
+  | not (b `testBit` 5) = s & select ?~ SelectDirection
   | otherwise = s
 
 storeJoypad _ _ _ = error "storeJoypad: not in range"
 
 loadJoypad :: JoypadState -> Word16 -> Word8
-loadJoypad s 0xff00 = foldl (.|.) 0x00 . fmap (bit . joypadIndex) $ case s ^. select of
-    SelectButton    -> filter button $ toList (s ^. pressed)
-    SelectDirection -> filter direction $ toList (s ^. pressed)
+loadJoypad s 0xff00 = case s ^. select of
+    Just SelectButton    -> foldl (.|.) 0x20 . fmap (bit . joypadIndex) $ filter button    $ toList (s ^. pressed)
+    Just SelectDirection -> foldl (.|.) 0x10 . fmap (bit . joypadIndex) $ filter direction $ toList (s ^. pressed)
+    _ -> 0x00
 loadJoypad _ _ = error "loadJoypad: not in range"
