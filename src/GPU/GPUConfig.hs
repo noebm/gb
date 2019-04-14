@@ -89,11 +89,27 @@ gpuModeDuration ModeVBlank = 456
 gpuModeDuration ModeOAM    = 80
 gpuModeDuration ModeVRAM   = 172
 
+clearInterrupts :: GPUConfig -> GPUConfig
+clearInterrupts gpu = gpu
+  { gpuOAMInterrupt      = False
+  , gpuVblankInterrupt   = False
+  , gpuHblankInterrupt   = False
+  , gpuYCompareInterrupt = False
+  }
+
+updateStatusInterrupts :: GPUConfig -> GPUConfig
+updateStatusInterrupts gpu = case gpuMode gpu of
+  ModeOAM    -> gpu' { gpuOAMInterrupt = True, gpuYCompareInterrupt = gpuYAtCompare gpu }
+  ModeHBlank -> gpu' { gpuHblankInterrupt = True }
+  ModeVBlank -> gpu' { gpuVblankInterrupt = True, gpuYCompareInterrupt = gpuYAtCompare gpu }
+  _ -> gpu'
+  where gpu' = clearInterrupts gpu
+
 updateGPUConfig :: Word -> GPUConfig -> Maybe (Word, GPUConfig)
 updateGPUConfig cycles g = do
   let cyclesMode = gpuModeDuration (gpuMode g)
   guard (cycles >= cyclesMode)
-  return (cycles - cyclesMode, gpuNextConfig g)
+  return (cycles - cyclesMode, updateStatusInterrupts $ gpuNextConfig g)
 
 gpuNextConfig :: GPUConfig -> GPUConfig
 gpuNextConfig g = case gpuMode g of

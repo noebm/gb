@@ -20,6 +20,7 @@ import Instruction.Interpret
 import Instruction.Instruction
 import Instruction.Disassembler
 import Interrupt.Interrupt
+import Interrupt.InterruptType
 
 import Cartridge.Cartridge
 
@@ -36,7 +37,20 @@ updateCPU = do
 
   return i
 
+gpuInterrupts :: MonadIO m => GPUState -> GB m ()
+gpuInterrupts gpu = do
+  let conf = gpuConfig gpu
+  let lcdInterrupts = [ gpuOAMInterrupt, gpuHblankInterrupt, gpuYCompareInterrupt ]
+  i <- getInterrupt
+  when (any ($ conf) lcdInterrupts) $ do
+    let iLCD = interruptLCD i
+    putInterrupt $ i { interruptLCD = iLCD { interruptFlag = True } }
+  when (gpuVblankInterrupt conf) $ do
+    let iVBLK = interruptVBlank i
+    putInterrupt $ i { interruptLCD = iVBLK { interruptFlag = True } }
+
 updateGraphics gfx = updateGPU $ \gpu -> do
+  gpuInterrupts gpu
   let conf = gpuConfig gpu
   case gpuMode conf of
     ModeVBlank | gpuYCoordinate conf == 144 -> renderGraphics gfx
