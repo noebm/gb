@@ -27,13 +27,35 @@ import Cartridge.Cartridge
 import GPU.GPUState
 import GPU.Drawing
 
+import Joypad (Joypad(..))
+import SDL.Input.Keyboard
+
+joypadMapping :: Joypad -> Scancode
+joypadMapping JoypadUp    = ScancodeUp
+joypadMapping JoypadDown  = ScancodeDown
+joypadMapping JoypadLeft  = ScancodeLeft
+joypadMapping JoypadRight = ScancodeRight
+
+joypadMapping JoypadA = ScancodeZ
+joypadMapping JoypadB = ScancodeX
+joypadMapping JoypadStart  = ScancodeKPEnter
+joypadMapping JoypadSelect = ScancodeSpace
+
+updateJoypad = do
+  f <- getKeyboardState
+  changed <- updateJoypadGB $ f . joypadMapping
+  when changed $ do
+    i <- getInterrupt
+    let iJOY = interruptJoypad i
+    putInterrupt $ i { interruptJoypad = iJOY { interruptFlag = True } }
+
 updateCPU = do
   processInterrupts
 
   i <- parseInstructionM byte
   -- i <- disassemble
   dt <- interpretM i
-  advCycles dt
+  advCycles dt --  * 4)
 
   return i
 
@@ -54,9 +76,6 @@ updateGraphics gfx = updateGPU $ \gpu -> do
   let conf = gpuConfig gpu
   case gpuMode conf of
     ModeVBlank | gpuYCoordinate conf == 144 -> renderGraphics gfx
-    -- ModeVBlank -> do
-    --   liftIO $ print (gpuYCoordinate conf)
-    --   renderGraphics gfx
     ModeHBlank -> genPixelRow (image gfx) gpu
     _ -> return ()
 
@@ -88,6 +107,7 @@ someFunc fp' = do
             i <- updateCPU
             forM_ logger $ \f -> liftIO $ f pc i
           updateGraphics fx
+          updateJoypad
 
     let runTillStop fx = do
           update fx

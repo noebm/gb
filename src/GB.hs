@@ -3,6 +3,7 @@ module GB
 ( MonadEmulator(..)
 , GB
 , runGB
+, updateJoypadGB
 , showRegisters
 )
 where
@@ -21,6 +22,7 @@ import MonadEmulator
 import GPU.GPUState
 import Interrupt.Interrupt
 import Cartridge.Cartridge
+import Joypad
 
 data GBState s = GBState
   { addressSpace :: MVector s Word8
@@ -29,6 +31,7 @@ data GBState s = GBState
 
   , gbInterrupt :: STRef s InterruptState
   , gbGPU       :: STRef s GPUState
+  , gbJoypad    :: STRef s JoypadState
 
   , gbCartridge   :: CartridgeState s
   }
@@ -50,12 +53,22 @@ makeGBState cart = do
     <*> newSTRef False
     <*> newSTRef defaultInterruptState
     <*> newSTRef defaultGPUState
+    <*> newSTRef defaultJoypadState
     <*> pure cart
 
 runGB :: MonadIO m => CartridgeState RealWorld -> GB m a -> m a
 runGB cart (GBT x) = do
   gbState <- liftIO $ stToIO $ makeGBState cart
   runReaderT x gbState
+
+updateJoypadGB :: MonadIO m => (Joypad -> Bool) -> GB m Bool
+updateJoypadGB f = GBT $ do
+  ref <- asks gbJoypad
+  liftIO . stToIO $ do
+    s0 <- readSTRef ref
+    let (s1 , changed) = updateJoypad f s0
+    writeSTRef ref s1
+    return changed
 
 {-# INLINE reg8index #-}
 reg8index :: Reg8 -> Int
