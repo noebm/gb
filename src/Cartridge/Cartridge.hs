@@ -18,7 +18,7 @@ import Control.Lens
 import Control.Monad.Primitive
 import Control.Monad
 
-import VectorUtils
+import Utilities.Vector
 
 {-
 data Cartridge = Cartridge

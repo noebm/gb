@@ -13,7 +13,7 @@ import SDL.Video
 import SDL.Vect
 import Control.Monad.IO.Class
 
-import VectorUtils
+import Utilities.Vector
 
 backgroundLine :: GPUConfig -> VideoRAM -> Word8 -> VS.Vector (V4 Word8)
 backgroundLine g vram y = VS.generate 160 $ \x ->

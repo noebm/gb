@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
-module VectorUtils
+module Utilities.Vector
   ( byteStringToVector
   , vectorToByteString
   )
