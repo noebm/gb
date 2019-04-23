@@ -20,6 +20,8 @@ import Control.Monad
 
 import Utilities.Vector
 
+import Cartridge.BootRom
+
 {-
 data Cartridge = Cartridge
   { header' :: Header.Header
@@ -73,9 +75,6 @@ makeCartridge boot (Rom h xs) = do
 
   return $ CartridgeState h boot bootEnable rom romIndex ramEnable ram
 
-loadBootRom :: Word16 -> BootRom -> Word8
-loadBootRom addr (BootRom xs) = xs VU.! fromIntegral addr
-
 {-# INLINE inCartridgeRange #-}
 inCartridgeRange :: (Num a, Ord a, Eq a) => a -> Bool
 inCartridgeRange addr
@@ -124,16 +123,6 @@ readRom fp = do
     when (VU.length vs `mod` 0x4000 /= 0) $ Left $ printf "readRom: file has invalid length 0x%x" (VU.length vs)
     h <- maybe (Left "readRom: reader parsing failed") Right $ Header.header bytes
     return (Rom h vs)
-
-newtype BootRom = BootRom (VU.Vector Word8)
-
-readBootRom :: FilePath -> IO (Either String BootRom)
-readBootRom fp = do
-  bytes <- B.readFile fp
-  let vs = byteStringToVector bytes
-  return $ do
-    when (VU.length vs /= 0x100) $ Left "readBootRom: invalid length"
-    return $ BootRom vs
 
 storeMBC :: PrimMonad m => MBCType -> Word16 -> Word8 -> CartridgeState (PrimState m) -> m () -- RomBank s
 storeMBC OnlyROM addr _ _

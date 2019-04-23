@@ -23,6 +23,7 @@ import Interrupt.Interrupt
 import Interrupt.InterruptType
 
 import Cartridge.Cartridge
+import Cartridge.BootRom
 
 import GPU.GPUState
 import GPU.Drawing
