@@ -28,11 +28,14 @@ data Joypad
   | JoypadSelect
   | JoypadA
   | JoypadB
-  deriving (Enum, Ord, Eq)
+  deriving (Enum, Ord, Eq, Show)
 
+{-# INLINE joypadAll #-}
 joypadAll :: Set.Set Joypad
 joypadAll = Set.fromList $ enumFrom (toEnum 0)
 
+{-# INLINE direction #-}
+{-# INLINE button #-}
 direction :: Joypad -> Bool
 direction b = case b of
   JoypadLeft  -> True
@@ -57,11 +60,15 @@ joypadIndex b = case b of
   JoypadA      -> 0
 
 data JoypadSelect = SelectDirection | SelectButton
+  deriving (Show)
+
+selected SelectButton = filtered button
+selected SelectDirection = filtered direction
 
 data JoypadState = JoypadState
   { _select :: Maybe JoypadSelect
   , _pressed :: Set.Set Joypad
-  }
+  } deriving (Show)
 
 makeLenses ''JoypadState
 
@@ -71,10 +78,8 @@ defaultJoypadState = JoypadState Nothing Set.empty
 updateJoypad :: (Joypad -> Bool) -> JoypadState -> (JoypadState , Bool)
 updateJoypad f s =
   let s' = s & pressed .~ Set.filter f joypadAll
-  in (,) s' $ case s ^. select of
-    Just SelectButton    -> (s ^.. pressed.folded.filtered button)    == (s' ^.. pressed.folded.filtered button)
-    Just SelectDirection -> (s ^.. pressed.folded.filtered direction) == (s' ^.. pressed.folded.filtered direction)
-    _ -> False
+      g t x = t ^.. pressed.folded.selected x
+  in (,) s' $ maybe False (\x -> g s x == g s' x) (s' ^. select)
 
 inJoypadRange :: Word16 -> Bool
 inJoypadRange addr = addr == 0xff00

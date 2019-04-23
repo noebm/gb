@@ -3,8 +3,11 @@ module GB
 ( MonadEmulator(..)
 , GB
 , runGB
-, updateJoypadGB
 , showRegisters
+
+, updateJoypadGB
+, getJoypad
+, putJoypad
 )
 where
 
@@ -60,6 +63,12 @@ runGB :: MonadIO m => CartridgeState RealWorld -> GB m a -> m a
 runGB cart (GBT x) = do
   gbState <- liftIO $ stToIO $ makeGBState cart
   runReaderT x gbState
+
+getJoypad :: MonadIO m => GB m JoypadState
+getJoypad = GBT $ getSTRef gbJoypad
+
+putJoypad :: MonadIO m => JoypadState -> GB m ()
+putJoypad s = GBT $ putSTRef gbJoypad s
 
 updateJoypadGB :: MonadIO m => (Joypad -> Bool) -> GB m Bool
 updateJoypadGB f = GBT $ do
@@ -120,6 +129,9 @@ loadAddr idx
   | inCartridgeRange idx = GBT $ do
       cart <- asks gbCartridge
       liftIO $ loadCartridge cart (fromIntegral idx)
+  | idx < 0xffff && inJoypadRange (fromIntegral idx) = GBT $ do
+      s <- getSTRef gbJoypad
+      return $ loadJoypad s (fromIntegral idx)
   | echoRam idx          = loadAddr (idx - 0x2000)
   | 0xFEA0 <= idx && idx < 0xFF00 = return 0xff
   | otherwise = GBT $ do
@@ -145,6 +157,9 @@ storeAddr idx b
   | inCartridgeRange idx = GBT $ do
       cart <- asks gbCartridge
       liftIO $ storeCartridge (fromIntegral idx) b cart
+  | idx < 0xffff && inJoypadRange (fromIntegral idx) = GBT $ do
+      s <- getSTRef gbJoypad
+      putSTRef gbJoypad $ storeJoypad (fromIntegral idx) b s
   | echoRam idx          = storeAddr (idx - 0x2000) b
   | 0xFEA0 <= idx && idx < 0xFF00 = return ()
   | otherwise = GBT $ do

@@ -29,6 +29,16 @@ import GPU.Drawing
 
 import Joypad (Joypad(..))
 import SDL.Input.Keyboard
+import SDL.Input.Keyboard.Codes
+
+import qualified SDL
+import Data.Maybe
+import Control.Applicative
+import Control.Lens
+import Data.Traversable
+
+import Utilities.SDL
+import qualified Data.Set as Set
 
 joypadMapping :: Joypad -> Scancode
 joypadMapping JoypadUp    = ScancodeUp
@@ -38,16 +48,38 @@ joypadMapping JoypadRight = ScancodeRight
 
 joypadMapping JoypadA = ScancodeZ
 joypadMapping JoypadB = ScancodeX
-joypadMapping JoypadStart  = ScancodeKPEnter
+joypadMapping JoypadStart  = ScancodeReturn
 joypadMapping JoypadSelect = ScancodeSpace
 
-updateJoypad = do
-  f <- getKeyboardState
+-- keyboardEvents :: MonadIO m => m ()
+keyboardEvents s = do
+  evs <- SDL.pollEvents <&> toListOf (traverse . eventPayload . _KeyboardEvent)
+  let aux :: SDL.KeyboardEventData -> Set.Set Scancode -> Set.Set Scancode
+      aux k = case k ^. keyMotion of
+        SDL.Pressed  -> Set.insert sc
+        SDL.Released -> Set.delete sc
+        where sc = k ^. keyKeysym.keyScancode
+  return $ foldrOf folded aux s evs
+
+-- keyboardEvents :: MonadIO m => m ( Scancode -> Bool )
+-- keyboardEvents = do
+--   evs <- SDL.pollEvents
+--   keys <- fmap catMaybes $ for evs $ \ev -> case SDL.eventPayload ev of
+--     SDL.KeyboardEvent (SDL.KeyboardEventData _ SDL.Pressed _ (Keysym k _ _)) -> return (Just k)
+--     _ -> return Nothing
+-- 
+--   return $ \x -> x `elem` keys
+
+updateJoypad s = do
+  s' <- keyboardEvents s
+  let f x = x `Set.member` s'
+  -- liftIO . print =<< getJoypad
   changed <- updateJoypadGB $ f . joypadMapping
   when changed $ do
     i <- getInterrupt
     let iJOY = interruptJoypad i
-    putInterrupt $ i { interruptJoypad = iJOY { interruptFlag = True } }
+    putInterrupt $ i { interruptJoypad = iJOY { interruptFlag = True }}
+  return s'
 
 updateCPU = do
   processInterrupts
@@ -101,18 +133,18 @@ someFunc fp' = do
       -- logger = Just $ \addr i -> do
       --   when (addr > 0xFF) $ putStrLn $ printf "0x%04x: %s" addr (show i)
 
-    let update fx = do
-          forM_ [0..0] $ \_ -> do
-            pc <- load16 (Register16 PC)
-            i <- updateCPU
-            forM_ logger $ \f -> liftIO $ f pc i
+    let update fx s = do
+          -- forM_ [0..0] $ \_ -> do
+          pc <- load16 (Register16 PC)
+          i <- updateCPU
+          forM_ logger $ \f -> liftIO $ f pc i
           updateGraphics fx
-          updateJoypad
+          updateJoypad s
 
-    let runTillStop fx = do
-          update fx
+    let runTillStop fx s0 = do
+          s1 <- update fx s0
           s <- stop
-          unless s $ runTillStop fx
+          unless s $ runTillStop fx s1
 
     gfx <- initializeGraphics
-    runTillStop gfx
+    runTillStop gfx Set.empty
