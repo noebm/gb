@@ -88,7 +88,7 @@ updateCPU = do
   -- i <- disassemble
   dt <- interpretM i
   -- advCycles dt --  * 4)
-  advCycles $ dt * 4
+  advCycles $ dt
 
   return i
 
