@@ -50,16 +50,19 @@ data Header = Header
   deriving Show
 
 header :: ByteString -> Maybe Header
-header bs = do
-  guard $ B.length bs >= 0x150
+header bs = either (const Nothing) Just $ do
+  unless (B.length bs >= 0x150) $ Left "file too short"
   let (crc, crc') = checksumHeader bs
-  guard (crc == crc')
+  unless (crc == crc') $ Left "invalid checksum"
+  ram <- ramBanks bs
+  loc <- locale bs
+  cartTy <- cartridgeType (bs `B.index` 0x147)
   return $ Header
     { headerTitle = title bs
-    , headerType = cartridgeType (bs `B.index` 0x147)
+    , headerType = cartTy
     , headerRomBanks = romBanks bs
-    , headerRamBanks = ramBanks bs
-    , headerLocale = locale bs
+    , headerRamBanks = ram
+    , headerLocale = loc
     }
 
 checksumHeader :: ByteString -> (Word8 , Word8)
@@ -71,31 +74,32 @@ checksumHeader bs = (foldl (\x y -> x - y - 1) 0 checksumData, headerChecksum)
 title :: ByteString -> ByteString
 title = B.take 16 . B.takeWhile (/= 0) . B.drop 0x134
 
-cartridgeType :: Word8 -> CartridgeType
-cartridgeType 0 = CartridgeType OnlyROM []
-cartridgeType 8 = CartridgeType OnlyROM [ HasRAM ]
-cartridgeType 9 = CartridgeType OnlyROM [ HasRAM, IsPersistent ]
+cartridgeType :: Word8 -> Either String CartridgeType
+cartridgeType 0 = Right $ CartridgeType OnlyROM []
+cartridgeType 8 = Right $ CartridgeType OnlyROM [ HasRAM ]
+cartridgeType 9 = Right $ CartridgeType OnlyROM [ HasRAM, IsPersistent ]
 
-cartridgeType 1 = CartridgeType MBC1 []
-cartridgeType 2 = CartridgeType MBC1 [ HasRAM ]
-cartridgeType 3 = CartridgeType MBC1 [ HasRAM, IsPersistent ]
+cartridgeType 1 = Right $ CartridgeType MBC1 []
+cartridgeType 2 = Right $ CartridgeType MBC1 [ HasRAM ]
+cartridgeType 3 = Right $ CartridgeType MBC1 [ HasRAM, IsPersistent ]
 
-cartridgeType 5 = CartridgeType MBC2 []
-cartridgeType 6 = CartridgeType MBC2 [ IsPersistent ]
+cartridgeType 5 = Right $ CartridgeType MBC2 []
+cartridgeType 6 = Right $ CartridgeType MBC2 [ IsPersistent ]
+cartridgeType x = Left $ "cartridgetype invalid / not supported " ++ show x
 
 romBanks :: ByteString -> Word
 romBanks bs = 4 * fromIntegral (bs `B.index` 0x148)
 
-locale :: ByteString -> Word8
-locale bs = bs `B.index` 0x14A
+locale :: ByteString -> Either String Word8
+locale bs = Right $ bs `B.index` 0x14A
 
-ramBanks :: ByteString -> Word
+ramBanks :: ByteString -> Either String Word
 ramBanks bs = case bs `B.index` 0x149 of
-  0x00 -> 0
-  0x01 -> 2
-  0x02 -> 8
-  0x03 -> 32
-  _ -> error "RAM size not defined"
+  0x00 -> Right 0
+  0x01 -> Right 2
+  0x02 -> Right 8
+  0x03 -> Right 32
+  _ -> Left "RAM size not defined"
 
 -- cartridgeTypeSupported :: Word8 -> Bool
 -- cartridgeTypeSupported 0x00 = True
