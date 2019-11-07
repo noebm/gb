@@ -26,8 +26,10 @@ dependencies:
 - bytestring
 - vector
 - primitive
+- attoparsec
 
 - mtl
+- comonad
 - lens
 - sdl2
 
