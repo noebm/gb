@@ -1,5 +1,4 @@
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE LambdaCase #-}
 module Lib
 where
 
@@ -120,7 +119,7 @@ setupCartridge fpBoot fpRom = do
   bootrom' <- fmap eitherError <$> mapM readBootRom fpBoot
   c <- mapM (makeCartridge bootrom') rom
   c' <- defaultCartridge
-  return $ maybe c' id c
+  return $ fromMaybe c' c
 
 someFunc :: Maybe FilePath -> IO ()
 someFunc fp' = do
