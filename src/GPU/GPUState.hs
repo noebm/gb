@@ -83,7 +83,7 @@ loadGPU g addr
   where conf = gpuConfig g
 
 storeGPU :: GPUState -> Word16 -> Word8 -> GPUState
-storeGPU g@(GPUState { gpuConfig = conf }) addr b
+storeGPU g@GPUState { gpuConfig = conf } addr b
   | inVideoRAM addr =
     maybe g (\x -> g { gpuVideoRAMUpdates = x : gpuVideoRAMUpdates g })
     $ storeVideoRAM conf addr b

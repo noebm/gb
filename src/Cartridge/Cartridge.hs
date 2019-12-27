@@ -97,7 +97,7 @@ loadCartridge s addr
   | inRamRange addr = do
       e <- stToPrim $ readSTRef (ramBanksEnable s)
       if e
-        then do
+        then
         (`loadRam` addr) <$> stToPrim (readSTRef $ ramBanks s)
         else return 0xff
   | addr == 0xff50 =
