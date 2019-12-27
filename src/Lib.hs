@@ -88,8 +88,7 @@ updateCPU = do
   i <- parseInstructionM byte
   -- i <- disassemble
   dt <- interpretM i
-  -- advCycles dt --  * 4)
-  advCycles $ dt
+  advCycles $ 4 * dt
 
   return i
 
