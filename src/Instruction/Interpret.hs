@@ -122,11 +122,11 @@ daa = do
   v <- load8 (Register8 A)
   let vcorr'
         | f ^. flagN
-        = if f ^. flagC then 0x60 else 0x00
-        + if f ^. flagH then 0x06 else 0x00
+        = (if f ^. flagC then 0x60 else 0x00)
+        + (if f ^. flagH then 0x06 else 0x00)
         | otherwise
-        = if f ^. flagC || v > 0x99 then 0x60 else 0x00
-        + if f ^. flagH || v > 0x09 then 0x06 else 0x00
+        = (if f ^. flagC || v > 0x99              then 0x60 else 0x00)
+        + (if (f ^. flagH) || (v .&. 0x0f) > 0x09 then 0x06 else 0x00)
   let v' = if f ^. flagN then v - vcorr' else v + vcorr'
   store8 (Register8 A) v'
   modifyFlags $ \k -> k
