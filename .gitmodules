@@ -1,6 +1,0 @@
-[submodule "gb-test-roms"]
-	path = gb-test-roms
-	url = https://github.com/retrio/gb-test-roms
-[submodule "gbc-hw-tests"]
-	path = gbc-hw-tests
-	url = https://github.com/AntonioND/gbc-hw-tests
