@@ -205,7 +205,7 @@ addRelative addr x = fromIntegral $ (fromIntegral addr :: Int) + fromIntegral x
 jumpRelative :: MonadEmulator m => Int8 -> m ()
 jumpRelative addrdiff = do
   pc <- load16 (Register16 PC)
-  store16 (Register16 PC) $ addRelative pc addrdiff
+  jump $ addRelative pc addrdiff
 
 push :: MonadEmulator m => Word16 -> m ()
 push w = do
@@ -230,4 +230,4 @@ ret = jump =<< pop
 restart :: MonadEmulator m => Word8 -> m ()
 restart b = do
   push =<< load16 (Register16 PC)
-  store16 (Register16 PC) $ (0x00, b) ^. word16
+  jump $ (0x00, b) ^. word16
