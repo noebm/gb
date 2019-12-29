@@ -51,7 +51,7 @@ joypadMapping JoypadB = ScancodeX
 joypadMapping JoypadStart  = ScancodeReturn
 joypadMapping JoypadSelect = ScancodeSpace
 
--- keyboardEvents :: MonadIO m => m ()
+keyboardEvents :: MonadIO m => Set.Set Scancode -> m (Set.Set Scancode)
 keyboardEvents s = do
   evs <- SDL.pollEvents <&> toListOf (traverse . eventPayload . _KeyboardEvent)
   let aux :: SDL.KeyboardEventData -> Set.Set Scancode -> Set.Set Scancode
@@ -60,15 +60,6 @@ keyboardEvents s = do
         SDL.Released -> Set.delete sc
         where sc = k ^. keyKeysym.keyScancode
   return $ foldrOf folded aux s evs
-
--- keyboardEvents :: MonadIO m => m ( Scancode -> Bool )
--- keyboardEvents = do
---   evs <- SDL.pollEvents
---   keys <- fmap catMaybes $ for evs $ \ev -> case SDL.eventPayload ev of
---     SDL.KeyboardEvent (SDL.KeyboardEventData _ SDL.Pressed _ (Keysym k _ _)) -> return (Just k)
---     _ -> return Nothing
--- 
---   return $ \x -> x `elem` keys
 
 updateJoypad s = do
   s' <- keyboardEvents s
@@ -81,14 +72,12 @@ updateJoypad s = do
     putInterrupt $ i { interruptJoypad = iJOY { interruptFlag = True }}
   return s'
 
+updateCPU :: MonadEmulator m => m (Instruction Arg)
 updateCPU = do
   processInterrupts
-
   i <- parseInstructionM byte
-  -- i <- disassemble
   dt <- interpretM i
   advCycles $ 4 * dt
-
   return i
 
 gpuInterrupts :: MonadIO m => GPUState -> GB m ()
