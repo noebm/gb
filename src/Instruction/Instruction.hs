@@ -212,7 +212,7 @@ parseInstruction b =
     case byteCodeDecompose b of
 
     (0,0,0) -> o NOP  (ConstantTime 4)  []
-    (0,2,0) -> o STOP (ConstantTime 0)  []
+    (0,2,0) -> o STOP (ConstantTime 4)  []
     (0,1,0) -> o LD   (ConstantTime 20) [ ArgPointerImm16, ArgDirect16 SP ]
     (0,3,0) -> o JR   (ConstantTime 12) [ AddressRel ]
     (0,y,0) -> o JR   (VariableTime 8 12) [ ArgFlag $! flag (y .&. 0x3), AddressRel ]
@@ -261,7 +261,7 @@ parseInstruction b =
     (0,6,7) -> o SCF (ConstantTime 4) []
     (0,7,7) -> o CCF (ConstantTime 4) []
 
-    (1,6,6) -> o HALT (ConstantTime 0) []
+    (1,6,6) -> o HALT (ConstantTime 4) []
     (1,y,z) -> o LD   (ConstantTime $ if y == 6 || z == 6 then 8 else 4) [ basicRegisterArg y, basicRegisterArg z ]
 
     (2,y,z) -> o (aluMnemonic y) (ConstantTime $ if z == 6 then 8 else 4) [ basicRegisterArg z ]
@@ -280,7 +280,7 @@ parseInstruction b =
     (3,1,1) -> o RET  (ConstantTime 16) []
     (3,3,1) -> o RETI (ConstantTime 16) []
     (3,5,1) -> o JP   (ConstantTime  4) [ ArgDirect16 HL ]
-    (3,7,1) -> o LD   (ConstantTime 12) [ ArgDirect16 SP, ArgDirect16 HL ]
+    (3,7,1) -> o LD   (ConstantTime 8) [ ArgDirect16 SP, ArgDirect16 HL ]
 
     (3,4,2) -> o LD (ConstantTime 8) [ ArgPointerRegFF C, ArgDirect8 A ]
     (3,6,2) -> o LD (ConstantTime 8) [ ArgDirect8 A, ArgPointerRegFF C ]
