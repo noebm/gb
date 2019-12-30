@@ -80,7 +80,7 @@ updateCPU = do
   advCycles $ 4 * dt
   return i
 
-gpuInterrupts :: MonadIO m => GPUState -> GB m ()
+gpuInterrupts :: (MonadIO m, MonadEmulator m) => GPUState -> m ()
 gpuInterrupts gpu = do
   let conf = gpuConfig gpu
   let lcdInterrupts = [ gpuOAMInterrupt, gpuHblankInterrupt, gpuYCompareInterrupt ]
@@ -92,6 +92,7 @@ gpuInterrupts gpu = do
     let iVBLK = interruptVBlank i
     putInterrupt $ i { interruptLCD = iVBLK { interruptFlag = True } }
 
+updateGraphics :: (MonadIO m , MonadEmulator m) => GraphicsContext -> m (Maybe ())
 updateGraphics gfx = updateGPU $ \gpu -> do
   gpuInterrupts gpu
   let conf = gpuConfig gpu
