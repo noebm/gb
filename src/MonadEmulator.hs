@@ -40,6 +40,7 @@ import Data.Int
 
 import GPU.GPUState
 import Interrupt.Interrupt
+import Interrupt.InterruptType
 
 data Reg8 = A | B | C | D | E | F | H | L
   deriving (Eq, Show)
@@ -118,7 +119,20 @@ updateGPU f = do
     putGPU gpu'
     _ <- resetCycles
     advCycles cyc'
+    gpuInterrupts gpu'
     f gpu'
+
+gpuInterrupts :: MonadEmulator m => GPUState -> m ()
+gpuInterrupts gpu = do
+  let conf = gpuConfig gpu
+  let lcdInterrupts = [ gpuOAMInterrupt, gpuHblankInterrupt, gpuYCompareInterrupt ]
+  i <- getInterrupt
+  when (any ($ conf) lcdInterrupts) $ do
+    let iLCD = interruptLCD i
+    putInterrupt $ i { interruptLCD = iLCD { interruptFlag = True } }
+  when (gpuVblankInterrupt conf) $ do
+    let iVBLK = interruptVBlank i
+    putInterrupt $ i { interruptVBlank = iVBLK { interruptFlag = True } }
 
 {-# INLINE aux0 #-}
 {-# INLINE aux1 #-}
