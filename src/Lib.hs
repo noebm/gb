@@ -90,7 +90,7 @@ gpuInterrupts gpu = do
     putInterrupt $ i { interruptLCD = iLCD { interruptFlag = True } }
   when (gpuVblankInterrupt conf) $ do
     let iVBLK = interruptVBlank i
-    putInterrupt $ i { interruptLCD = iVBLK { interruptFlag = True } }
+    putInterrupt $ i { interruptVBlank = iVBLK { interruptFlag = True } }
 
 updateGraphics :: (MonadIO m , MonadEmulator m) => GraphicsContext -> m (Maybe ())
 updateGraphics gfx = updateGPU $ \gpu -> do
