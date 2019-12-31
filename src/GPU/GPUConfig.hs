@@ -176,13 +176,13 @@ loadGPUConfig g 0xFF40 = foldl (.|.) 0x00
    , if gpuOBJDisplay          g then bit 1 else 0x00
    , if gpuPriority            g then bit 0 else 0x00
    ]
-loadGPUConfig g 0xFF41 = foldl (.|.) 0x00
+loadGPUConfig g 0xFF41 = foldl (.|.) 0x80
   [ if gpuYCompareInterrupt g then bit 6 else 0x00
   , if gpuOAMInterrupt      g then bit 5 else 0x00
   , if gpuVblankInterrupt   g then bit 4 else 0x00
   , if gpuHblankInterrupt   g then bit 3 else 0x00
   , if gpuYAtCompare        g then bit 2 else 0x00
-  , gpuModeNumber g
+  , if gpuEnabled g then gpuModeNumber g else 0x00
   ]
 loadGPUConfig g 0xFF42 = gpuScrollY g
 loadGPUConfig g 0xFF43 = gpuScrollX g
