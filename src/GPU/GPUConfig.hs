@@ -113,10 +113,10 @@ updateGPUConfig cycles g = do
 
 gpuNextConfig :: GPUConfig -> GPUConfig
 gpuNextConfig g = case gpuMode g of
-  ModeHBlank -> if y == 144
-                then g { gpuMode = ModeVBlank }
-                else g { gpuMode = ModeOAM , gpuYCoordinate = y + 1 }
-  ModeVBlank -> if gpuYCoordinate g == 154
+  ModeHBlank -> if y == 143
+                then g { gpuMode = ModeVBlank , gpuYCoordinate = y + 1 }
+                else g { gpuMode = ModeOAM    , gpuYCoordinate = y + 1 }
+  ModeVBlank -> if gpuYCoordinate g == 153
                 then g { gpuMode = ModeOAM , gpuYCoordinate = 0 }
                 else g { gpuYCoordinate = y + 1 }
   ModeOAM    -> g { gpuMode = ModeVRAM   }
