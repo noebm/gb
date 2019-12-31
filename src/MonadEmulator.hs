@@ -104,12 +104,12 @@ class Monad m => MonadEmulator m where
   putInterrupt :: InterruptState -> m ()
 
 getIEM :: MonadEmulator m => m Bool
-getIEM   = interruptStateEnabled <$> getInterrupt
+getIEM   = interruptMasterEnableFlag <$> getInterrupt
 
 setIEM :: MonadEmulator m => Bool -> m ()
 setIEM b = do
   s <- getInterrupt
-  putInterrupt $ s { interruptStateEnabled = b }
+  putInterrupt $ s { interruptMasterEnableFlag = b }
 
 updateGPU :: MonadEmulator m => (GPUState -> m a) -> m (Maybe a)
 updateGPU f = do

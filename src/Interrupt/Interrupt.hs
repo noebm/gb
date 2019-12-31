@@ -24,7 +24,7 @@ data InterruptState = InterruptState
   , interruptTimer  :: InterruptType
   , interruptSerial :: InterruptType
   , interruptJoypad :: InterruptType
-  , interruptStateEnabled :: Bool
+  , interruptMasterEnableFlag :: Bool
   } deriving (Show)
 
 defaultInterruptState :: InterruptState
@@ -32,7 +32,7 @@ defaultInterruptState = InterruptState d d d d d False
   where d = defaultInterruptType
 
 disableInterruptState :: InterruptState -> InterruptState
-disableInterruptState s = s { interruptStateEnabled = False }
+disableInterruptState s = s { interruptMasterEnableFlag = False }
 
 data Interrupt = INTVBLANK | INTLCD | INTTIMER | INTSERIAL | INTJOYPAD
   deriving (Enum, Show)
@@ -67,7 +67,7 @@ checkForInterrupts is
 
 handleInterrupt :: InterruptState -> Maybe (Interrupt, InterruptState)
 handleInterrupt s = do
-  guard (interruptStateEnabled s)
+  guard (interruptMasterEnableFlag s)
   i <- checkForInterrupts s
   let s' = disableInterruptState $ setInterrupt i clear s
   return (i , s')
