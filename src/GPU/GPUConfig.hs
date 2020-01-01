@@ -157,7 +157,7 @@ storeGPUConfig g 0xFF42 b = g { gpuScrollY = b }
 storeGPUConfig g 0xFF43 b = g { gpuScrollX = b }
 storeGPUConfig g 0xFF44 _ = g
 storeGPUConfig g 0xFF45 b = g { gpuYCompare = b }
-storeGPUConfig g 0xFF46 _ = g -- ??? dma transfer ... should be handled separately
+-- storeGPUConfig g 0xFF46 _ = g -- ??? dma transfer ... should be handled separately
 storeGPUConfig g 0xFF47 b = g { gpuBGPalette   = Palette b } -- non CBG mode only
 storeGPUConfig g 0xFF48 b = g { gpuOBJ0Palette = Palette b } -- non CBG mode only
 storeGPUConfig g 0xFF49 b = g { gpuOBJ1Palette = Palette b } -- non CBG mode only

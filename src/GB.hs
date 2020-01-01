@@ -147,6 +147,10 @@ putSTRef f x = liftIO . stToIO . (`writeSTRef` x) =<< asks f
 {-# INLINE storeAddr #-}
 storeAddr :: MonadIO m => Int -> Word8 -> GB m ()
 storeAddr idx b
+  | idx == 0xff46 = do
+      gpu <- GBT $ getSTRef gbGPU
+      gpu' <- dmaTransfer (loadAddr . fromIntegral) ((b , 0x00) ^. word16) gpu
+      GBT $ putSTRef gbGPU gpu'
   | inGPURange idx = GBT $ do
       gpu <- getSTRef gbGPU
       let gpu' = storeGPU gpu (fromIntegral idx) b

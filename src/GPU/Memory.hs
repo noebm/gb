@@ -18,13 +18,11 @@ module GPU.Memory
   , storeVideoRAM
   , dumpVideoRAM
 
-  , OAM
+  , OAM (..)
   , defaultOAM
   , loadOAM
   , storeOAM
   , dumpOAM
-
-  , dmaTransfer
   )
 where
 
@@ -96,12 +94,6 @@ storeVideoRAM :: GPUConfig -> Word16 -> Word8 -> Maybe MemoryUpdate
 storeVideoRAM GPUConfig { gpuMode = mode } addr b = do
   guard (mode /= ModeVRAM)
   return ( fromIntegral addr .&. 0x1fff , b )
-
-{-# INLINE dmaTransfer #-}
-dmaTransfer :: Vector Word8 -> OAM
-dmaTransfer xs
-  | VU.length xs == 0x1F = OAM xs
-  | otherwise            = error "dmaTransfer: invalid length"
 
 {-# INLINE loadOAM #-}
 loadOAM :: GPUConfig -> OAM -> Word16 -> Maybe Word8

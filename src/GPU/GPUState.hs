@@ -3,6 +3,7 @@ module GPU.GPUState
   , GPUState (..)
   , defaultGPUState
   , updateGPUState
+  , dmaTransfer
   , loadGPU
   , storeGPU
   , inGPURange
@@ -16,6 +17,11 @@ import GPU.GPUConfig as X
 
 import Control.Monad
 import Data.Word
+import Data.Bits
+
+-- only used for dmaTransfer
+import qualified Data.Vector.Unboxed as VU
+import Data.Vector.Unboxed (Vector)
 
 -- stores updates as deltas until needed
 data GPUState = GPUState
@@ -82,12 +88,19 @@ loadGPU g addr
   | otherwise = error "loadGPU: not in range"
   where conf = gpuConfig g
 
+-- since we dont have access to MonadEmulator yet
+-- this seems the best way
+dmaTransfer :: Monad m => (Word16 -> m Word8) -> Word16 -> GPUState -> m GPUState
+dmaTransfer access baseaddr g = do
+  vec <- VU.generateM 0xa0 $ access . fromIntegral . (fromIntegral baseaddr +)
+  return $ g { gpuOAMUpdates = [] , gpuOAM = OAM vec }
+
 storeGPU :: GPUState -> Word16 -> Word8 -> GPUState
 storeGPU g@GPUState { gpuConfig = conf } addr b
   | inVideoRAM addr =
     maybe g (\x -> g { gpuVideoRAMUpdates = x : gpuVideoRAMUpdates g })
     $ storeVideoRAM conf addr b
-  | inOAM addr =
+  | inOAM addr && addr /= 0xff46 =
     maybe g (\x -> g { gpuOAMUpdates = x : gpuOAMUpdates g })
     $ storeOAM conf addr b
   | inGPUMMIO addr = g { gpuConfig = storeGPUConfig conf addr b }
