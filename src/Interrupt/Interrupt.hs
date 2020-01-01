@@ -45,12 +45,12 @@ getInterrupt INTTIMER  = interruptTimer
 getInterrupt INTSERIAL = interruptSerial
 getInterrupt INTJOYPAD = interruptJoypad
 
-setInterrupt :: Interrupt -> (InterruptType -> InterruptType) -> (InterruptState -> InterruptState)
-setInterrupt INTVBLANK f s = s { interruptVBlank = f (interruptVBlank s) }
-setInterrupt INTLCD    f s = s { interruptLCD    = f (interruptLCD    s) }
-setInterrupt INTTIMER  f s = s { interruptTimer  = f (interruptTimer  s) }
-setInterrupt INTSERIAL f s = s { interruptSerial = f (interruptSerial s) }
-setInterrupt INTJOYPAD f s = s { interruptJoypad = f (interruptJoypad s) }
+modifyInterrupt :: Interrupt -> (InterruptType -> InterruptType) -> (InterruptState -> InterruptState)
+modifyInterrupt INTVBLANK f s = s { interruptVBlank = f (interruptVBlank s) }
+modifyInterrupt INTLCD    f s = s { interruptLCD    = f (interruptLCD    s) }
+modifyInterrupt INTTIMER  f s = s { interruptTimer  = f (interruptTimer  s) }
+modifyInterrupt INTSERIAL f s = s { interruptSerial = f (interruptSerial s) }
+modifyInterrupt INTJOYPAD f s = s { interruptJoypad = f (interruptJoypad s) }
 
 {-# INLINE interruptAddress #-}
 interruptAddress :: Interrupt -> Word16
@@ -60,6 +60,7 @@ interruptAddress INTTIMER  = 0x50
 interruptAddress INTSERIAL = 0x58
 interruptAddress INTJOYPAD = 0x60
 
+-- find first set interrupt ordered by priority
 checkForInterrupts :: InterruptState -> Maybe Interrupt
 checkForInterrupts is
   = find (\i -> isTriggered (getInterrupt i is))
@@ -69,8 +70,8 @@ handleInterrupt :: InterruptState -> Maybe (Interrupt, InterruptState)
 handleInterrupt s = do
   guard (interruptMasterEnableFlag s)
   i <- checkForInterrupts s
-  let s' = disableInterruptState $ setInterrupt i clear s
-  return (i , s')
+  let s' = modifyInterrupt i clear s
+  return (i , disableInterruptState $ s')
 
 {-# INLINE interruptBit #-}
 interruptBit :: Interrupt -> Int
@@ -95,7 +96,7 @@ loadInterrupt _ _ = error "loadInterrupt: not an interrupt address"
 getInterruptBit :: Interrupt
                 -> (InterruptType -> Bool -> InterruptType)
                 -> (InterruptState -> Word8 -> InterruptState)
-getInterruptBit i f s b = setInterrupt i g s
+getInterruptBit i f s b = modifyInterrupt i g s
   where g x = f x (b `testBit` interruptBit i)
 
 updateInterruptState :: (InterruptType -> Bool -> InterruptType) -> InterruptState -> Word8 -> InterruptState
