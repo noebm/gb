@@ -101,7 +101,9 @@ updateStatusInterrupts :: GPUConfig -> GPUConfig
 updateStatusInterrupts gpu = case gpuMode gpu of
   ModeOAM    -> gpu' { gpuOAMInterrupt = True, gpuYCompareInterrupt = gpuYAtCompare gpu }
   ModeHBlank -> gpu' { gpuHblankInterrupt = True }
-  ModeVBlank -> gpu' { gpuVblankInterrupt = True, gpuYCompareInterrupt = gpuYAtCompare gpu }
+  ModeVBlank | gpuYCoordinate gpu == 144
+             -> gpu' { gpuVblankInterrupt = True, gpuYCompareInterrupt = gpuYAtCompare gpu  }
+  ModeVBlank -> gpu' { gpuYCompareInterrupt = gpuYAtCompare gpu }
   _ -> gpu'
   where gpu' = clearInterrupts gpu
 
