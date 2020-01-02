@@ -117,7 +117,12 @@ instance Show Flag where
   show FlagC  = "C"
   show FlagNC = "NC"
 
-data Instruction a = Instruction !Word8 !Mnemonic !(Time Word) ![ a ]
+data Instruction a = Instruction
+  { opcode :: !Word8
+  , mnemonic :: !Mnemonic
+  , time :: !(Time Word)
+  , arguments :: ![ a ]
+  }
 
 instance Functor Instruction where
   fmap f (Instruction code op t args) = Instruction code op t (fmap f args)
@@ -131,10 +136,6 @@ instance Traversable Instruction where
 instance Show a => Show (Instruction a) where
   show (Instruction code mnemonic t args)
     = printf "0x%02x - %s %s" code (show mnemonic) (showArgStructure $ show <$> args)
-
-{-# INLINE arguments #-}
-arguments :: Instruction a -> [ a ]
-arguments (Instruction _ _ _ args) = args
 
 {-# INLINE basicRegisterArg #-}
 basicRegisterArg :: Word8 -> Arg
