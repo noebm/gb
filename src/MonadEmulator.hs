@@ -19,6 +19,7 @@ module MonadEmulator
 
   , byte, word, sbyte
 
+  , modifyInterrupt
   , addRelative
   , jump, jumpRelative
   , push, pop
@@ -103,13 +104,13 @@ class Monad m => MonadEmulator m where
   getInterrupt :: m InterruptState
   putInterrupt :: InterruptState -> m ()
 
+modifyInterrupt f = putInterrupt . f =<< getInterrupt
+
 getIEM :: MonadEmulator m => m Bool
-getIEM   = interruptMasterEnableFlag <$> getInterrupt
+getIEM = view interruptMasterEnableFlag <$> getInterrupt
 
 setIEM :: MonadEmulator m => Bool -> m ()
-setIEM b = do
-  s <- getInterrupt
-  putInterrupt $ s { interruptMasterEnableFlag = b }
+setIEM b = modifyInterrupt $ interruptMasterEnableFlag .~ b
 
 updateGPU :: MonadEmulator m => (GPUState -> m a) -> m (Maybe a)
 updateGPU f = do
@@ -126,13 +127,10 @@ gpuInterrupts :: MonadEmulator m => GPUState -> m ()
 gpuInterrupts gpu = do
   let conf = gpuConfig gpu
   let lcdInterrupts = [ gpuOAMInterrupt, gpuHblankInterrupt, gpuYCompareInterrupt ]
-  i <- getInterrupt
-  when (any ($ conf) lcdInterrupts) $ do
-    let iLCD = interruptLCD i
-    putInterrupt $ i { interruptLCD = iLCD { interruptFlag = True } }
-  when (gpuVblankInterrupt conf) $ do
-    let iVBLK = interruptVBlank i
-    putInterrupt $ i { interruptVBlank = iVBLK { interruptFlag = True } }
+  when (any ($ conf) lcdInterrupts) $
+    modifyInterrupt $ interruptLCD.interruptFlag .~ True
+  when (gpuVblankInterrupt conf) $
+    modifyInterrupt $ interruptVBlank.interruptFlag .~ True
 
 {-# INLINE aux0 #-}
 {-# INLINE aux1 #-}

@@ -66,10 +66,8 @@ updateJoypad s = do
   let f x = x `Set.member` s'
   -- liftIO . print =<< getJoypad
   changed <- updateJoypadGB $ f . joypadMapping
-  when changed $ do
-    i <- getInterrupt
-    let iJOY = interruptJoypad i
-    putInterrupt $ i { interruptJoypad = iJOY { interruptFlag = True }}
+  when changed $
+    modifyInterrupt $ interruptJoypad . interruptFlag .~ True
   return s'
 
 updateCPU :: MonadEmulator m => m (Instruction Arg)

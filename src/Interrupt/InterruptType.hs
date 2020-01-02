@@ -1,26 +1,31 @@
+{-# LANGUAGE TemplateHaskell #-}
 module Interrupt.InterruptType where
 
+import Control.Lens
+
 data InterruptType = InterruptType
-  { interruptEnabled :: Bool
-  , interruptFlag    :: Bool
+  { _interruptEnabled :: Bool
+  , _interruptFlag    :: Bool
   } deriving (Show)
+
+makeLenses ''InterruptType
 
 defaultInterruptType :: InterruptType
 defaultInterruptType = InterruptType False False
 
-set :: InterruptType -> InterruptType
-set i
-  | interruptEnabled i = i { interruptFlag = True }
+setInterrupt :: InterruptType -> InterruptType
+setInterrupt i
+  | _interruptEnabled i = i & interruptFlag .~ True
   | otherwise = i
 
 clear :: InterruptType -> InterruptType
-clear i = i { interruptFlag = False }
+clear = interruptFlag .~ False
 
 enable :: InterruptType -> InterruptType
-enable i = i { interruptEnabled = True }
+enable = interruptEnabled .~ True
 
 disable :: InterruptType -> InterruptType
-disable i = i { interruptEnabled = False }
+disable = interruptEnabled .~ False
 
 isTriggered :: InterruptType -> Bool
-isTriggered i = interruptFlag i && interruptEnabled i
+isTriggered i = _interruptFlag i && _interruptEnabled i

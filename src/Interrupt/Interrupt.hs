@@ -1,9 +1,19 @@
+{-# LANGUAGE TemplateHaskell, FlexibleContexts, RankNTypes #-}
 module Interrupt.Interrupt
   ( InterruptState (..)
+  , interruptVBlank
+  , interruptLCD
+  , interruptTimer
+  , interruptSerial
+  , interruptJoypad
+  , interruptMasterEnableFlag
+
   , defaultInterruptState
 
   , handleInterrupt
   , interruptAddress
+  , interrupt
+  , Interrupt
 
   , inInterruptRange
   , loadInterrupt
@@ -17,40 +27,25 @@ import Control.Monad
 import Data.Foldable
 import Data.Word
 import Data.Bits
+import Control.Lens
 
 data InterruptState = InterruptState
-  { interruptVBlank :: InterruptType
-  , interruptLCD    :: InterruptType
-  , interruptTimer  :: InterruptType
-  , interruptSerial :: InterruptType
-  , interruptJoypad :: InterruptType
-  , interruptMasterEnableFlag :: Bool
+  { _interruptVBlank :: InterruptType
+  , _interruptLCD    :: InterruptType
+  , _interruptTimer  :: InterruptType
+  , _interruptSerial :: InterruptType
+  , _interruptJoypad :: InterruptType
+  , _interruptMasterEnableFlag :: Bool
   } deriving (Show)
+
+makeLenses ''InterruptState
 
 defaultInterruptState :: InterruptState
 defaultInterruptState = InterruptState d d d d d False
   where d = defaultInterruptType
 
-disableInterruptState :: InterruptState -> InterruptState
-disableInterruptState s = s { interruptMasterEnableFlag = False }
-
 data Interrupt = INTVBLANK | INTLCD | INTTIMER | INTSERIAL | INTJOYPAD
   deriving (Enum, Show)
-
-{-# INLINE getInterrupt #-}
-getInterrupt :: Interrupt -> InterruptState -> InterruptType
-getInterrupt INTVBLANK = interruptVBlank
-getInterrupt INTLCD    = interruptLCD
-getInterrupt INTTIMER  = interruptTimer
-getInterrupt INTSERIAL = interruptSerial
-getInterrupt INTJOYPAD = interruptJoypad
-
-modifyInterrupt :: Interrupt -> (InterruptType -> InterruptType) -> (InterruptState -> InterruptState)
-modifyInterrupt INTVBLANK f s = s { interruptVBlank = f (interruptVBlank s) }
-modifyInterrupt INTLCD    f s = s { interruptLCD    = f (interruptLCD    s) }
-modifyInterrupt INTTIMER  f s = s { interruptTimer  = f (interruptTimer  s) }
-modifyInterrupt INTSERIAL f s = s { interruptSerial = f (interruptSerial s) }
-modifyInterrupt INTJOYPAD f s = s { interruptJoypad = f (interruptJoypad s) }
 
 {-# INLINE interruptAddress #-}
 interruptAddress :: Interrupt -> Word16
@@ -60,18 +55,23 @@ interruptAddress INTTIMER  = 0x50
 interruptAddress INTSERIAL = 0x58
 interruptAddress INTJOYPAD = 0x60
 
+interrupt :: Interrupt -> IndexedLens' Interrupt InterruptState InterruptType
+interrupt INTVBLANK p = interruptVBlank (indexed p INTVBLANK)
+interrupt INTLCD    p = interruptLCD    (indexed p INTLCD)
+interrupt INTTIMER  p = interruptTimer  (indexed p INTTIMER)
+interrupt INTSERIAL p = interruptSerial (indexed p INTSERIAL)
+interrupt INTJOYPAD p = interruptJoypad (indexed p INTJOYPAD)
+
 -- find first set interrupt ordered by priority
 checkForInterrupts :: InterruptState -> Maybe Interrupt
-checkForInterrupts is
-  = find (\i -> isTriggered (getInterrupt i is))
-  [ INTVBLANK ..]
+checkForInterrupts is = find (\i -> is ^. interrupt i . to isTriggered) [ INTVBLANK ..]
 
 handleInterrupt :: InterruptState -> Maybe (Interrupt, InterruptState)
 handleInterrupt s = do
-  guard (interruptMasterEnableFlag s)
+  guard (s ^. interruptMasterEnableFlag)
   i <- checkForInterrupts s
-  let s' = modifyInterrupt i clear s
-  return (i , disableInterruptState $ s')
+  let s' = s & interrupt i %~ clear & interruptMasterEnableFlag .~ False
+  return (i , s')
 
 {-# INLINE interruptBit #-}
 interruptBit :: Interrupt -> Int
@@ -81,33 +81,32 @@ interruptBit INTTIMER  = 2
 interruptBit INTSERIAL = 3
 interruptBit INTJOYPAD = 4
 
-setInterruptBit :: Interrupt -> (InterruptType -> Bool) -> InterruptType -> Word8
-setInterruptBit i f s = if f s then bit (interruptBit i) else zeroBits
+setInterruptBit :: Interrupt -> (InterruptType -> Bool) -> InterruptState -> Word8
+setInterruptBit i f s = shift (fromIntegral $ fromEnum (f (s ^. interrupt i))) (interruptBit i)
 
 getInterruptState :: Word8 -> (InterruptType -> Bool) -> InterruptState -> Word8
 getInterruptState b f s = foldl (\acc i -> acc .|. g i) b [INTVBLANK ..]
-  where g i = setInterruptBit i f (getInterrupt i s)
+  where g i = setInterruptBit i f s
 
 loadInterrupt :: InterruptState -> Word16 -> Word8
-loadInterrupt s 0xff0f = getInterruptState 0xe0 interruptFlag    s
-loadInterrupt s 0xffff = getInterruptState 0x00 interruptEnabled s
+loadInterrupt s 0xff0f = getInterruptState 0xe0 _interruptFlag    s
+loadInterrupt s 0xffff = getInterruptState 0x00 _interruptEnabled s
 loadInterrupt _ _ = error "loadInterrupt: not an interrupt address"
 
 getInterruptBit :: Interrupt
                 -> (InterruptType -> Bool -> InterruptType)
                 -> (InterruptState -> Word8 -> InterruptState)
-getInterruptBit i f s b = modifyInterrupt i g s
-  where g x = f x (b `testBit` interruptBit i)
+getInterruptBit i f s b = s & interrupt i %~ \x -> f x (b `testBit` interruptBit i)
 
 updateInterruptState :: (InterruptType -> Bool -> InterruptType) -> InterruptState -> Word8 -> InterruptState
-updateInterruptState f s0 b = foldl (\s i -> getInterruptBit i f s b) s0 [INTVBLANK ..]
+updateInterruptState f s0 b = foldl
+  (\s i -> s & interrupt i %~ \x -> f x (b `testBit` interruptBit i))
+  s0 [INTVBLANK ..]
 
 storeInterrupt :: InterruptState -> Word16 -> Word8 -> InterruptState
-storeInterrupt s0 0xff0f b = updateInterruptState f s0 b
-  where f it x = it { interruptFlag = x }
-storeInterrupt s0 0xffff b = updateInterruptState f s0 b
-  where f it x = it { interruptEnabled = x }
-storeInterrupt _ _ _ = error "storeInterrupt: not an interrupt address"
+storeInterrupt s0 0xff0f = updateInterruptState (\it x -> set interruptFlag x it) s0
+storeInterrupt s0 0xffff = updateInterruptState (\it x -> set interruptEnabled x it) s0
+storeInterrupt _ _ = error "storeInterrupt: not an interrupt address"
 
 {-# INLINE inInterruptRange #-}
 inInterruptRange :: Word16 -> Bool
