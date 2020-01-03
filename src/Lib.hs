@@ -75,7 +75,7 @@ updateCPU = do
   processInterrupts
   i <- parseInstructionM byte
   dt <- interpretM i
-  advCycles $ 4 * dt
+  advCycles $ dt
   return i
 
 updateGraphics :: (MonadIO m , MonadEmulator m) => GraphicsContext -> m (Maybe ())
