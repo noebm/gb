@@ -85,7 +85,7 @@ handleInterrupt :: InterruptState -> Maybe (Interrupt, InterruptState)
 handleInterrupt s = do
   guard (s ^. interruptMasterEnableFlag)
   i <- checkForInterrupts s
-  let s' = s & interrupt i %~ clear & interruptMasterEnableFlag .~ False
+  let s' = s & interrupt i.interruptFlag .~ False & interruptMasterEnableFlag .~ False
   return (i , s')
 
 {-# INLINE interruptBit #-}
