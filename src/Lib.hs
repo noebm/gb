@@ -40,6 +40,7 @@ import Data.Traversable
 import Utilities.SDL
 import qualified Data.Set as Set
 
+  {-
 joypadMapping :: Joypad -> Scancode
 joypadMapping JoypadUp    = ScancodeUp
 joypadMapping JoypadDown  = ScancodeDown
@@ -69,6 +70,7 @@ updateJoypad s = do
   when changed $
     modifyInterrupt $ interruptJoypad . interruptFlag .~ True
   return s'
+-}
 
 updateCPU :: MonadEmulator m => m (Instruction Arg)
 updateCPU = do
@@ -114,7 +116,8 @@ someFunc fp' = do
           i <- updateCPU
           forM_ logger $ \f -> liftIO $ f pc i
           updateGraphics fx
-          updateJoypad s
+          -- updateJoypad s
+          return s
 
     let runTillStop fx s0 = do
           s1 <- update fx s0
