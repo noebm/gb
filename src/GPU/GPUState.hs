@@ -25,10 +25,10 @@ import Data.Vector.Unboxed (Vector)
 
 -- stores updates as deltas until needed
 data GPUState = GPUState
-  { gpuVideoRAM        :: VideoRAM
-  , gpuVideoRAMUpdates :: [ MemoryUpdate ]
-  , gpuOAM             :: OAM
-  , gpuOAMUpdates      :: [ MemoryUpdate ]
+  { gpuVideoRAM        :: !VideoRAM
+  , gpuVideoRAMUpdates :: ![ MemoryUpdate ]
+  , gpuOAM             :: !OAM
+  , gpuOAMUpdates      :: ![ MemoryUpdate ]
   , gpuConfig          :: GPUConfig
   }
 
