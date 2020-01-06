@@ -583,6 +583,7 @@ interpretM instr@(Instruction _ op t args) = case op of
     return $ getTime True t
 
   HALT -> do
+    setHalt
     return $ getTime True t
 
   _ -> error $ "failed at " ++ show instr

@@ -33,6 +33,7 @@ data GBState s = GBState
   { addressSpace :: MVector s Word8
   , clock        :: STRef s Word
   , shouldStop   :: STRef s Bool
+  , isHalted     :: STRef s Bool
 
   , gbTimer     :: STRef s TimerState
   , gbInterrupt :: STRef s InterruptState
@@ -56,6 +57,7 @@ makeGBState cart = do
   GBState
     <$> pure memory
     <*> newSTRef 0
+    <*> newSTRef False
     <*> newSTRef False
     <*> newSTRef defaultTimerState
     <*> newSTRef defaultInterruptState
@@ -214,6 +216,10 @@ instance MonadIO m => MonadEmulator (GB m) where
 
   getGPU = readState  gbGPU
   putGPU = writeState gbGPU
+
+  setHalt = writeState isHalted True
+  clearHalt = writeState isHalted False
+  halt = readState isHalted
 
   getInterrupt = readState  gbInterrupt
   putInterrupt = writeState gbInterrupt

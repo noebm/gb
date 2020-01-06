@@ -77,13 +77,20 @@ updateTimer' cyc = do
   when overflow $
     modifyInterrupt $ interruptTimer.interruptFlag .~ True
 
-updateCPU :: MonadEmulator m => m (Instruction Arg, Word)
+updateCPU :: MonadEmulator m => m (Maybe (Instruction Arg), Word)
 updateCPU = do
-  processInterrupts
-  i <- parseInstructionM byte
-  dt <- interpretM i
-  advCycles $ dt
-  return (i , dt)
+  halted <- halt
+  interrupted <- processInterrupts
+  if not halted || interrupted
+    then do
+    when interrupted clearHalt
+    i <- parseInstructionM byte
+    dt <- interpretM i
+    advCycles $ dt
+    return (Just i , dt)
+    else do
+    advCycles 4
+    return (Nothing , 4)
 
 updateGraphics :: (MonadIO m , MonadEmulator m) => GraphicsContext -> m (Maybe ())
 updateGraphics gfx = updateGPU $ \gpu -> do

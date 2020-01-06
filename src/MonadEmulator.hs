@@ -39,6 +39,7 @@ import Data.Bits.Lens
 import Data.Bits
 import Data.Word
 import Data.Int
+import Data.Maybe
 
 import GPU.GPUState
 import Interrupt.Interrupt
@@ -99,6 +100,10 @@ class Monad m => MonadEmulator m where
 
   setStop :: m ()
   stop :: m Bool
+
+  setHalt :: m ()
+  clearHalt :: m ()
+  halt :: m Bool
 
   getGPU :: m GPUState
   putGPU :: GPUState -> m ()
@@ -176,19 +181,24 @@ instance MonadEmulator m => MonadEmulator (StateT s m) where
   setStop = aux0 setStop
   stop    = aux0 stop
 
+  setHalt = aux0 setHalt
+  clearHalt = aux0 clearHalt
+  halt = aux0 halt
+
 getCycles :: MonadEmulator m => m Word
 getCycles = do
   t <- resetCycles
   advCycles t
   return t
 
-processInterrupts :: MonadEmulator m => m ()
+processInterrupts :: MonadEmulator m => m Bool
 processInterrupts = do
   int <- handleInterrupt <$> getInterrupt
   forM_ int $ \(i , s) -> do
     putInterrupt s
     call (interruptAddress i)
     advCycles 20
+  return $ isJust int
 
 {-# INLINE word16 #-}
 word16 :: Iso' (Word8, Word8) Word16
