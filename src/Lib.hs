@@ -27,6 +27,7 @@ import Cartridge.BootRom
 import GPU.GPUState
 import GPU.Drawing
 
+import Timer
 import Joypad (Joypad(..))
 import SDL.Input.Keyboard
 import SDL.Input.Keyboard.Codes
@@ -72,13 +73,18 @@ updateJoypad s = do
   return s'
 -}
 
-updateCPU :: MonadEmulator m => m (Instruction Arg)
+updateTimer' cyc = do
+  overflow <- updateTimer cyc
+  when overflow $
+    modifyInterrupt $ interruptTimer.interruptFlag .~ True
+
+updateCPU :: MonadEmulator m => m (Instruction Arg, Word)
 updateCPU = do
   processInterrupts
   i <- parseInstructionM byte
   dt <- interpretM i
   advCycles $ dt
-  return i
+  return (i , dt)
 
 updateGraphics :: (MonadIO m , MonadEmulator m) => GraphicsContext -> m (Maybe ())
 updateGraphics gfx = updateGPU $ \gpu -> do
@@ -113,9 +119,10 @@ someFunc fp' = do
     let update fx s = do
           -- forM_ [0..0] $ \_ -> do
           pc <- load16 (Register16 PC)
-          i <- updateCPU
+          (i, dt) <- updateCPU
           forM_ logger $ \f -> liftIO $ f pc i
           updateGraphics fx
+          updateTimer' dt
           -- updateJoypad s
           return s
 

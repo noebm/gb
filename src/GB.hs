@@ -15,6 +15,7 @@ import qualified Data.Vector.Unboxed.Mutable as V
 import Data.Vector.Unboxed.Mutable (MVector)
 import Data.STRef
 import Data.Word
+import Text.Printf
 
 import Control.Lens
 import Control.Monad.ST
@@ -24,6 +25,7 @@ import MonadEmulator
 
 import GPU.GPUState
 import Interrupt.Interrupt
+import Timer
 import Cartridge.Cartridge
 import Joypad
 
@@ -32,6 +34,7 @@ data GBState s = GBState
   , clock        :: STRef s Word
   , shouldStop   :: STRef s Bool
 
+  , gbTimer     :: STRef s TimerState
   , gbInterrupt :: STRef s InterruptState
   , gbGPU       :: STRef s GPUState
   , gbJoypad    :: STRef s JoypadState
@@ -54,6 +57,7 @@ makeGBState cart = do
     <$> pure memory
     <*> newSTRef 0
     <*> newSTRef False
+    <*> newSTRef defaultTimerState
     <*> newSTRef defaultInterruptState
     <*> newSTRef defaultGPUState
     <*> newSTRef defaultJoypadState
@@ -63,6 +67,12 @@ runGB :: MonadIO m => CartridgeState RealWorld -> GB m a -> m a
 runGB cart (GBT x) = do
   gbState <- liftIO $ stToIO $ makeGBState cart
   runReaderT x gbState
+
+
+readState :: MonadIO m => (GBState s -> STRef RealWorld a) -> GBT s m a
+readState  f   = GBT $ liftIO . stToIO . readSTRef =<< asks f
+writeState :: MonadIO m => (GBState s -> STRef RealWorld a) -> a -> GBT s m ()
+writeState f b = GBT $ liftIO . stToIO . (`writeSTRef` b) =<< asks f
 
 getJoypad :: MonadIO m => GB m JoypadState
 getJoypad = GBT $ getSTRef gbJoypad
@@ -126,6 +136,11 @@ loadAddr idx
   | inInterruptRange (fromIntegral idx) = do
       s <- getInterrupt
       return $ loadInterrupt s (fromIntegral idx)
+  | inTimerRange (fromIntegral idx) = do
+      ts <- getTimerState
+      liftIO $ putStrLn $ printf "load Timer 0x%04x" idx
+      liftIO $ print ts
+      return $ loadTimer ts (fromIntegral idx)
   | inCartridgeRange idx = GBT $ do
       cart <- asks gbCartridge
       liftIO $ loadCartridge cart (fromIntegral idx)
@@ -158,6 +173,12 @@ storeAddr idx b
   | inInterruptRange (fromIntegral idx) = do
       s <- getInterrupt
       putInterrupt $ storeInterrupt s (fromIntegral idx) b
+  | inTimerRange (fromIntegral idx) = do
+      ts <- getTimerState
+      let ts' = storeTimer (fromIntegral idx) b ts
+      liftIO $ putStrLn $ printf "store Timer 0x%04x" idx
+      liftIO $ print ts'
+      putTimerState ts'
   | inCartridgeRange idx = GBT $ do
       cart <- asks gbCartridge
       liftIO $ storeCartridge (fromIntegral idx) b cart
@@ -197,6 +218,9 @@ instance MonadIO m => MonadEmulator (GB m) where
       v <- readSTRef c
       writeSTRef c 0
       return v
+
+  getTimerState = readState gbTimer
+  putTimerState = writeState gbTimer
 
   getGPU = GBT $ getSTRef gbGPU
   putGPU = GBT . putSTRef gbGPU

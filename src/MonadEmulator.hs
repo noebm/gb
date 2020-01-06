@@ -6,6 +6,7 @@ module MonadEmulator
   , MonadEmulator (..)
 
   , updateGPU
+  , updateTimer
   , processInterrupts
   , getIEM , setIEM
   , showRegisters
@@ -41,6 +42,7 @@ import Data.Int
 
 import GPU.GPUState
 import Interrupt.Interrupt
+import Timer
 import Interrupt.InterruptType
 
 data Reg8 = A | B | C | D | E | F | H | L
@@ -104,6 +106,9 @@ class Monad m => MonadEmulator m where
   getInterrupt :: m InterruptState
   putInterrupt :: InterruptState -> m ()
 
+  getTimerState :: m TimerState
+  putTimerState :: TimerState -> m ()
+
 modifyInterrupt f = putInterrupt . f =<< getInterrupt
 
 getIEM :: MonadEmulator m => m Bool
@@ -122,6 +127,13 @@ updateGPU f = do
     advCycles cyc'
     gpuInterrupts gpu'
     f gpu'
+
+updateTimer :: MonadEmulator m => Word -> m Bool
+updateTimer cycles = do
+  ts <- getTimerState
+  let (i, ts') = updateTimerState cycles ts
+  putTimerState ts'
+  return i
 
 gpuInterrupts :: MonadEmulator m => GPUState -> m ()
 gpuInterrupts gpu = do
@@ -157,6 +169,9 @@ instance MonadEmulator m => MonadEmulator (StateT s m) where
 
   getInterrupt = aux0 getInterrupt
   putInterrupt = aux1 putInterrupt
+
+  getTimerState = aux0 getTimerState
+  putTimerState = aux1 putTimerState
 
   setStop = aux0 setStop
   stop    = aux0 stop
