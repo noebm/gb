@@ -86,10 +86,8 @@ updateCPU = do
     when interrupted clearHalt
     i <- parseInstructionM byte
     dt <- interpretM i
-    advCycles $ dt
     return (Just i , dt)
     else do
-    advCycles 4
     return (Nothing , 4)
 
 updateGraphics :: (MonadIO m , MonadEmulator m) => GraphicsContext -> m (Maybe ())
@@ -126,6 +124,7 @@ someFunc fp' = do
           -- forM_ [0..0] $ \_ -> do
           pc <- load16 (Register16 PC)
           (i, dt) <- updateCPU
+          advCycles dt
           forM_ logger $ \f -> liftIO $ f pc i
           updateGraphics fx
           updateTimer' dt
