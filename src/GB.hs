@@ -138,8 +138,6 @@ loadAddr idx
       return $ loadInterrupt s (fromIntegral idx)
   | inTimerRange (fromIntegral idx) = do
       ts <- getTimerState
-      liftIO $ putStrLn $ printf "load Timer 0x%04x" idx
-      liftIO $ print ts
       return $ loadTimer ts (fromIntegral idx)
   | inCartridgeRange idx = GBT $ do
       cart <- asks gbCartridge
@@ -176,8 +174,6 @@ storeAddr idx b
   | inTimerRange (fromIntegral idx) = do
       ts <- getTimerState
       let ts' = storeTimer (fromIntegral idx) b ts
-      liftIO $ putStrLn $ printf "store Timer 0x%04x" idx
-      liftIO $ print ts'
       putTimerState ts'
   | inCartridgeRange idx = GBT $ do
       cart <- asks gbCartridge
