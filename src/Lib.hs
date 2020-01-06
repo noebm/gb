@@ -87,8 +87,8 @@ updateCPU = do
       then clearHalt >> return (Nothing, 0)
       else return (Nothing, 4)
 
-updateGraphics :: (MonadIO m , MonadEmulator m) => GraphicsContext -> m (Maybe ())
-updateGraphics gfx = updateGPU $ \gpu -> do
+updateGraphics :: (MonadIO m , MonadEmulator m) => GraphicsContext -> Word -> m (Maybe ())
+updateGraphics gfx cyc = updateGPU cyc $ \gpu -> do
   let conf = gpuConfig gpu
   case gpuMode conf of
     ModeVBlank | gpuYCoordinate conf == 144 -> renderGraphics gfx
@@ -124,9 +124,9 @@ someFunc fp' = do
           (i, dt') <- updateCPU
           advCycles dt'
           forM_ logger $ \f -> liftIO $ f pc i
-          updateGraphics fx
           t' <- getCycles
           let dt = t' - t
+          updateGraphics fx dt
           updateTimer dt
           -- updateJoypad s
           return s

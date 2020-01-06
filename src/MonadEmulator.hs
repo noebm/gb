@@ -138,14 +138,11 @@ getIEM = view interruptMasterEnableFlag <$> getInterrupt
 setIEM :: MonadEmulator m => Bool -> m ()
 setIEM b = modifyInterrupt $ interruptMasterEnableFlag .~ b
 
-updateGPU :: MonadEmulator m => (GPUState -> m a) -> m (Maybe a)
-updateGPU f = do
-  cyc <- getCycles
+updateGPU :: MonadEmulator m => Word -> (GPUState -> m a) -> m (Maybe a)
+updateGPU cyc f = do
   mupdate <- updateGPUState cyc <$> getGPU
-  forM mupdate $ \(cyc' , gpu') -> do
+  forM mupdate $ \gpu' -> do
     putGPU gpu'
-    _ <- resetCycles
-    advCycles cyc'
     gpuInterrupts gpu'
     f gpu'
 

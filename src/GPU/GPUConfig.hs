@@ -21,6 +21,7 @@ data GPUMode = ModeHBlank | ModeVBlank | ModeOAM | ModeVRAM
 
 data GPUConfig = GPUConfig
   { gpuMode       :: GPUMode
+  , gpuClock      :: !Word
 
   , gpuEnabled        :: Bool
   , gpuWindowTileMapSelect :: Bool
@@ -55,6 +56,7 @@ data GPUConfig = GPUConfig
 defaultGPUConfig :: GPUConfig
 defaultGPUConfig = GPUConfig
   { gpuMode                = ModeHBlank
+  , gpuClock               = 0
   , gpuEnabled             = False
   , gpuWindowTileMapSelect = False
   , gpuWindowDisplay       = False
@@ -107,11 +109,13 @@ updateStatusInterrupts gpu = case gpuMode gpu of
   _ -> gpu'
   where gpu' = clearInterrupts gpu
 
-updateGPUConfig :: Word -> GPUConfig -> Maybe (Word, GPUConfig)
-updateGPUConfig cycles g = do
+updateGPUConfig :: Word -> GPUConfig -> GPUConfig
+updateGPUConfig cycles g =
   let cyclesMode = gpuModeDuration (gpuMode g)
-  guard (cycles >= cyclesMode)
-  return (cycles - cyclesMode, updateStatusInterrupts $ gpuNextConfig g)
+      g' = g { gpuClock = gpuClock g + cycles }
+  in if gpuClock g' >= cyclesMode
+     then updateStatusInterrupts $ gpuNextConfig $ g' { gpuClock = gpuClock g' - cyclesMode }
+     else g'
 
 gpuNextConfig :: GPUConfig -> GPUConfig
 gpuNextConfig g = case gpuMode g of

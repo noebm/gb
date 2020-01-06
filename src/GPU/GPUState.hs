@@ -44,10 +44,10 @@ defaultGPUState = GPUState
 {-# INLINE updateVideoRAMState  #-}
 {-# INLINE updateOAMState       #-}
 {-# INLINE updateGPUConfigState #-}
-updateGPUConfigState :: Word -> GPUState -> Maybe (Word, GPUState)
+updateGPUConfigState :: Word -> GPUState -> GPUState
 updateGPUConfigState cycles s
-   = (\(cycles' , conf) -> (cycles' , s { gpuConfig = conf }))
-  <$> updateGPUConfig cycles (gpuConfig s)
+   = (\ conf -> s { gpuConfig = conf })
+  $ updateGPUConfig cycles (gpuConfig s)
 updateVideoRAMState, updateOAMState :: GPUState -> GPUState
 updateVideoRAMState g = g
   { gpuVideoRAM = updateVideoRAM (gpuVideoRAMUpdates g) (gpuVideoRAM g)
@@ -58,11 +58,10 @@ updateOAMState g = g
   , gpuOAMUpdates = []
   }
 
-updateGPUState :: Word -> GPUState -> Maybe (Word, GPUState)
+updateGPUState :: Word -> GPUState -> Maybe GPUState
 updateGPUState cycles s = do
   guard (gpuEnabled (gpuConfig s))
-  (cycles' , s') <- updateGPUConfigState cycles s
-  return (cycles' , updateVideoRAMState $ updateOAMState s')
+  return $ updateVideoRAMState $ updateOAMState $ updateGPUConfigState cycles s
 
 inVideoRAM, inOAM, inGPUMMIO, inGPURange :: (Num a, Ord a) => a -> Bool
 inVideoRAM addr = 0x8000 <= addr && addr < 0xA000
