@@ -17,7 +17,7 @@ paletteGrayscale p i = case paletteValue p i of
   3 -> 0
   _ -> error "impossible"
 
-type ColorCode = Word8
+newtype ColorCode = ColorCode Word8
 
 paletteValue :: Palette -> ColorCode -> Word8
-paletteValue (Palette p) idx = (p `shiftR` fromIntegral (2 * idx)) .&. 0x3
+paletteValue (Palette p) (ColorCode idx) = (p `shiftR` fromIntegral (2 * idx)) .&. 0x3

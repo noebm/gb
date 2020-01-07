@@ -70,8 +70,8 @@ tile (VideoRAM vram) (VideoAddr addr) = Tile $ VU.slice addr tilesize vram
 
 {-# INLINE loadTile #-}
 loadTile :: Tile -> Word8 -> Word8 -> ColorCode
-loadTile (Tile t) x y
-  =   ((t VU.! byteOffset       .&. bit bitOffset) `shiftR` bitOffset) -- lower bit
+loadTile (Tile t) x y = ColorCode
+  $   ((t VU.! byteOffset       .&. bit bitOffset) `shiftR` bitOffset) -- lower bit
   .|. ((t VU.! (byteOffset + 1) .&. bit bitOffset) `shiftR` (bitOffset - 1)) -- higher bit
   where byteOffset = fromIntegral $ (y .&. 7) `shiftL` 1
         bitOffset  = fromIntegral $ complement x .&. 7
