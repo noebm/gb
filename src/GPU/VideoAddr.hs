@@ -10,8 +10,8 @@ newtype VideoAddr = VideoAddr Int
 
 {-# INLINE backgroundTableIndex #-}
 backgroundTableIndex :: GPUConfig -> Word8 -> Word8 -> VideoAddr
-backgroundTableIndex GPUConfig { gpuBGTileMapSelect = select } x y =
-  let bgrdTableIndex = fromIntegral (x `div` 8) + 32 * fromIntegral (y `div` 8)
+backgroundTableIndex GPUConfig { gpuBGTileMapSelect = select } col row =
+  let bgrdTableIndex = fromIntegral col + 32 * fromIntegral row
       bgrdTableBase = if select then 0x9C00 else 0x9800
   in VideoAddr $ (bgrdTableBase + bgrdTableIndex) .&. 0x1fff
 

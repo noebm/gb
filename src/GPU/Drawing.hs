@@ -21,8 +21,7 @@ backgroundLine g vram =
       addr
         = fmap (tileAddress g)
         $ fmap (loadVideoRAM' vram)
-        $ fmap (flip (backgroundTableIndex g) y')
-        $ fmap (8 *)
+        $ fmap (flip (backgroundTableIndex g) (y' `div` 8))
         $ fmap (+ sd)
         $ [0..20]
   in VS.generate 160 $ \x ->
