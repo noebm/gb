@@ -9,7 +9,7 @@ newtype Palette = Palette { getPalette :: Word8 }
 defaultPalette :: Palette
 defaultPalette = Palette 0x00
 
-paletteGrayscale :: Palette -> ColorCode -> Word8
+paletteGrayscale :: Palette -> Color -> Word8
 paletteGrayscale p i = case paletteValue p i of
   0 -> 255
   1 -> 192
@@ -17,7 +17,13 @@ paletteGrayscale p i = case paletteValue p i of
   3 -> 0
   _ -> error "impossible"
 
-newtype ColorCode = ColorCode Word8
+newtype Color = Color Word8
+  deriving (Eq, Show)
 
-paletteValue :: Palette -> ColorCode -> Word8
-paletteValue (Palette p) (ColorCode idx) = (p `shiftR` fromIntegral (2 * idx)) .&. 0x3
+colorOff   = Color 0
+colorLight = Color 1
+colorDark  = Color 2
+colorOn    = Color 3
+
+paletteValue :: Palette -> Color -> Word8
+paletteValue (Palette p) (Color idx) = (p `shiftR` fromIntegral (2 * idx)) .&. 0x3
