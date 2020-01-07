@@ -29,9 +29,11 @@ where
 import qualified Data.Vector.Unboxed as VU
 import Data.Vector.Unboxed (Vector)
 import Control.Monad
+import Control.Lens
 
 import Data.Word
 import Data.Bits
+import Data.Bits.Lens
 
 import GPU.GPUConfig
 import GPU.Palette
@@ -71,10 +73,11 @@ tile (VideoRAM vram) (VideoAddr addr) = Tile $ VU.slice addr tilesize vram
 {-# INLINE loadTile #-}
 loadTile :: Tile -> Word8 -> Word8 -> ColorCode
 loadTile (Tile t) x y = ColorCode
-  $   ((t VU.! byteOffset       .&. bit bitOffset) `shiftR` bitOffset) -- lower bit
-  .|. ((t VU.! (byteOffset + 1) .&. bit bitOffset) `shiftR` (bitOffset - 1)) -- higher bit
+  $ 0x00 & bitAt 0 .~ (byte1 ^. bitAt bitOffset) & bitAt 1 .~ (byte2 ^. bitAt bitOffset)
   where byteOffset = fromIntegral $ (y .&. 7) `shiftL` 1
         bitOffset  = fromIntegral $ complement x .&. 7
+        byte1 = t VU.! byteOffset
+        byte2 = t VU.! (byteOffset + 1)
 
 {-# INLINE loadVideoRAM' #-}
 loadVideoRAM' :: VideoRAM -> VideoAddr -> Word8
