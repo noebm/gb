@@ -14,9 +14,9 @@ import Control.Monad.IO.Class
 
 import Utilities.Vector
 
-backgroundLine :: GPUConfig -> VideoRAM -> Word8 -> VS.Vector (V4 Word8)
-backgroundLine g vram y =
-  let y' = y + gpuScrollY g
+backgroundLine :: GPUConfig -> VideoRAM -> VS.Vector (V4 Word8)
+backgroundLine g vram =
+  let y' = gpuYCoordinate g + gpuScrollY g
       (sd, sr) = gpuScrollX g `divMod` 8
       addr
         = fmap (tileAddress g)
@@ -46,4 +46,4 @@ genPixelRow :: (MonadIO m) => Texture -> GPUState -> m ()
 genPixelRow im g = do
   let y = gpuYCoordinate $ gpuConfig g
   updateTextureLine im (fromIntegral y)
-    $ backgroundLine (gpuConfig g) (gpuVideoRAM g) y
+    $ backgroundLine (gpuConfig g) (gpuVideoRAM g)
