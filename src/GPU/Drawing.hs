@@ -5,7 +5,6 @@ import Data.Word
 import qualified Data.Vector.Storable as VS
 
 import GPU.Memory
-import GPU.GPUConfig
 import GPU.Palette
 import GPU.GPUState
 
@@ -16,17 +15,35 @@ import Control.Monad.IO.Class
 import Utilities.Vector
 
 backgroundLine :: GPUConfig -> VideoRAM -> Word8 -> VS.Vector (V4 Word8)
-backgroundLine g vram y = VS.generate 160 $ \x ->
-  let x' = fromIntegral x + gpuScrollX g
-      y' =              y + gpuScrollY g
-      idx = loadVideoRAM' vram (backgroundTableIndex g x' y')
-      c = paletteGrayscale (gpuBGPalette g) $ loadTile (tile vram (tileAddress g idx)) x' y'
-  in V4 c c c 0xff
+backgroundLine g vram y =
+  let y' = y + gpuScrollY g
+      (sd, sr) = gpuScrollX g `divMod` 8
+      addr
+        = fmap (tileAddress g)
+        $ fmap (loadVideoRAM' vram)
+        $ fmap (flip (backgroundTableIndex g) y')
+        $ fmap (8 *)
+        $ fmap (+ sd)
+        $ [0..20]
+  in VS.generate 160 $ \x ->
+    let x' = fromIntegral x + gpuScrollX g
+        (xd, xr) = fromIntegral x `divMod` 8
+        offset = (xr + sr) `div` 8
+        t = tile vram (addr !! fromIntegral (xd + offset))
+    in (\c -> V4 c c c 0xff) . paletteGrayscale (gpuBGPalette g)
+       $ loadTile t x' y'
+
+updateTextureLine :: MonadIO m => Texture -> Int -> VS.Vector (V4 Word8) -> m ()
+updateTextureLine tex line vs = do
+  let vs' = VS.unsafeCast vs
+  _ <- updateTexture tex
+    (Just $ fromIntegral <$> Rectangle (P $ V2 0 line) (V2 160 1))
+    (vectorToByteString vs')
+    (fromIntegral $ VS.length vs')
+  return ()
 
 genPixelRow :: (MonadIO m) => Texture -> GPUState -> m ()
 genPixelRow im g = do
   let y = gpuYCoordinate $ gpuConfig g
-  let vs = VS.unsafeCast $ backgroundLine (gpuConfig g) (gpuVideoRAM g) y
-  _ <- updateTexture im (Just $ fromIntegral <$> Rectangle (P $ V2 0 y) (V2 160 1))
-    (vectorToByteString vs) (fromIntegral $ VS.length vs)
-  return ()
+  updateTextureLine im (fromIntegral y)
+    $ backgroundLine (gpuConfig g) (gpuVideoRAM g) y
