@@ -14,12 +14,13 @@ import Control.Monad.IO.Class
 
 import Utilities.Vector
 
-backgroundLine :: GPUConfig -> VideoRAM -> VS.Vector (V4 Word8)
+backgroundLine :: GPUConfig -> VideoRAM -> VS.Vector Word8
 backgroundLine g vram =
   let y' = gpuYCoordinate g + gpuScrollY g
       (sd, sr) = gpuScrollX g `divMod` 8
-      addr
-        = fmap (tileAddress g)
+      tiles
+        = fmap (tile vram)
+        $ fmap (tileAddress g)
         $ fmap (loadVideoRAM' vram)
         $ fmap (flip (backgroundTableIndex g) (y' `div` 8))
         $ fmap (+ sd)
@@ -28,9 +29,8 @@ backgroundLine g vram =
     let x' = fromIntegral x + gpuScrollX g
         (xd, xr) = fromIntegral x `divMod` 8
         offset = (xr + sr) `div` 8
-        t = tile vram (addr !! fromIntegral (xd + offset))
-    in (\c -> V4 c c c 0xff) . paletteGrayscale (gpuBGPalette g)
-       $ loadTile t x' y'
+        t = tiles !! fromIntegral (xd + offset)
+    in paletteValue (gpuBGPalette g) $ loadTile t x' y'
 
 updateTextureLine :: MonadIO m => Texture -> Int -> VS.Vector (V4 Word8) -> m ()
 updateTextureLine tex line vs = do
@@ -41,8 +41,17 @@ updateTextureLine tex line vs = do
     (fromIntegral $ VS.length vs')
   return ()
 
+paletteColorToGrayscale :: Word8 -> V4 Word8
+paletteColorToGrayscale w = V4 c c c 0xff
+  where
+    c = case w of
+      0x00 -> 255
+      0x01 -> 192
+      0x02 -> 96
+      _    -> 0
+
 genPixelRow :: (MonadIO m) => Texture -> GPUState -> m ()
 genPixelRow im g = do
   let y = gpuYCoordinate $ gpuConfig g
   updateTextureLine im (fromIntegral y)
-    $ backgroundLine (gpuConfig g) (gpuVideoRAM g)
+    $ VS.map paletteColorToGrayscale $ backgroundLine (gpuConfig g) (gpuVideoRAM g)

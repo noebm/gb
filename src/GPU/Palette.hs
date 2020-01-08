@@ -9,14 +9,6 @@ newtype Palette = Palette { getPalette :: Word8 }
 defaultPalette :: Palette
 defaultPalette = Palette 0x00
 
-paletteGrayscale :: Palette -> Color -> Word8
-paletteGrayscale p i = case paletteValue p i of
-  0 -> 255
-  1 -> 192
-  2 -> 96
-  3 -> 0
-  _ -> error "impossible"
-
 newtype Color = Color Word8
   deriving (Eq, Show)
 
