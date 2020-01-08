@@ -580,6 +580,9 @@ interpretM instr@(Instruction _ op t args) = case op of
       & flagC .~ True
     return $ getTime True t
 
+  HALT -> do
+    return $ getTime True t
+
   _ -> error $ "failed at " ++ show instr
 
   where msg = error $ printf "interpretM: %s - invalid arguments %s" (show op) (show args)
