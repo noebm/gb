@@ -68,17 +68,17 @@ runGB cart (GBT x) = do
   gbState <- liftIO $ stToIO $ makeGBState cart
   runReaderT x gbState
 
-
 readState :: MonadIO m => (GBState s -> STRef RealWorld a) -> GBT s m a
 readState  f   = GBT $ liftIO . stToIO . readSTRef =<< asks f
+
 writeState :: MonadIO m => (GBState s -> STRef RealWorld a) -> a -> GBT s m ()
 writeState f b = GBT $ liftIO . stToIO . (`writeSTRef` b) =<< asks f
 
 getJoypad :: MonadIO m => GB m JoypadState
-getJoypad = GBT $ getSTRef gbJoypad
+getJoypad = readState gbJoypad
 
 putJoypad :: MonadIO m => JoypadState -> GB m ()
-putJoypad s = GBT $ putSTRef gbJoypad s
+putJoypad s = writeState gbJoypad s
 
 updateJoypadGB :: MonadIO m => (Joypad -> Bool) -> GB m Bool
 updateJoypadGB f = GBT $ do
@@ -142,8 +142,8 @@ loadAddr idx
   | inCartridgeRange idx = GBT $ do
       cart <- asks gbCartridge
       liftIO $ loadCartridge cart (fromIntegral idx)
-  | idx < 0xffff && inJoypadRange (fromIntegral idx) = GBT $ do
-      s <- getSTRef gbJoypad
+  | idx < 0xffff && inJoypadRange (fromIntegral idx) = do
+      s <- readState gbJoypad
       return $ loadJoypad s (fromIntegral idx)
   | echoRam idx          = loadAddr (idx - 0x2000)
   | 0xFEA0 <= idx && idx < 0xFF00 = return 0xff
@@ -151,23 +151,17 @@ loadAddr idx
       addrspace <- asks addressSpace
       liftIO $ V.unsafeRead addrspace idx
 
-getSTRef :: (MonadIO m, s ~ RealWorld) => (GBState s -> STRef s a) -> ReaderT (GBState s) m a
-getSTRef f = liftIO . stToIO . readSTRef =<< asks f
-
-putSTRef :: (MonadIO m, s ~ RealWorld) => (GBState s -> STRef s a) -> a -> ReaderT (GBState s) m ()
-putSTRef f x = liftIO . stToIO . (`writeSTRef` x) =<< asks f
-
 {-# INLINE storeAddr #-}
 storeAddr :: MonadIO m => Int -> Word8 -> GB m ()
 storeAddr idx b
   | idx == 0xff46 = do
-      gpu <- GBT $ getSTRef gbGPU
+      gpu <- readState gbGPU
       gpu' <- dmaTransfer (loadAddr . fromIntegral) ((b , 0x00) ^. word16) gpu
-      GBT $ putSTRef gbGPU gpu'
-  | inGPURange idx = GBT $ do
-      gpu <- getSTRef gbGPU
+      writeState gbGPU gpu'
+  | inGPURange idx = do
+      gpu <- readState gbGPU
       let gpu' = storeGPU gpu (fromIntegral idx) b
-      putSTRef gbGPU gpu'
+      writeState gbGPU gpu'
   | inInterruptRange (fromIntegral idx) = do
       s <- getInterrupt
       putInterrupt $ storeInterrupt s (fromIntegral idx) b
@@ -178,9 +172,9 @@ storeAddr idx b
   | inCartridgeRange idx = GBT $ do
       cart <- asks gbCartridge
       liftIO $ storeCartridge (fromIntegral idx) b cart
-  | idx < 0xffff && inJoypadRange (fromIntegral idx) = GBT $ do
-      s <- getSTRef gbJoypad
-      putSTRef gbJoypad $ storeJoypad (fromIntegral idx) b s
+  | idx < 0xffff && inJoypadRange (fromIntegral idx) = do
+      s <- readState gbJoypad
+      writeState gbJoypad $ storeJoypad (fromIntegral idx) b s
   | echoRam idx          = storeAddr (idx - 0x2000) b
   | 0xFEA0 <= idx && idx < 0xFF00 = return ()
   | otherwise = GBT $ do
@@ -215,14 +209,14 @@ instance MonadIO m => MonadEmulator (GB m) where
       writeSTRef c 0
       return v
 
-  getTimerState = readState gbTimer
+  getTimerState = readState  gbTimer
   putTimerState = writeState gbTimer
 
-  getGPU = GBT $ getSTRef gbGPU
-  putGPU = GBT . putSTRef gbGPU
+  getGPU = readState  gbGPU
+  putGPU = writeState gbGPU
 
-  getInterrupt = GBT $ getSTRef gbInterrupt
-  putInterrupt = GBT . putSTRef gbInterrupt
+  getInterrupt = readState  gbInterrupt
+  putInterrupt = writeState gbInterrupt
 
   setStop = GBT $ do
     s <- asks shouldStop
