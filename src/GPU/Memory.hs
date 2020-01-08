@@ -89,24 +89,24 @@ external interface
 
 {-# INLINE loadVideoRAM #-}
 loadVideoRAM :: GPUConfig -> VideoRAM -> Word16 -> Maybe Word8
-loadVideoRAM GPUConfig { gpuMode = mode } (VideoRAM m) addr = do
+loadVideoRAM GPUConfig { _gpuMode = mode } (VideoRAM m) addr = do
   guard (mode /= ModeVRAM)
   VU.indexM m $ fromIntegral (addr .&. 0x1fff)
 
 {-# INLINE storeVideoRAM #-}
 storeVideoRAM :: GPUConfig -> Word16 -> Word8 -> Maybe MemoryUpdate
-storeVideoRAM GPUConfig { gpuMode = mode } addr b = do
+storeVideoRAM GPUConfig { _gpuMode = mode } addr b = do
   guard (mode /= ModeVRAM)
   return ( fromIntegral addr .&. 0x1fff , b )
 
 {-# INLINE loadOAM #-}
 loadOAM :: GPUConfig -> OAM -> Word16 -> Maybe Word8
-loadOAM GPUConfig { gpuMode = mode } (OAM m) addr = do
+loadOAM GPUConfig { _gpuMode = mode } (OAM m) addr = do
   guard (mode /= ModeVRAM || mode /= ModeOAM)
   VU.indexM m $ fromIntegral (addr .&. 0x9f)
 
 {-# INLINE storeOAM #-}
 storeOAM :: GPUConfig -> Word16 -> Word8 -> Maybe MemoryUpdate
-storeOAM GPUConfig { gpuMode = mode } addr b = do
+storeOAM GPUConfig { _gpuMode = mode } addr b = do
   guard (mode /= ModeVRAM || mode /= ModeOAM)
   return ( fromIntegral addr .&. 0x9f , b )

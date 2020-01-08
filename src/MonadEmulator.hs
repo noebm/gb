@@ -156,10 +156,10 @@ updateTimer cycles = do
 gpuInterrupts :: MonadEmulator m => GPUState -> m ()
 gpuInterrupts gpu = do
   let conf = gpuConfig gpu
-  let lcdInterrupts = [ gpuOAMInterrupt, gpuHblankInterrupt, gpuYCompareInterrupt ]
+  let lcdInterrupts = [ _gpuOAMInterrupt, _gpuHblankInterrupt, _gpuYCompareInterrupt ]
   when (any ($ conf) lcdInterrupts) $
     modifyInterrupt $ interruptLCD.interruptFlag .~ True
-  when (gpuVblankInterrupt conf) $
+  when (_gpuVblankInterrupt conf) $
     modifyInterrupt $ interruptVBlank.interruptFlag .~ True
 
 {-# INLINE aux0 #-}

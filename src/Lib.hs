@@ -90,8 +90,8 @@ updateCPU = do
 updateGraphics :: (MonadIO m , MonadEmulator m) => GraphicsContext -> Word -> m ()
 updateGraphics gfx cyc = updateGPU cyc $ \gpu -> do
   let conf = gpuConfig gpu
-  when (gpuVblankInterrupt conf) $ renderGraphics gfx
-  when (gpuHblankInterrupt conf) $ genPixelRow (image gfx) gpu
+  when (_gpuVblankInterrupt conf) $ renderGraphics gfx
+  when (_gpuHblankInterrupt conf) $ genPixelRow (image gfx) gpu
 
 -- setupCartridge :: Maybe FilePath -> Maybe FilePath -> IO (CartridgeState )
 setupCartridge fpBoot fpRom = do

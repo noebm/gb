@@ -16,8 +16,8 @@ import Utilities.Vector
 
 backgroundLine :: GPUConfig -> VideoRAM -> VS.Vector Word8
 backgroundLine g vram =
-  let y' = gpuYCoordinate g + gpuScrollY g
-      (sd, sr) = gpuScrollX g `divMod` 8
+  let y' = _gpuYCoordinate g + _gpuScrollY g
+      (sd, sr) = _gpuScrollX g `divMod` 8
       tiles
         = fmap (tile vram)
         $ fmap (tileAddress g)
@@ -26,11 +26,11 @@ backgroundLine g vram =
         $ fmap (+ sd)
         $ [0..20]
   in VS.generate 160 $ \x ->
-    let x' = fromIntegral x + gpuScrollX g
+    let x' = fromIntegral x + _gpuScrollX g
         (xd, xr) = fromIntegral x `divMod` 8
         offset = (xr + sr) `div` 8
         t = tiles !! fromIntegral (xd + offset)
-    in paletteValue (gpuBGPalette g) $ loadTile t x' y'
+    in paletteValue (_gpuBGPalette g) $ loadTile t x' y'
 
 updateTextureLine :: MonadIO m => Texture -> Int -> VS.Vector (V4 Word8) -> m ()
 updateTextureLine tex line vs = do
@@ -52,6 +52,6 @@ paletteColorToGrayscale w = V4 c c c 0xff
 
 genPixelRow :: (MonadIO m) => Texture -> GPUState -> m ()
 genPixelRow im g = do
-  let y = gpuYCoordinate $ gpuConfig g
+  let y = _gpuYCoordinate $ gpuConfig g
   updateTextureLine im (fromIntegral y)
     $ VS.map paletteColorToGrayscale $ backgroundLine (gpuConfig g) (gpuVideoRAM g)
