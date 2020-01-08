@@ -4,6 +4,7 @@ module MonadEmulator
   , LoadStore8 (..)
   , LoadStore16 (..)
   , MonadEmulator (..)
+  , load8, store8
 
   , updateGPU
   , updateTimer
@@ -81,12 +82,12 @@ data LoadStore16 = Register16 !Reg16 | Addr16 !Word16
 -- load-store should be the identity for registers.
 -- store-load should be equal to store.
 class Monad m => MonadEmulator m where
-  -- | Stores a value in side the emulator state.
-  store8 :: LoadStore8 -> Word8 -> m ()
+  storeReg :: Reg8 -> Word8 -> m ()
+  storeAddr   :: Word16 -> Word8 -> m ()
   store16 :: LoadStore16 -> Word16 -> m ()
 
-  -- | Retrieves a value from the emulator state.
-  load8 :: LoadStore8 -> m Word8
+  loadReg :: Reg8 -> m Word8
+  loadAddr :: Word16 -> m Word8
   load16 :: LoadStore16 -> m Word16
 
   -- | Advances / Clears internal timer.
@@ -108,6 +109,14 @@ class Monad m => MonadEmulator m where
 
   getTimerState :: m TimerState
   putTimerState :: TimerState -> m ()
+
+store8 :: MonadEmulator m => LoadStore8 -> Word8 -> m ()
+store8 (Register8 r) = storeReg r
+store8 (Addr8 addr) = storeAddr addr
+
+load8 :: MonadEmulator m => LoadStore8 -> m Word8
+load8 (Register8 r) = loadReg r
+load8 (Addr8 addr) = loadAddr addr
 
 modifyInterrupt f = putInterrupt . f =<< getInterrupt
 
@@ -156,10 +165,12 @@ aux2 :: Functor m => (a -> b -> m c) -> (a -> b -> StateT s m c)
 aux2 f = aux1 . f
 
 instance MonadEmulator m => MonadEmulator (StateT s m) where
-  store8  = aux2 store8
+  storeReg = aux2 storeReg
+  storeAddr = aux2 storeAddr
   store16 = aux2 store16
 
-  load8     = aux1 load8
+  loadReg = aux1 loadReg
+  loadAddr = aux1 loadAddr
   load16    = aux1 load16
 
   advCycles = aux1 advCycles

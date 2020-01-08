@@ -127,9 +127,9 @@ ls16ToIndex (Addr16 addr) = (fromIntegral addr , fromIntegral addr + 1)
 echoRam :: Int -> Bool
 echoRam addr = 0xE000 <= addr && addr < 0xFE00
 
-{-# INLINE loadAddr #-}
-loadAddr :: MonadIO m => Int -> GB m Word8
-loadAddr idx
+{-# INLINE loadAddr' #-}
+loadAddr' :: MonadIO m => Int -> GB m Word8
+loadAddr' idx
   | inGPURange idx = do
       gpu <- getGPU
       let (b , mgpu') = loadGPU gpu (fromIntegral idx)
@@ -147,15 +147,15 @@ loadAddr idx
   | idx < 0xffff && inJoypadRange (fromIntegral idx) = do
       s <- readState gbJoypad
       return $ loadJoypad s (fromIntegral idx)
-  | echoRam idx          = loadAddr (idx - 0x2000)
+  | echoRam idx          = loadAddr' (idx - 0x2000)
   | 0xFEA0 <= idx && idx < 0xFF00 = return 0xff
   | otherwise = GBT $ do
       addrspace <- asks addressSpace
       liftIO $ V.read addrspace idx
 
-{-# INLINE storeAddr #-}
-storeAddr :: MonadIO m => Int -> Word8 -> GB m ()
-storeAddr idx b
+{-# INLINE storeAddr' #-}
+storeAddr' :: MonadIO m => Int -> Word8 -> GB m ()
+storeAddr' idx b
   | idx == 0xff46 = do
       gpu <- readState gbGPU
       gpu' <- dmaTransfer (loadAddr . fromIntegral) ((b , 0x00) ^. word16) gpu
@@ -177,28 +177,28 @@ storeAddr idx b
   | idx < 0xffff && inJoypadRange (fromIntegral idx) = do
       s <- readState gbJoypad
       writeState gbJoypad $ storeJoypad (fromIntegral idx) b s
-  | echoRam idx          = storeAddr (idx - 0x2000) b
+  | echoRam idx          = storeAddr' (idx - 0x2000) b
   | 0xFEA0 <= idx && idx < 0xFF00 = return ()
   | otherwise = GBT $ do
       addrspace <- asks addressSpace
       liftIO $ V.write addrspace idx b
 
 instance MonadIO m => MonadEmulator (GB m) where
-  {-# INLINE store8 #-}
-  store8 ls = storeAddr (ls8ToIndex ls)
+  storeReg r = storeAddr' (ls8ToIndex (Register8 r))
+  storeAddr addr = storeAddr' (ls8ToIndex (Addr8 addr))
 
   {-# INLINE store16 #-}
   store16 ls w =
     let (idx0, idx1) = ls16ToIndex ls
-    in store16LE (storeAddr idx0) (storeAddr idx1) w
+    in store16LE (storeAddr' idx0) (storeAddr' idx1) w
 
-  {-# INLINE load8 #-}
-  load8 ls = loadAddr (ls8ToIndex ls)
+  loadReg r = loadAddr' (ls8ToIndex (Register8 r))
+  loadAddr addr = loadAddr' (ls8ToIndex (Addr8 addr))
 
   {-# INLINE load16 #-}
   load16 ls =
     let (idx0, idx1) = ls16ToIndex ls
-    in load16LE (loadAddr idx0) (loadAddr idx1)
+    in load16LE (loadAddr' idx0) (loadAddr' idx1)
 
   advCycles dt = GBT $ do
     c <- asks clock
