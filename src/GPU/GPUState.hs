@@ -14,7 +14,7 @@ where
 
 import Control.Lens
 import GPU.Memory
-import GPU.GPUConfig as X
+import GPU.GPUControl as X
 
 import Control.Monad
 import Data.Word
@@ -30,7 +30,7 @@ data GPUState = GPUState
   , gpuVideoRAMUpdates :: ![ MemoryUpdate ]
   , gpuOAM             :: !OAM
   , gpuOAMUpdates      :: ![ MemoryUpdate ]
-  , gpuConfig          :: GPUConfig
+  , gpuConfig          :: GPUControl
   }
 
 defaultGPUState :: GPUState
@@ -39,7 +39,7 @@ defaultGPUState = GPUState
   , gpuVideoRAMUpdates = []
   , gpuOAM             = defaultOAM
   , gpuOAMUpdates      = []
-  , gpuConfig          = defaultGPUConfig
+  , gpuConfig          = defaultGPUControl
   }
 
 updateVideoRAMState, updateOAMState :: GPUState -> GPUState
@@ -55,7 +55,7 @@ updateOAMState g = g
 updateGPUState :: Word -> GPUState -> (Bool, GPUState)
 updateGPUState cycles s = do
   if view gpuEnabled (gpuConfig s) then
-    let (f, c) = updateGPUConfig cycles (gpuConfig s)
+    let (f, c) = updateGPUControl cycles (gpuConfig s)
     in (f , updateVideoRAMState $ updateOAMState $ s { gpuConfig = c })
     else (False, s)
 
@@ -79,7 +79,7 @@ loadGPU g addr
     let g' = updateOAMState g
         oam' = gpuOAM g'
     in maybe (0xff, Nothing) (\x -> (x , Just g')) $ loadOAM conf oam' addr
-  | inGPUMMIO addr = (loadGPUConfig conf addr , Nothing)
+  | inGPUMMIO addr = (loadGPUControl conf addr , Nothing)
   | otherwise = error "loadGPU: not in range"
   where conf = gpuConfig g
 
@@ -98,5 +98,5 @@ storeGPU g@GPUState { gpuConfig = conf } addr b
   | inOAM addr && addr /= 0xff46 =
     maybe g (\x -> g { gpuOAMUpdates = x : gpuOAMUpdates g })
     $ storeOAM conf addr b
-  | inGPUMMIO addr = g { gpuConfig = storeGPUConfig conf addr b }
+  | inGPUMMIO addr = g { gpuConfig = storeGPUControl conf addr b }
   | otherwise = error "storeGPU: not in range"

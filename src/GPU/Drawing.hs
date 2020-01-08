@@ -16,7 +16,7 @@ import Utilities.Vector
 
 import Control.Lens
 
-backgroundLine :: GPUConfig -> VideoRAM -> VS.Vector Word8
+backgroundLine :: GPUControl -> VideoRAM -> VS.Vector Word8
 backgroundLine g vram =
   let y' = (+) <$> view gpuYCoordinate <*> view (gpuScroll._y) $ g
       (sd, sr) = (g ^. gpuScroll._x) `divMod` 8

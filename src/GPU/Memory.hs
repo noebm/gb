@@ -35,7 +35,7 @@ import Data.Word
 import Data.Bits
 import Data.Bits.Lens
 
-import GPU.GPUConfig
+import GPU.GPUControl
 import GPU.Palette
 import GPU.VideoAddr
 
@@ -88,25 +88,25 @@ external interface
 -}
 
 {-# INLINE loadVideoRAM #-}
-loadVideoRAM :: GPUConfig -> VideoRAM -> Word16 -> Maybe Word8
-loadVideoRAM GPUConfig { _gpuMode = mode } (VideoRAM m) addr = do
+loadVideoRAM :: GPUControl -> VideoRAM -> Word16 -> Maybe Word8
+loadVideoRAM GPUControl { _gpuMode = mode } (VideoRAM m) addr = do
   guard (mode /= ModeVRAM)
   VU.indexM m $ fromIntegral (addr .&. 0x1fff)
 
 {-# INLINE storeVideoRAM #-}
-storeVideoRAM :: GPUConfig -> Word16 -> Word8 -> Maybe MemoryUpdate
-storeVideoRAM GPUConfig { _gpuMode = mode } addr b = do
+storeVideoRAM :: GPUControl -> Word16 -> Word8 -> Maybe MemoryUpdate
+storeVideoRAM GPUControl { _gpuMode = mode } addr b = do
   guard (mode /= ModeVRAM)
   return ( fromIntegral addr .&. 0x1fff , b )
 
 {-# INLINE loadOAM #-}
-loadOAM :: GPUConfig -> OAM -> Word16 -> Maybe Word8
-loadOAM GPUConfig { _gpuMode = mode } (OAM m) addr = do
+loadOAM :: GPUControl -> OAM -> Word16 -> Maybe Word8
+loadOAM GPUControl { _gpuMode = mode } (OAM m) addr = do
   guard (mode /= ModeVRAM || mode /= ModeOAM)
   VU.indexM m $ fromIntegral (addr .&. 0x9f)
 
 {-# INLINE storeOAM #-}
-storeOAM :: GPUConfig -> Word16 -> Word8 -> Maybe MemoryUpdate
-storeOAM GPUConfig { _gpuMode = mode } addr b = do
+storeOAM :: GPUControl -> Word16 -> Word8 -> Maybe MemoryUpdate
+storeOAM GPUControl { _gpuMode = mode } addr b = do
   guard (mode /= ModeVRAM || mode /= ModeOAM)
   return ( fromIntegral addr .&. 0x9f , b )
