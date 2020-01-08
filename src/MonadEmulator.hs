@@ -4,7 +4,8 @@ module MonadEmulator
   , LoadStore8 (..)
   , LoadStore16 (..)
   , MonadEmulator (..)
-  , load8, store8, load16
+  , load8, store8
+  , load16, store16
 
   , updateGPU
   , updateTimer
@@ -84,7 +85,8 @@ data LoadStore16 = Register16 !Reg16 | Addr16 !Word16 | PC | SP
 class Monad m => MonadEmulator m where
   storeReg :: Reg8 -> Word8 -> m ()
   storeAddr   :: Word16 -> Word8 -> m ()
-  store16 :: LoadStore16 -> Word16 -> m ()
+  storePC :: Word16 -> m ()
+  storeSP :: Word16 -> m ()
 
   loadReg :: Reg8 -> m Word8
   loadAddr :: Word16 -> m Word8
@@ -114,6 +116,14 @@ class Monad m => MonadEmulator m where
 store8 :: MonadEmulator m => LoadStore8 -> Word8 -> m ()
 store8 (Register8 r) = storeReg r
 store8 (Addr8 addr) = storeAddr addr
+
+store16 :: MonadEmulator m => LoadStore16 -> Word16 -> m ()
+store16 (Register16 r) =
+  let (r0, r1) = regPair r
+  in store16LE (storeReg r0) (storeReg r1)
+store16 PC = storePC
+store16 SP = storeSP
+store16 (Addr16 addr) = store16LE (storeAddr addr) (storeAddr $ addr + 1)
 
 load8 :: MonadEmulator m => LoadStore8 -> m Word8
 load8 (Register8 r) = loadReg r
@@ -176,7 +186,8 @@ aux2 f = aux1 . f
 instance MonadEmulator m => MonadEmulator (StateT s m) where
   storeReg = aux2 storeReg
   storeAddr = aux2 storeAddr
-  store16 = aux2 store16
+  storePC = aux1 storePC
+  storeSP = aux1 storeSP
 
   loadReg = aux1 loadReg
   loadAddr = aux1 loadAddr

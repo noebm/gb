@@ -184,10 +184,12 @@ instance MonadIO m => MonadEmulator (GB m) where
   storeReg r = storeAddr' (ls8ToIndex (Register8 r))
   storeAddr addr = storeAddr' (ls8ToIndex (Addr8 addr))
 
-  {-# INLINE store16 #-}
-  store16 ls w =
-    let (idx0, idx1) = ls16ToIndex ls
-    in store16LE (storeAddr' idx0) (storeAddr' idx1) w
+  storeSP =
+    let (idx0, idx1) = ls16ToIndex SP
+    in store16LE (storeAddr' idx0) (storeAddr' idx1)
+  storePC =
+    let (idx0, idx1) = ls16ToIndex PC
+    in store16LE (storeAddr' idx0) (storeAddr' idx1)
 
   loadReg r = loadAddr' (ls8ToIndex (Register8 r))
   loadAddr addr = loadAddr' (ls8ToIndex (Addr8 addr))
