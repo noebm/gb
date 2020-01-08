@@ -99,23 +99,24 @@ clearInterrupts gpu = gpu
   , gpuYCompareInterrupt = False
   }
 
-updateStatusInterrupts :: GPUConfig -> GPUConfig
+updateStatusInterrupts :: GPUConfig -> (Bool, GPUConfig)
 updateStatusInterrupts gpu = case gpuMode gpu of
-  ModeOAM    -> gpu' { gpuOAMInterrupt = True, gpuYCompareInterrupt = gpuYAtCompare gpu }
-  ModeHBlank -> gpu' { gpuHblankInterrupt = True }
-  ModeVBlank | gpuYCoordinate gpu == 144
-             -> gpu' { gpuVblankInterrupt = True, gpuYCompareInterrupt = gpuYAtCompare gpu  }
-  ModeVBlank -> gpu' { gpuYCompareInterrupt = gpuYAtCompare gpu }
-  _ -> gpu'
+  ModeOAM    -> (True, gpu' { gpuOAMInterrupt = True, gpuYCompareInterrupt = gpuYAtCompare gpu })
+  ModeHBlank -> (True, gpu' { gpuHblankInterrupt = True })
+  ModeVBlank -> let f1 = gpuYCoordinate gpu == 144
+                    f2 = gpuYAtCompare gpu
+                in ( f1 || f2
+                   , gpu' { gpuVblankInterrupt = f1, gpuYCompareInterrupt = f2 } )
+  _ -> (False, gpu')
   where gpu' = clearInterrupts gpu
 
-updateGPUConfig :: Word -> GPUConfig -> GPUConfig
+updateGPUConfig :: Word -> GPUConfig -> (Bool, GPUConfig)
 updateGPUConfig cycles g =
   let cyclesMode = gpuModeDuration (gpuMode g)
       g' = g { gpuClock = gpuClock g + cycles }
   in if gpuClock g' >= cyclesMode
      then updateStatusInterrupts $ gpuNextConfig $ g' { gpuClock = gpuClock g' - cyclesMode }
-     else g'
+     else (False , g')
 
 gpuNextConfig :: GPUConfig -> GPUConfig
 gpuNextConfig g = case gpuMode g of
