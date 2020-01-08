@@ -196,7 +196,7 @@ parseExtendedInstruction b =
   in
     case byteCodeDecompose b of
       (0,y,z) ->
-        let op = case y of { 0 -> RLC ; 1 -> RRC ; 2 -> RL; 3 -> RR; 4 -> SLA; 5 -> SRA; 6 -> SWAP; 7 -> SRL }
+        let op = case y of { 0 -> RLC ; 1 -> RRC ; 2 -> RL; 3 -> RR; 4 -> SLA; 5 -> SRA; 6 -> SWAP; _ -> SRL }
         in o op (ConstantTime $ if z == 6 then 16 else 8) [ basicRegisterArg z ]
 
       (1,y,z) -> o BIT (ConstantTime $ if z == 6 then 12 else 8) [ ArgByteCode y, basicRegisterArg z ]
