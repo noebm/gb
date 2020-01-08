@@ -13,6 +13,9 @@ module GPU.GPUConfig
   , gpuBGTileMapSelect, gpuBGDisplay
   , gpuOBJSizeLarge, gpuOBJDisplay
 
+  , gpuYCoordinate
+  , gpuScroll
+
   )
 where
 
@@ -22,6 +25,7 @@ import Control.Monad
 import Text.Printf
 
 import GPU.Palette
+import SDL.Vect
 
 import Control.Lens
 import Data.Bits.Lens
@@ -48,10 +52,8 @@ data GPUConfig = GPUConfig
   , _gpuOBJ0Palette :: Palette
   , _gpuOBJ1Palette :: Palette
 
-  , _gpuScrollX :: Word8
-  , _gpuScrollY :: Word8
-  , _gpuWindowX :: Word8
-  , _gpuWindowY :: Word8
+  , _gpuScroll :: V2 Word8
+  , _gpuWindow :: V2 Word8
   }
   deriving (Show)
 
@@ -87,10 +89,8 @@ defaultGPUConfig = GPUConfig
   , _gpuOBJ0Palette = Palette 0
   , _gpuOBJ1Palette = Palette 0
 
-  , _gpuScrollX = 0
-  , _gpuScrollY = 0
-  , _gpuWindowX = 0
-  , _gpuWindowY = 0
+  , _gpuScroll = zero
+  , _gpuWindow = zero
   }
 
 {-# INLINE gpuModeDuration #-}
@@ -160,16 +160,16 @@ storeGPUConfig g 0xFF41 b = g
   , _gpuVblankInterrupt   = b `testBit` 4
   , _gpuHblankInterrupt   = b `testBit` 3
   }
-storeGPUConfig g 0xFF42 b = g { _gpuScrollY = b }
-storeGPUConfig g 0xFF43 b = g { _gpuScrollX = b }
+storeGPUConfig g 0xFF42 b = g & gpuScroll._y .~ b
+storeGPUConfig g 0xFF43 b = g & gpuScroll._x .~ b
 storeGPUConfig g 0xFF44 _ = g
 storeGPUConfig g 0xFF45 b = g { _gpuYCompare = b }
 -- storeGPUConfig g 0xFF46 _ = g -- ??? dma transfer ... should be handled separately
 storeGPUConfig g 0xFF47 b = g { _gpuBGPalette   = Palette b } -- non CBG mode only
 storeGPUConfig g 0xFF48 b = g { _gpuOBJ0Palette = Palette b } -- non CBG mode only
 storeGPUConfig g 0xFF49 b = g { _gpuOBJ1Palette = Palette b } -- non CBG mode only
-storeGPUConfig g 0xFF4A b = g { _gpuWindowY = b }
-storeGPUConfig g 0xFF4B b = g { _gpuWindowX = b }
+storeGPUConfig g 0xFF4A b = g & gpuWindow._y .~ b
+storeGPUConfig g 0xFF4B b = g & gpuWindow._x .~ b
 storeGPUConfig _ _ _ = error "storeGPUConfig: not in range"
 
 loadGPUConfig :: GPUConfig -> Word16 -> Word8
@@ -182,15 +182,15 @@ loadGPUConfig g 0xFF41 = foldl (.|.) 0x80
   , if gpuYAtCompare        g then bit 2 else 0x00
   , if view gpuEnabled g then gpuModeNumber g else 0x00
   ]
-loadGPUConfig g 0xFF42 = _gpuScrollY g
-loadGPUConfig g 0xFF43 = _gpuScrollX g
+loadGPUConfig g 0xFF42 = g ^. gpuScroll._y
+loadGPUConfig g 0xFF43 = g ^. gpuScroll._x
 loadGPUConfig g 0xFF44 = _gpuYCoordinate g
 loadGPUConfig g 0xFF45  = _gpuYCompare g
 -- loadGPUConfig g 0xFF46 = g -- ??? dma transfer ... should be handled separately
 loadGPUConfig g 0xFF47 = getPalette $ _gpuBGPalette   g -- non CBG mode only
 loadGPUConfig g 0xFF48 = getPalette $ _gpuOBJ0Palette g -- non CBG mode only
 loadGPUConfig g 0xFF49 = getPalette $ _gpuOBJ1Palette g -- non CBG mode only
-loadGPUConfig g 0xFF4A = _gpuWindowY g
-loadGPUConfig g 0xFF4B = _gpuWindowX g
+loadGPUConfig g 0xFF4A = g ^. gpuWindow._y
+loadGPUConfig g 0xFF4B = g ^. gpuWindow._x
 loadGPUConfig _ 0xff4d = 0xff
 loadGPUConfig _ addr = error $ printf "loadGPUConfig: not in range 0x%04x" addr

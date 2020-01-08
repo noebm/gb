@@ -14,10 +14,12 @@ import Control.Monad.IO.Class
 
 import Utilities.Vector
 
+import Control.Lens
+
 backgroundLine :: GPUConfig -> VideoRAM -> VS.Vector Word8
 backgroundLine g vram =
-  let y' = _gpuYCoordinate g + _gpuScrollY g
-      (sd, sr) = _gpuScrollX g `divMod` 8
+  let y' = (+) <$> view gpuYCoordinate <*> view (gpuScroll._y) $ g
+      (sd, sr) = (g ^. gpuScroll._x) `divMod` 8
       tiles
         = fmap (tile vram)
         $ fmap (tileAddress g)
@@ -26,10 +28,8 @@ backgroundLine g vram =
         $ fmap (+ sd)
         $ [0..20]
   in VS.generate 160 $ \x ->
-    let x' = fromIntegral x + _gpuScrollX g
-        (xd, xr) = fromIntegral x `divMod` 8
-        offset = (xr + sr) `div` 8
-        t = tiles !! fromIntegral (xd + offset)
+    let x' = fromIntegral x + (g ^. gpuScroll._x)
+        t = tiles !! fromIntegral ((x' `div` 8) - sr)
     in paletteValue (_gpuBGPalette g) $ loadTile t x' y'
 
 updateTextureLine :: MonadIO m => Texture -> Int -> VS.Vector (V4 Word8) -> m ()
