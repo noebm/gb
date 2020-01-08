@@ -32,7 +32,7 @@ data GPUConfig = GPUConfig
 
   , gpuOBJSizeLarge    :: Bool
   , gpuOBJDisplay      :: Bool
-  , gpuPriority        :: Bool
+  , gpuBGDisplay       :: Bool
 
   , gpuYCompareInterrupt :: Bool
   , gpuOAMInterrupt      :: Bool
@@ -64,7 +64,7 @@ defaultGPUConfig = GPUConfig
   , gpuBGTileMapSelect     = False
   , gpuOBJSizeLarge        = False
   , gpuOBJDisplay          = False
-  , gpuPriority            = False
+  , gpuBGDisplay           = False
 
   , gpuYCompareInterrupt = False
   , gpuOAMInterrupt      = False
@@ -152,7 +152,7 @@ storeGPUConfig g 0xFF40 b = g
   , gpuBGTileMapSelect     = b `testBit` 3
   , gpuOBJSizeLarge        = b `testBit` 2
   , gpuOBJDisplay          = b `testBit` 1
-  , gpuPriority            = b `testBit` 0
+  , gpuBGDisplay           = b `testBit` 0
   }
 storeGPUConfig g 0xFF41 b = g
   { gpuYCompareInterrupt = b `testBit` 6
@@ -181,7 +181,7 @@ loadGPUConfig g 0xFF40 = foldl (.|.) 0x00
    , if gpuBGTileMapSelect     g then bit 3 else 0x00
    , if gpuOBJSizeLarge        g then bit 2 else 0x00
    , if gpuOBJDisplay          g then bit 1 else 0x00
-   , if gpuPriority            g then bit 0 else 0x00
+   , if gpuBGDisplay           g then bit 0 else 0x00
    ]
 loadGPUConfig g 0xFF41 = foldl (.|.) 0x80
   [ if gpuYCompareInterrupt g then bit 6 else 0x00
