@@ -23,6 +23,7 @@ import Control.Monad.Reader
 
 import MonadEmulator
 
+import CPU.Registers
 import GPU.GPUState
 import Interrupt.Interrupt
 import Timer
@@ -110,14 +111,8 @@ ls8ToIndex (Addr8 addr) = fromIntegral addr
 
 {-# INLINE ls16ToIndex #-}
 ls16ToIndex :: LoadStore16 -> (Int,Int)
-ls16ToIndex (Register16 r) = reg16decomp r & each +~ rbase
-  where
-  rbase = 0x10000
-  {-# INLINE reg16decomp #-}
-  reg16decomp AF = (F, A) & each %~ reg8index
-  reg16decomp BC = (C, B) & each %~ reg8index
-  reg16decomp DE = (E, D) & each %~ reg8index
-  reg16decomp HL = (L, H) & each %~ reg8index
+ls16ToIndex (Register16 r) = regPair r & each %~ reg8index & each +~ rbase
+  where rbase = 0x10000
 ls16ToIndex PC = (0x8 , 0x9) & each +~ rbase
   where rbase = 0x10000
 ls16ToIndex SP = (0xA , 0xB) & each +~ rbase
