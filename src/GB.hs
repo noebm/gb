@@ -32,6 +32,10 @@ import Joypad
 
 data GBState s = GBState
   { addressSpace :: MVector s Word8
+
+  , stackpointer   :: STRef s Word16
+  , programCounter :: STRef s Word16
+
   , clock        :: STRef s Word
   , shouldStop   :: STRef s Bool
   , isHalted     :: STRef s Bool
@@ -54,9 +58,11 @@ type GB = GBT RealWorld
 
 makeGBState :: CartridgeState s -> ST s (GBState s)
 makeGBState cart = do
-  memory <- V.replicate (0x10000 + 0xC) 0x00
+  memory <- V.replicate (0x10000 + 0x8) 0x00
   GBState
     <$> pure memory
+    <*> newSTRef 0x0000
+    <*> newSTRef 0x0000
     <*> newSTRef 0
     <*> newSTRef False
     <*> newSTRef False
@@ -108,17 +114,6 @@ ls8ToIndex :: LoadStore8 -> Int
 ls8ToIndex (Register8 r) = rbase + reg8index r
   where rbase = 0x10000
 ls8ToIndex (Addr8 addr) = fromIntegral addr
-
-{-# INLINE ls16ToIndex #-}
-ls16ToIndex :: LoadStore16 -> (Int,Int)
-ls16ToIndex (Register16 r) = regPair r & each %~ reg8index & each +~ rbase
-  where rbase = 0x10000
-ls16ToIndex PC = (0x8 , 0x9) & each +~ rbase
-  where rbase = 0x10000
-ls16ToIndex SP = (0xA , 0xB) & each +~ rbase
-  where rbase = 0x10000
-
-ls16ToIndex (Addr16 addr) = (fromIntegral addr , fromIntegral addr + 1)
 
 {-# INLINE echoRam #-}
 echoRam :: Int -> Bool
@@ -184,22 +179,14 @@ instance MonadIO m => MonadEmulator (GB m) where
   storeReg r = storeAddr' (ls8ToIndex (Register8 r))
   storeAddr addr = storeAddr' (ls8ToIndex (Addr8 addr))
 
-  storeSP =
-    let (idx0, idx1) = ls16ToIndex SP
-    in store16LE (storeAddr' idx0) (storeAddr' idx1)
-  storePC =
-    let (idx0, idx1) = ls16ToIndex PC
-    in store16LE (storeAddr' idx0) (storeAddr' idx1)
+  storeSP = writeState stackpointer
+  storePC = writeState programCounter
 
   loadReg r = loadAddr' (ls8ToIndex (Register8 r))
   loadAddr addr = loadAddr' (ls8ToIndex (Addr8 addr))
 
-  loadSP =
-    let (idx0, idx1) = ls16ToIndex SP
-    in load16LE (loadAddr' idx0) (loadAddr' idx1)
-  loadPC =
-    let (idx0, idx1) = ls16ToIndex PC
-    in load16LE (loadAddr' idx0) (loadAddr' idx1)
+  loadSP = readState stackpointer
+  loadPC = readState programCounter
 
   advCycles dt = GBT $ do
     c <- asks clock

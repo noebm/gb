@@ -16,8 +16,6 @@ module MonadEmulator
 
   , word16
 
-  , load16LE, store16LE
-
   , flagC, flagH, flagN, flagZ
 
   , byte, word, sbyte
