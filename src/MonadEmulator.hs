@@ -4,7 +4,7 @@ module MonadEmulator
   , LoadStore8 (..)
   , LoadStore16 (..)
   , MonadEmulator (..)
-  , load8, store8
+  , load8, store8, load16
 
   , updateGPU
   , updateTimer
@@ -88,7 +88,8 @@ class Monad m => MonadEmulator m where
 
   loadReg :: Reg8 -> m Word8
   loadAddr :: Word16 -> m Word8
-  load16 :: LoadStore16 -> m Word16
+  loadPC :: m Word16
+  loadSP :: m Word16
 
   -- | Advances / Clears internal timer.
   advCycles :: Word -> m ()
@@ -117,6 +118,14 @@ store8 (Addr8 addr) = storeAddr addr
 load8 :: MonadEmulator m => LoadStore8 -> m Word8
 load8 (Register8 r) = loadReg r
 load8 (Addr8 addr) = loadAddr addr
+
+load16 :: MonadEmulator m => LoadStore16 -> m Word16
+load16 (Register16 r) =
+  let (r0, r1) = regPair r
+  in load16LE (loadReg r0) (loadReg r1)
+load16 PC = loadPC
+load16 SP = loadSP
+load16 (Addr16 addr) = load16LE (loadAddr addr) (loadAddr $ addr + 1)
 
 modifyInterrupt f = putInterrupt . f =<< getInterrupt
 
@@ -171,7 +180,8 @@ instance MonadEmulator m => MonadEmulator (StateT s m) where
 
   loadReg = aux1 loadReg
   loadAddr = aux1 loadAddr
-  load16    = aux1 load16
+  loadPC = aux0 loadPC
+  loadSP = aux0 loadSP
 
   advCycles = aux1 advCycles
   resetCycles = aux0 resetCycles

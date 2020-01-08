@@ -192,9 +192,11 @@ instance MonadIO m => MonadEmulator (GB m) where
   loadReg r = loadAddr' (ls8ToIndex (Register8 r))
   loadAddr addr = loadAddr' (ls8ToIndex (Addr8 addr))
 
-  {-# INLINE load16 #-}
-  load16 ls =
-    let (idx0, idx1) = ls16ToIndex ls
+  loadSP =
+    let (idx0, idx1) = ls16ToIndex SP
+    in load16LE (loadAddr' idx0) (loadAddr' idx1)
+  loadPC =
+    let (idx0, idx1) = ls16ToIndex PC
     in load16LE (loadAddr' idx0) (loadAddr' idx1)
 
   advCycles dt = GBT $ do
