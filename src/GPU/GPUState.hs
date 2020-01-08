@@ -12,6 +12,7 @@ module GPU.GPUState
   )
 where
 
+import Control.Lens
 import GPU.Memory
 import GPU.GPUConfig as X
 
@@ -53,7 +54,7 @@ updateOAMState g = g
 
 updateGPUState :: Word -> GPUState -> (Bool, GPUState)
 updateGPUState cycles s = do
-  if _gpuEnabled (gpuConfig s) then
+  if view gpuEnabled (gpuConfig s) then
     let (f, c) = updateGPUConfig cycles (gpuConfig s)
     in (f , updateVideoRAMState $ updateOAMState $ s { gpuConfig = c })
     else (False, s)

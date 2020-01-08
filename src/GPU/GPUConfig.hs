@@ -6,6 +6,13 @@ module GPU.GPUConfig
   , updateGPUConfig
   , loadGPUConfig
   , storeGPUConfig
+
+  , gpuEnabled
+  , gpuTileDataSelect
+  , gpuWindowTileMapSelect, gpuWindowDisplay
+  , gpuBGTileMapSelect, gpuBGDisplay
+  , gpuOBJSizeLarge, gpuOBJDisplay
+
   )
 where
 
@@ -17,6 +24,7 @@ import Text.Printf
 import GPU.Palette
 
 import Control.Lens
+import Data.Bits.Lens
 
 -- should go from 0 to 3
 data GPUMode = ModeHBlank | ModeVBlank | ModeOAM | ModeVRAM
@@ -26,16 +34,7 @@ data GPUConfig = GPUConfig
   { _gpuMode       :: GPUMode
   , _gpuClock      :: !Word
 
-  , _gpuEnabled        :: Bool
-  , _gpuWindowTileMapSelect :: Bool
-  , _gpuWindowDisplay       :: Bool
-  , _gpuTileDataSelect :: Bool
-
-  , _gpuBGTileMapSelect :: Bool
-
-  , _gpuOBJSizeLarge    :: Bool
-  , _gpuOBJDisplay      :: Bool
-  , _gpuBGDisplay       :: Bool
+  , _gpuLCDControlByte :: Word8
 
   , _gpuYCompareInterrupt :: Bool
   , _gpuOAMInterrupt      :: Bool
@@ -59,18 +58,22 @@ data GPUConfig = GPUConfig
 makePrisms ''GPUMode
 makeLenses ''GPUConfig
 
+gpuEnabled, gpuWindowTileMapSelect, gpuWindowDisplay, gpuTileDataSelect,
+  gpuBGTileMapSelect, gpuOBJSizeLarge, gpuOBJDisplay, gpuBGDisplay :: Lens' GPUConfig Bool
+gpuEnabled             = gpuLCDControlByte . bitAt 7
+gpuWindowTileMapSelect = gpuLCDControlByte . bitAt 6
+gpuWindowDisplay       = gpuLCDControlByte . bitAt 5
+gpuTileDataSelect      = gpuLCDControlByte . bitAt 4
+gpuBGTileMapSelect     = gpuLCDControlByte . bitAt 3
+gpuOBJSizeLarge        = gpuLCDControlByte . bitAt 2
+gpuOBJDisplay          = gpuLCDControlByte . bitAt 1
+gpuBGDisplay           = gpuLCDControlByte . bitAt 0
+
 defaultGPUConfig :: GPUConfig
 defaultGPUConfig = GPUConfig
   { _gpuMode                = ModeHBlank
   , _gpuClock               = 0
-  , _gpuEnabled             = False
-  , _gpuWindowTileMapSelect = False
-  , _gpuWindowDisplay       = False
-  , _gpuTileDataSelect      = False
-  , _gpuBGTileMapSelect     = False
-  , _gpuOBJSizeLarge        = False
-  , _gpuOBJDisplay          = False
-  , _gpuBGDisplay           = False
+  , _gpuLCDControlByte      = 0x00
 
   , _gpuYCompareInterrupt = False
   , _gpuOAMInterrupt      = False
@@ -150,16 +153,7 @@ gpuYAtCompare GPUConfig { _gpuYCoordinate = ly , _gpuYCompare = lyc }
   = ly == lyc
 
 storeGPUConfig :: GPUConfig -> Word16 -> Word8 -> GPUConfig
-storeGPUConfig g 0xFF40 b = g
-  { _gpuEnabled             = b `testBit` 7
-  , _gpuWindowTileMapSelect = b `testBit` 6
-  , _gpuWindowDisplay       = b `testBit` 5
-  , _gpuTileDataSelect      = b `testBit` 4
-  , _gpuBGTileMapSelect     = b `testBit` 3
-  , _gpuOBJSizeLarge        = b `testBit` 2
-  , _gpuOBJDisplay          = b `testBit` 1
-  , _gpuBGDisplay           = b `testBit` 0
-  }
+storeGPUConfig g 0xFF40 b = g & gpuLCDControlByte .~ b
 storeGPUConfig g 0xFF41 b = g
   { _gpuYCompareInterrupt = b `testBit` 6
   , _gpuOAMInterrupt      = b `testBit` 5
@@ -179,23 +173,14 @@ storeGPUConfig g 0xFF4B b = g { _gpuWindowX = b }
 storeGPUConfig _ _ _ = error "storeGPUConfig: not in range"
 
 loadGPUConfig :: GPUConfig -> Word16 -> Word8
-loadGPUConfig g 0xFF40 = foldl (.|.) 0x00
-   [ if _gpuEnabled             g then bit 7 else 0x00
-   , if _gpuWindowTileMapSelect g then bit 6 else 0x00
-   , if _gpuWindowDisplay       g then bit 5 else 0x00
-   , if _gpuTileDataSelect      g then bit 4 else 0x00
-   , if _gpuBGTileMapSelect     g then bit 3 else 0x00
-   , if _gpuOBJSizeLarge        g then bit 2 else 0x00
-   , if _gpuOBJDisplay          g then bit 1 else 0x00
-   , if _gpuBGDisplay           g then bit 0 else 0x00
-   ]
+loadGPUConfig g 0xFF40 = g ^. gpuLCDControlByte
 loadGPUConfig g 0xFF41 = foldl (.|.) 0x80
   [ if _gpuYCompareInterrupt g then bit 6 else 0x00
   , if _gpuOAMInterrupt      g then bit 5 else 0x00
   , if _gpuVblankInterrupt   g then bit 4 else 0x00
   , if _gpuHblankInterrupt   g then bit 3 else 0x00
   , if gpuYAtCompare        g then bit 2 else 0x00
-  , if _gpuEnabled g then gpuModeNumber g else 0x00
+  , if view gpuEnabled g then gpuModeNumber g else 0x00
   ]
 loadGPUConfig g 0xFF42 = _gpuScrollY g
 loadGPUConfig g 0xFF43 = _gpuScrollX g
