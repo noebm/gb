@@ -49,6 +49,7 @@ getArgM :: MonadEmulator m => Arg -> Either (m Word8) (m Word16)
 getArgM arg = case arg of
   -- single byte data
   ArgDirect8 r -> Left (load8 (Register8 r))
+  ArgSP        -> Right (load16 SP)
   Immediate8   -> Left byte
   -- double byte data
   ArgDirect16 r -> Right (load16 $ Register16 r)
@@ -84,6 +85,7 @@ setArgM arg = case arg of
   ArgDirect8 r -> Left (store8 (Register8 r))
   -- double byte data
   ArgDirect16 r -> Right (store16 $ Register16 r)
+  ArgSP -> Right (store16 SP)
 
   -- pointers
   ArgPointerRegFF r -> Left (\b -> (`store8` b) . Addr8 . addrFF =<< load8 (Register8 r))
@@ -225,7 +227,7 @@ interpretM instr@(Instruction _ op t args) = case op of
         return $ getTime True t
       _ -> error $ printf "interpretM: %s - cannot match type" (show instr)
     l@[ rHL, rSP, ptrRel ]
-      | [ ArgDirect16 HL, ArgDirect16 SP, Immediate8 ] <- toArg <$> l
+      | [ ArgDirect16 HL, ArgSP, Immediate8 ] <- toArg <$> l
       , Right sHL <- setArgumentM rHL
       , Right gSP <- getArgumentM rSP
       , Left  getRel <- getArgumentM ptrRel
@@ -429,13 +431,13 @@ interpretM instr@(Instruction _ op t args) = case op of
   JP -> case args of
     [ arg ]
       | Right g <- getArgumentM arg ->
-          g >>= store16 (Register16 PC) >> return (getTime True t)
+          g >>= store16 PC >> return (getTime True t)
     [ argf , arg ]
       | Right g <- getArgumentM arg
       , ArgFlag f <- toArg argf -> do
           t' <- getFlag f <$> load8 (Register8 F)
           addr <- g
-          when t' $ store16 (Register16 PC) addr
+          when t' $ store16 PC addr
           return $ getTime t' t
     _ -> msg
   CALL -> case args of
@@ -493,7 +495,7 @@ interpretM instr@(Instruction _ op t args) = case op of
             & flagC .~ (v' < v)
             & flagH .~ ((v' .&. 0x0FFF) < (v .&. 0x0FFF))
           return $ getTime True t
-      | ArgDirect16 SP <- toArg to
+      | ArgSP <- toArg to
       , Right s <- setArgumentM to
       , Right gs <- getArgumentM to
       , Left getRel <- getArgumentM from -> do

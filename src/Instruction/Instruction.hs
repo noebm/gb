@@ -38,6 +38,7 @@ data Mnemonic
 
 data Arg = ArgDirect8 Reg8
          | ArgDirect16 Reg16
+         | ArgSP
 
          | Immediate8
          | Immediate16
@@ -63,6 +64,8 @@ instance Show Arg where
   show arg = case arg of
     ArgDirect8 r -> show r
     ArgDirect16 r -> show r
+    ArgSP -> "SP"
+
     Immediate8 -> "d8"
     Immediate16 -> "d16"
 
@@ -214,19 +217,19 @@ parseInstruction b =
 
     (0,0,0) -> o NOP  (ConstantTime 4)  []
     (0,2,0) -> o STOP (ConstantTime 4)  []
-    (0,1,0) -> o LD   (ConstantTime 20) [ ArgPointerImm16, ArgDirect16 SP ]
+    (0,1,0) -> o LD   (ConstantTime 20) [ ArgPointerImm16, ArgSP ]
     (0,3,0) -> o JR   (ConstantTime 12) [ AddressRel ]
     (0,y,0) -> o JR   (VariableTime 8 12) [ ArgFlag $! flag (y .&. 0x3), AddressRel ]
 
     (0,0,1) -> o LD (ConstantTime 12) [ ArgDirect16 BC, Immediate16 ]
     (0,2,1) -> o LD (ConstantTime 12) [ ArgDirect16 DE, Immediate16 ]
     (0,4,1) -> o LD (ConstantTime 12) [ ArgDirect16 HL, Immediate16 ]
-    (0,6,1) -> o LD (ConstantTime 12) [ ArgDirect16 SP, Immediate16 ]
+    (0,6,1) -> o LD (ConstantTime 12) [ ArgSP, Immediate16 ]
 
     (0,1,1) -> o ADD (ConstantTime 8) [ ArgDirect16 HL, ArgDirect16 BC]
     (0,3,1) -> o ADD (ConstantTime 8) [ ArgDirect16 HL, ArgDirect16 DE]
     (0,5,1) -> o ADD (ConstantTime 8) [ ArgDirect16 HL, ArgDirect16 HL]
-    (0,7,1) -> o ADD (ConstantTime 8) [ ArgDirect16 HL, ArgDirect16 SP]
+    (0,7,1) -> o ADD (ConstantTime 8) [ ArgDirect16 HL, ArgSP]
 
     (0,y@1,2) -> o LD (ConstantTime 8) [ ArgDirect8 A, registerPointerArg y ]
     (0,y@3,2) -> o LD (ConstantTime 8) [ ArgDirect8 A, registerPointerArg y ]
@@ -241,12 +244,12 @@ parseInstruction b =
     (0,0,3) -> o INC (ConstantTime 8) [ ArgDirect16 BC ]
     (0,2,3) -> o INC (ConstantTime 8) [ ArgDirect16 DE ]
     (0,4,3) -> o INC (ConstantTime 8) [ ArgDirect16 HL ]
-    (0,6,3) -> o INC (ConstantTime 8) [ ArgDirect16 SP ]
+    (0,6,3) -> o INC (ConstantTime 8) [ ArgSP ]
 
     (0,1,3) -> o DEC (ConstantTime 8) [ ArgDirect16 BC ]
     (0,3,3) -> o DEC (ConstantTime 8) [ ArgDirect16 DE ]
     (0,5,3) -> o DEC (ConstantTime 8) [ ArgDirect16 HL ]
-    (0,7,3) -> o DEC (ConstantTime 8) [ ArgDirect16 SP ]
+    (0,7,3) -> o DEC (ConstantTime 8) [ ArgSP ]
 
     (0,y,4) -> o INC (ConstantTime $ if y == 6 then 12 else 4) [ basicRegisterArg y ]
     (0,y,5) -> o DEC (ConstantTime $ if y == 6 then 12 else 4) [ basicRegisterArg y ]
@@ -269,8 +272,8 @@ parseInstruction b =
 
     (3,4,0) -> o LD  (ConstantTime 12) [ ArgPointerImmFF, ArgDirect8 A ]
     (3,6,0) -> o LD  (ConstantTime 12) [ ArgDirect8 A, ArgPointerImmFF ]
-    (3,5,0) -> o ADD (ConstantTime 16) [ ArgDirect16 SP, Immediate8 ]
-    (3,7,0) -> o LD  (ConstantTime 12) [ ArgDirect16 HL, ArgDirect16 SP, Immediate8 ]
+    (3,5,0) -> o ADD (ConstantTime 16) [ ArgSP, Immediate8 ]
+    (3,7,0) -> o LD  (ConstantTime 12) [ ArgDirect16 HL, ArgSP, Immediate8 ]
     (3,y,0) -> o RET (VariableTime 8 20) [ ArgFlag $! flag y ]
 
     (3,0,1) -> o POP (ConstantTime 12) [ ArgDirect16 BC ]
@@ -281,7 +284,7 @@ parseInstruction b =
     (3,1,1) -> o RET  (ConstantTime 16) []
     (3,3,1) -> o RETI (ConstantTime 16) []
     (3,5,1) -> o JP   (ConstantTime  4) [ ArgDirect16 HL ]
-    (3,7,1) -> o LD   (ConstantTime 8) [ ArgDirect16 SP, ArgDirect16 HL ]
+    (3,7,1) -> o LD   (ConstantTime 8) [ ArgSP, ArgDirect16 HL ]
 
     (3,4,2) -> o LD (ConstantTime 8) [ ArgPointerRegFF C, ArgDirect8 A ]
     (3,6,2) -> o LD (ConstantTime 8) [ ArgDirect8 A, ArgPointerRegFF C ]
