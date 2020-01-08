@@ -38,12 +38,6 @@ getFlag FlagNZ = views flagZ not
 addrFF :: Word8 -> Word16
 addrFF k = (0xFF , k) ^. word16
 
--- {-# INLINE addrRel #-}
--- addrRel :: MonadEmulator m => Int8 -> m Word16
--- addrRel k = do
---   pc <- load16 (Register16 PC)
---   return $ addRelative pc k
-
 {-# INLINE getArgM #-}
 getArgM :: MonadEmulator m => Arg -> Either (m Word8) (m Word16)
 getArgM arg = case arg of
