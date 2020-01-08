@@ -41,16 +41,11 @@ import Data.Word
 import Data.Int
 import Data.Maybe
 
+import CPU.Registers
 import GPU.GPUState
 import Interrupt.Interrupt
 import Timer
 import Interrupt.InterruptType
-
-data Reg8 = A | B | C | D | E | F | H | L
-  deriving (Eq, Show)
-
-data Reg16 = AF | BC | DE | HL | PC | SP
-  deriving (Eq, Show)
 
 showRegisters :: MonadEmulator m => m String
 showRegisters = do

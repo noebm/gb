@@ -1,6 +1,6 @@
 module Instruction.Instruction where
 
-import MonadEmulator
+import CPU.Registers
 import Instruction.Time
 
 import Data.Traversable
