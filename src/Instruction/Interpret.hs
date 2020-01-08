@@ -212,14 +212,20 @@ interpretM :: (MonadEmulator m, Argument a, Show a) => Instruction a -> m Word
 interpretM instr@(Instruction _ op t args) = case op of
   NOP -> return $ getTime True t
   LD -> case args of
-    [to , from] -> case (setArgumentM to, getArgumentM from) of
-      (Left s , Left g) -> do
-        s =<< g
-        return $ getTime True t
-      (Right s , Right g) -> do
-        s =<< g
-        return $ getTime True t
-      _ -> error $ printf "interpretM: %s - cannot match type" (show instr)
+    [to , from]
+      | Left s <- setArgumentM to
+      , Left g <- getArgumentM from
+        -> do
+      s =<< g
+      return $ getTime True t
+    _ -> msg
+  LD16 -> case args of
+    [to , from]
+      | Right s <- setArgumentM to
+      , Right g <- getArgumentM from
+        -> do
+      s =<< g
+      return $ getTime True t
     l@[ rHL, rSP, ptrRel ]
       | [ ArgDirect16 HL, ArgSP, Immediate8 ] <- toArg <$> l
       , Right sHL <- setArgumentM rHL
@@ -475,6 +481,9 @@ interpretM instr@(Instruction _ op t args) = case op of
 
   ADD -> case args of
     [ arg ] | Left g <- getArgumentM arg -> arith add g False >> return (getTime True t)
+    _ -> msg
+
+  ADD16 -> case args of
     [ to , from ]
       | ArgDirect16 HL <- toArg to
       , Right s  <- setArgumentM to
@@ -520,11 +529,7 @@ interpretM instr@(Instruction _ op t args) = case op of
                 return $ getTime True t
     _ -> msg
   INC -> case args of
-    [ arg ] | Right g <- getArgumentM arg
-            , Right s <- setArgumentM arg -> do
-                s . (+1) =<< g
-                return $ getTime True t
-            | Left g <- getArgumentM arg
+    [ arg ] | Left g <- getArgumentM arg
             , Left s <- setArgumentM arg -> do
                 v <- g
                 let v' = v + 1
@@ -535,13 +540,21 @@ interpretM instr@(Instruction _ op t args) = case op of
                   & flagH .~ (v .&. 0x0F == 0x0F)
                 return $ getTime True t
     _ -> msg
+  INC16 -> case args of
+    [ arg ] | Right g <- getArgumentM arg
+            , Right s <- setArgumentM arg -> do
+                s . (+1) =<< g
+                return $ getTime True t
+    _ -> msg
 
-  DEC -> case args of
+  DEC16 -> case args of
     [ arg ] | Right g <- getArgumentM arg
             , Right s <- setArgumentM arg -> do
                 s . subtract 1 =<< g
                 return $ getTime True t
-            | Left g <- getArgumentM arg
+    _ -> msg
+  DEC -> case args of
+    [ arg ] | Left g <- getArgumentM arg
             , Left s <- setArgumentM arg -> do
                 v <- g
                 let v' = v - 1
