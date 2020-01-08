@@ -100,14 +100,14 @@ updateJoypadGB f = GBT $ do
 
 {-# INLINE reg8index #-}
 reg8index :: Reg8 -> Int
-reg8index A = 1
-reg8index F = 0
-reg8index B = 3
-reg8index C = 2
-reg8index D = 5
-reg8index E = 4
-reg8index H = 7
-reg8index L = 6
+reg8index A = 0
+reg8index F = 1
+reg8index B = 2
+reg8index C = 3
+reg8index D = 4
+reg8index E = 5
+reg8index H = 6
+reg8index L = 7
 
 {-# INLINE ls8ToIndex #-}
 ls8ToIndex :: LoadStore8 -> Int

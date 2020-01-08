@@ -118,7 +118,7 @@ store8 (Addr8 addr) = storeAddr addr
 store16 :: MonadEmulator m => LoadStore16 -> Word16 -> m ()
 store16 (Register16 r) =
   let (r0, r1) = regPair r
-  in store16LE (storeReg r0) (storeReg r1)
+  in store16LE (storeReg r1) (storeReg r0)
 store16 PC = storePC
 store16 SP = storeSP
 store16 (Addr16 addr) = store16LE (storeAddr addr) (storeAddr $ addr + 1)
@@ -130,7 +130,7 @@ load8 (Addr8 addr) = loadAddr addr
 load16 :: MonadEmulator m => LoadStore16 -> m Word16
 load16 (Register16 r) =
   let (r0, r1) = regPair r
-  in load16LE (loadReg r0) (loadReg r1)
+  in load16LE (loadReg r1) (loadReg r0)
 load16 PC = loadPC
 load16 SP = loadSP
 load16 (Addr16 addr) = load16LE (loadAddr addr) (loadAddr $ addr + 1)
