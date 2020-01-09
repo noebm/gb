@@ -9,11 +9,11 @@ import Control.Lens
 newtype VideoAddr = VideoAddr Int
   deriving Show
 
-{-# INLINE backgroundTableIndex #-}
-backgroundTableIndex :: GPUControl -> Word8 -> Word8 -> VideoAddr
-backgroundTableIndex g col row =
+{-# INLINE tileTableIndex #-}
+tileTableIndex :: Bool -> Word8 -> Word8 -> VideoAddr
+tileTableIndex f col row =
   let bgrdTableIndex = fromIntegral col + 32 * fromIntegral row
-      bgrdTableBase = if g ^. gpuBGTileMapSelect then 0x9C00 else 0x9800
+      bgrdTableBase = if f then 0x9C00 else 0x9800
   in VideoAddr $ (bgrdTableBase + bgrdTableIndex) .&. 0x1fff
 
 {-# INLINE tileAddress #-}

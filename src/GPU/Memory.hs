@@ -1,5 +1,5 @@
 module GPU.Memory
-  ( backgroundTableIndex
+  ( tileTableIndex
   , tileAddress
 
   , Tile

@@ -15,6 +15,7 @@ module GPU.GPUControl
 
   , gpuLine
   , gpuScroll
+  , gpuWindow
 
   )
 where
