@@ -13,7 +13,7 @@ module GPU.GPUControl
   , gpuBGTileMapSelect, gpuBGDisplay
   , gpuOBJSizeLarge, gpuOBJDisplay
 
-  , gpuYCoordinate
+  , gpuLine
   , gpuScroll
 
   )
@@ -34,19 +34,34 @@ import Data.Bits.Lens
 data GPUMode = ModeHBlank | ModeVBlank | ModeOAM | ModeVRAM
   deriving (Eq, Show)
 
+{-# INLINE gpuModeNumber #-}
+gpuModeNumber :: GPUControl -> Word8
+gpuModeNumber GPUControl { _gpuMode = m } = case m of
+  ModeHBlank -> 0
+  ModeVBlank -> 1
+  ModeOAM    -> 2
+  ModeVRAM   -> 3
+
+{-# INLINE gpuModeDuration #-}
+gpuModeDuration :: GPUMode -> Word
+gpuModeDuration ModeHBlank = 204
+gpuModeDuration ModeVBlank = 456
+gpuModeDuration ModeOAM    = 80
+gpuModeDuration ModeVRAM   = 172
+
 data GPUControl = GPUControl
-  { _gpuMode       :: GPUMode
-  , _gpuClock      :: !Word
+  { _gpuClock      :: !Word
 
   , _gpuLCDControlByte :: Word8
 
-  , _gpuYCompareInterrupt :: Bool
-  , _gpuOAMInterrupt      :: Bool
-  , _gpuVblankInterrupt   :: Bool
-  , _gpuHblankInterrupt   :: Bool
+  , _gpuLineCompareInterrupt :: Bool
+  , _gpuOAMInterrupt         :: Bool
+  , _gpuVblankInterrupt      :: Bool
+  , _gpuHblankInterrupt      :: Bool
+  , _gpuMode                 :: GPUMode
 
-  , _gpuYCoordinate :: Word8
-  , _gpuYCompare    :: Word8
+  , _gpuLineCompare    :: Word8
+  , _gpuLine :: Word8
 
   , _gpuBGPalette   :: Palette
   , _gpuOBJ0Palette :: Palette
@@ -73,17 +88,17 @@ gpuBGDisplay           = gpuLCDControlByte . bitAt 0
 
 defaultGPUControl :: GPUControl
 defaultGPUControl = GPUControl
-  { _gpuMode                = ModeHBlank
-  , _gpuClock               = 0
+  { _gpuClock               = 0
   , _gpuLCDControlByte      = 0x00
 
-  , _gpuYCompareInterrupt = False
+  , _gpuLineCompareInterrupt = False
   , _gpuOAMInterrupt      = False
   , _gpuVblankInterrupt   = False
   , _gpuHblankInterrupt   = False
+  , _gpuMode              = ModeHBlank
 
-  , _gpuYCoordinate = 0
-  , _gpuYCompare    = 0
+  , _gpuLineCompare       = 0
+  , _gpuLine              = 0
 
   , _gpuBGPalette   = Palette 0
   , _gpuOBJ0Palette = Palette 0
@@ -93,29 +108,22 @@ defaultGPUControl = GPUControl
   , _gpuWindow = zero
   }
 
-{-# INLINE gpuModeDuration #-}
-gpuModeDuration :: GPUMode -> Word
-gpuModeDuration ModeHBlank = 204
-gpuModeDuration ModeVBlank = 456
-gpuModeDuration ModeOAM    = 80
-gpuModeDuration ModeVRAM   = 172
-
 clearInterrupts :: GPUControl -> GPUControl
 clearInterrupts gpu = gpu
   { _gpuOAMInterrupt      = False
   , _gpuVblankInterrupt   = False
   , _gpuHblankInterrupt   = False
-  , _gpuYCompareInterrupt = False
+  , _gpuLineCompareInterrupt = False
   }
 
 updateStatusInterrupts :: GPUControl -> (Bool, GPUControl)
 updateStatusInterrupts gpu = case _gpuMode gpu of
-  ModeOAM    -> (True, gpu' { _gpuOAMInterrupt = True, _gpuYCompareInterrupt = gpuYAtCompare gpu })
-  ModeHBlank -> (True, gpu' { _gpuHblankInterrupt = True })
-  ModeVBlank -> let f1 = _gpuYCoordinate gpu == 144
+  ModeOAM    -> (True, gpu' & gpuOAMInterrupt .~ True & gpuLineCompareInterrupt .~ gpuYAtCompare gpu)
+  ModeHBlank -> (True, gpu' & gpuHblankInterrupt .~ True)
+  ModeVBlank -> let f1 = _gpuLine gpu == 144
                     f2 = gpuYAtCompare gpu
                 in ( f1 || f2
-                   , gpu' { _gpuVblankInterrupt = f1, _gpuYCompareInterrupt = f2 } )
+                   , gpu' & gpuVblankInterrupt .~ f1 & gpuLineCompareInterrupt .~ f2 )
   _ -> (False, gpu')
   where gpu' = clearInterrupts gpu
 
@@ -130,32 +138,24 @@ updateGPUControl cycles g =
 gpuNextConfig :: GPUControl -> GPUControl
 gpuNextConfig g = case _gpuMode g of
   ModeHBlank -> if y < 143
-                then g { _gpuMode = ModeOAM    , _gpuYCoordinate = y + 1 }
-                else g { _gpuMode = ModeVBlank , _gpuYCoordinate = y + 1 }
-  ModeVBlank -> if _gpuYCoordinate g < 153
-                then g { _gpuYCoordinate = y + 1 }
-                else g { _gpuMode = ModeOAM , _gpuYCoordinate = 0 }
-  ModeOAM    -> g { _gpuMode = ModeVRAM   }
-  ModeVRAM   -> g { _gpuMode = ModeHBlank }
-  where y = _gpuYCoordinate g
-
-{-# INLINE gpuModeNumber #-}
-gpuModeNumber :: GPUControl -> Word8
-gpuModeNumber GPUControl { _gpuMode = m } = case m of
-  ModeHBlank -> 0
-  ModeVBlank -> 1
-  ModeOAM    -> 2
-  ModeVRAM   -> 3
+                then g & gpuMode .~ ModeOAM    & gpuLine +~ 1
+                else g & gpuMode .~ ModeVBlank & gpuLine +~ 1
+  ModeVBlank -> if _gpuLine g < 153
+                then g & gpuLine +~ 1
+                else g & gpuMode .~ ModeOAM & gpuLine .~ 0
+  ModeOAM    -> g & gpuMode .~ ModeVRAM
+  ModeVRAM   -> g & gpuMode .~ ModeHBlank
+  where y = _gpuLine g
 
 {-# INLINE gpuYAtCompare #-}
 gpuYAtCompare :: GPUControl -> Bool
-gpuYAtCompare GPUControl { _gpuYCoordinate = ly , _gpuYCompare = lyc }
+gpuYAtCompare GPUControl { _gpuLine = ly , _gpuLineCompare = lyc }
   = ly == lyc
 
 storeGPUControl :: GPUControl -> Word16 -> Word8 -> GPUControl
 storeGPUControl g 0xFF40 b = g & gpuLCDControlByte .~ b
 storeGPUControl g 0xFF41 b = g
-  { _gpuYCompareInterrupt = b `testBit` 6
+  { _gpuLineCompareInterrupt = b `testBit` 6
   , _gpuOAMInterrupt      = b `testBit` 5
   , _gpuVblankInterrupt   = b `testBit` 4
   , _gpuHblankInterrupt   = b `testBit` 3
@@ -163,29 +163,28 @@ storeGPUControl g 0xFF41 b = g
 storeGPUControl g 0xFF42 b = g & gpuScroll._y .~ b
 storeGPUControl g 0xFF43 b = g & gpuScroll._x .~ b
 storeGPUControl g 0xFF44 _ = g
-storeGPUControl g 0xFF45 b = g { _gpuYCompare = b }
+storeGPUControl g 0xFF45 b = g & gpuLineCompare .~ b
 -- storeGPUControl g 0xFF46 _ = g -- ??? dma transfer ... should be handled separately
-storeGPUControl g 0xFF47 b = g { _gpuBGPalette   = Palette b } -- non CBG mode only
-storeGPUControl g 0xFF48 b = g { _gpuOBJ0Palette = Palette b } -- non CBG mode only
-storeGPUControl g 0xFF49 b = g { _gpuOBJ1Palette = Palette b } -- non CBG mode only
+storeGPUControl g 0xFF47 b = g & gpuBGPalette   .~ Palette b -- non CBG mode only
+storeGPUControl g 0xFF48 b = g & gpuOBJ0Palette .~ Palette b -- non CBG mode only
+storeGPUControl g 0xFF49 b = g & gpuOBJ1Palette .~ Palette b -- non CBG mode only
 storeGPUControl g 0xFF4A b = g & gpuWindow._y .~ b
 storeGPUControl g 0xFF4B b = g & gpuWindow._x .~ b
 storeGPUControl _ _ _ = error "storeGPUControl: not in range"
 
 loadGPUControl :: GPUControl -> Word16 -> Word8
 loadGPUControl g 0xFF40 = g ^. gpuLCDControlByte
-loadGPUControl g 0xFF41 = foldl (.|.) 0x80
-  [ if _gpuYCompareInterrupt g then bit 6 else 0x00
-  , if _gpuOAMInterrupt      g then bit 5 else 0x00
-  , if _gpuVblankInterrupt   g then bit 4 else 0x00
-  , if _gpuHblankInterrupt   g then bit 3 else 0x00
-  , if gpuYAtCompare        g then bit 2 else 0x00
-  , if view gpuEnabled g then gpuModeNumber g else 0x00
-  ]
+loadGPUControl g 0xFF41 = 0x80
+  .|. (if g ^. gpuEnabled then gpuModeNumber g else 0x00)
+  & bitAt 6 .~ (g ^. gpuLineCompareInterrupt)
+  & bitAt 5 .~ (g ^. gpuOAMInterrupt)
+  & bitAt 4 .~ (g ^. gpuVblankInterrupt)
+  & bitAt 3 .~ (g ^. gpuHblankInterrupt)
+  & bitAt 2 .~ gpuYAtCompare g
 loadGPUControl g 0xFF42 = g ^. gpuScroll._y
 loadGPUControl g 0xFF43 = g ^. gpuScroll._x
-loadGPUControl g 0xFF44 = _gpuYCoordinate g
-loadGPUControl g 0xFF45  = _gpuYCompare g
+loadGPUControl g 0xFF44 = _gpuLine g
+loadGPUControl g 0xFF45  = _gpuLineCompare g
 -- loadGPUControl g 0xFF46 = g -- ??? dma transfer ... should be handled separately
 loadGPUControl g 0xFF47 = getPalette $ _gpuBGPalette   g -- non CBG mode only
 loadGPUControl g 0xFF48 = getPalette $ _gpuOBJ0Palette g -- non CBG mode only

@@ -18,7 +18,7 @@ import Control.Lens
 
 backgroundLine :: GPUControl -> VideoRAM -> VS.Vector Word8
 backgroundLine g vram =
-  let y' = (+) <$> view gpuYCoordinate <*> view (gpuScroll._y) $ g
+  let y' = (+) <$> view gpuLine <*> view (gpuScroll._y) $ g
       (sd, sr) = (g ^. gpuScroll._x) `divMod` 8
       tiles
         = fmap (tile vram)
@@ -52,6 +52,6 @@ paletteColorToGrayscale w = V4 c c c 0xff
 
 genPixelRow :: (MonadIO m) => Texture -> GPUState -> m ()
 genPixelRow im g = do
-  let y = _gpuYCoordinate $ gpuConfig g
+  let y = _gpuLine $ gpuConfig g
   updateTextureLine im (fromIntegral y)
     $ VS.map paletteColorToGrayscale $ backgroundLine (gpuConfig g) (gpuVideoRAM g)
