@@ -4,6 +4,7 @@
 module GPU.Sprite
   ( Sprite
   -- | Accessors for Sprite
+  , spriteTile
   , spritePositionX, spritePositionY, spritePosition
   , spriteFlippedX, spriteFlippedY, spriteFlipped
   , spriteBGPriority
@@ -24,6 +25,7 @@ import qualified Data.Vector.Generic.Mutable as M
 
 import Control.Monad
 import Control.Applicative
+import Data.List (sortBy)
 
 import Control.Lens
 import Data.Bits.Lens
@@ -129,11 +131,26 @@ storeOAM GPUControl { _gpuMode = mode } addr b oam = do
   guard (mode /= ModeVRAM || mode /= ModeOAM)
   return $ oam & oamBytesInternal.ix (fromIntegral (addr .&. 0x9f)) .~ b
 
+{- |
+  Returns all sprites for the current line.
+  Sprites are ordered by draw priority, so that sprites with the highest priority are at the end.
+-}
 getLineSprites :: Word8 -> Word8 -> OAM -> U.Vector Sprite
 getLineSprites line size (OAM oam)
-  = G.take 10
-  $ G.filter (\s -> line - s ^. spritePositionY < size)
-  $ oam
+  = G.backpermute collectedSprites spriteOrder
+
+  where
+    collectedSprites
+      = G.take 10
+      $ G.filter (\s -> line - s ^. spritePositionY < size)
+      $ oam
+
+    spriteOrder
+      = G.fromList
+      $ sortBy (\j i
+                -> ((collectedSprites ^?! ix i.spritePositionX) `compare` (collectedSprites ^?! ix j.spritePositionX))
+                 <> (i `compare` j))
+      $ [0..G.length collectedSprites - 1]
 
 directMemoryAccessOAM :: U.Vector Word8 -> OAM
 directMemoryAccessOAM v
