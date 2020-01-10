@@ -56,11 +56,7 @@ generateLine gctrl mem = do
   when (gctrl ^. gpuWindowDisplay) $ when (gctrl ^. gpuWindow._y <= gctrl ^. gpuLine) $ do
     let (offset, disp) = displayLine gctrl mem
     V.copy (VM.drop (fromIntegral offset) pixels) disp
-
-    -- V.copy (pixel
   return pixels
-
-
 
 updateTextureLine :: MonadIO m => Texture -> Int -> VS.Vector (V4 Word8) -> m ()
 updateTextureLine tex line vs = do
@@ -83,7 +79,8 @@ paletteColorToGrayscale w = V4 c c c 0xff
 genPixelRow :: (MonadIO m) => Texture -> GPUState -> m ()
 genPixelRow im g = do
   let y = _gpuLine $ gpuConfig g
+  v <- liftIO $ V.freeze =<< generateLine (gpuConfig g) (gpuVideoRAM g)
   updateTextureLine im (fromIntegral y)
     $ VS.map paletteColorToGrayscale
     $ VS.convert
-    $ backgroundLine (gpuConfig g) (gpuVideoRAM g)
+    $ v
