@@ -45,10 +45,10 @@ displayLine g vram =
 generateLine :: PrimMonad m => GPUControl -> VideoRAM -> m (VM.MVector (PrimState m) Word8)
 generateLine gctrl mem = do
   pixels <- VM.new 160
-  when (gctrl ^. gpuBGDisplay) $ do
+  when (gctrl ^. displayBG) $ do
     let bgrd = backgroundLine gctrl mem
     V.copy pixels bgrd
-  when (gctrl ^. gpuWindowDisplay) $ when (gctrl ^. gpuWindow._y <= gctrl ^. gpuLine) $ do
+  when (gctrl ^. displayWindow) $ when (gctrl ^. gpuWindow._y <= gctrl ^. gpuLine) $ do
     let (offset, disp) = displayLine gctrl mem
     V.copy (VM.drop (fromIntegral offset) pixels) disp
   return pixels

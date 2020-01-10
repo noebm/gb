@@ -9,9 +9,9 @@ module GPU.GPUControl
 
   , gpuEnabled
   , gpuTileDataSelect
-  , gpuWindowTileMapSelect, gpuWindowDisplay
-  , gpuBGTileMapSelect, gpuBGDisplay
-  , gpuOBJSizeLarge, gpuOBJDisplay
+  , gpuWindowTileMapSelect, displayWindow
+  , gpuBGTileMapSelect, displayBG
+  , gpuOBJSizeLarge, displayOBJ
 
   , gpuLine
   , gpuScroll
@@ -76,16 +76,16 @@ data GPUControl = GPUControl
 makePrisms ''GPUMode
 makeLenses ''GPUControl
 
-gpuEnabled, gpuWindowTileMapSelect, gpuWindowDisplay, gpuTileDataSelect,
-  gpuBGTileMapSelect, gpuOBJSizeLarge, gpuOBJDisplay, gpuBGDisplay :: Lens' GPUControl Bool
+gpuEnabled, gpuWindowTileMapSelect, displayWindow, gpuTileDataSelect,
+  gpuBGTileMapSelect, gpuOBJSizeLarge, displayOBJ, displayBG :: Lens' GPUControl Bool
 gpuEnabled             = gpuLCDControlByte . bitAt 7
 gpuWindowTileMapSelect = gpuLCDControlByte . bitAt 6
-gpuWindowDisplay       = gpuLCDControlByte . bitAt 5
+displayWindow          = gpuLCDControlByte . bitAt 5
 gpuTileDataSelect      = gpuLCDControlByte . bitAt 4
 gpuBGTileMapSelect     = gpuLCDControlByte . bitAt 3
 gpuOBJSizeLarge        = gpuLCDControlByte . bitAt 2
-gpuOBJDisplay          = gpuLCDControlByte . bitAt 1
-gpuBGDisplay           = gpuLCDControlByte . bitAt 0
+displayOBJ             = gpuLCDControlByte . bitAt 1
+displayBG              = gpuLCDControlByte . bitAt 0
 
 defaultGPUControl :: GPUControl
 defaultGPUControl = GPUControl
