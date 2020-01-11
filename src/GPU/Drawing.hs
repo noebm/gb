@@ -39,8 +39,8 @@ displayLine g vram =
     let i = windowX + fromIntegral i'
         x' = i + (g ^. gpuScroll._x)
         x = if x' >= windowX then i - windowX else x'
-        t = getTile g vram (g ^. gpuWindowTileMapSelect) (x' `div` 8) (y' `div` 8)
-    in paletteValue (_gpuBGPalette g) $ getTileColor t x' y'
+        t = getTile g vram (g ^. gpuWindowTileMapSelect) (x `div` 8) (y' `div` 8)
+    in paletteValue (_gpuBGPalette g) $ getTileColor t x y'
 
 generateLine :: PrimMonad m => GPUControl -> VideoRAM -> m (VM.MVector (PrimState m) Word8)
 generateLine gctrl mem = do
