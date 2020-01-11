@@ -31,8 +31,8 @@ backgroundLine g vram =
         t = getTile g vram (g ^. gpuBGTileMapSelect) (x `div` 8) (y `div` 8)
     in paletteValue (_gpuBGPalette g) $ getTileColor t x y
 
-displayLine :: GPUControl -> VideoRAM -> (Word8, V.Vector Word8)
-displayLine g vram =
+windowLine :: GPUControl -> VideoRAM -> (Word8, V.Vector Word8)
+windowLine g vram =
   let y' = (-) <$> view gpuLine <*> view (gpuWindow._y) $ g
       windowX = view (gpuWindow._x) g - 7
   in (,) windowX $ V.generate (160 - fromIntegral windowX) $ \i' ->
@@ -49,7 +49,7 @@ generateLine gctrl mem = do
     let bgrd = backgroundLine gctrl mem
     V.copy pixels bgrd
   when (gctrl ^. displayWindow) $ when (gctrl ^. gpuWindow._y <= gctrl ^. gpuLine) $ do
-    let (offset, disp) = displayLine gctrl mem
+    let (offset, disp) = windowLine gctrl mem
     V.copy (VM.drop (fromIntegral offset) pixels) disp
   return pixels
 
