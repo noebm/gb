@@ -29,7 +29,7 @@ backgroundLine g vram =
   in V.generate 160 $ \x ->
     let x' = fromIntegral x + (g ^. gpuScroll._x)
         t = getTile g vram (g ^. gpuBGTileMapSelect) (x' `div` 8) (y' `div` 8)
-    in paletteValue (_gpuBGPalette g) $ loadTile t x' y'
+    in paletteValue (_gpuBGPalette g) $ getTileColor t x' y'
 
 displayLine :: GPUControl -> VideoRAM -> (Word8, V.Vector Word8)
 displayLine g vram =
@@ -40,7 +40,7 @@ displayLine g vram =
         x' = i + (g ^. gpuScroll._x)
         x = if x' >= windowX then i - windowX else x'
         t = getTile g vram (g ^. gpuWindowTileMapSelect) (x' `div` 8) (y' `div` 8)
-    in paletteValue (_gpuBGPalette g) $ loadTile t x' y'
+    in paletteValue (_gpuBGPalette g) $ getTileColor t x' y'
 
 generateLine :: PrimMonad m => GPUControl -> VideoRAM -> m (VM.MVector (PrimState m) Word8)
 generateLine gctrl mem = do
