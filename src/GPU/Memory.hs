@@ -25,15 +25,13 @@ where
 import qualified Data.Vector.Unboxed as VU
 import qualified Data.Vector.Unboxed.Mutable as VUM
 import Data.Vector.Unboxed (Vector)
-import Control.Monad
 import Control.Lens
 
 import Data.Word
 import Data.Bits
 import Data.Bits.Lens
 
-import GPU.GPUControl
-import GPU.Palette
+import GPU.Palette (Color(..))
 import GPU.VideoAddr
 
 newtype OAM = OAM (Vector Word8)
@@ -77,25 +75,17 @@ external interface
 -}
 
 {-# INLINE loadVideoRAM #-}
-loadVideoRAM :: GPUControl -> VideoRAM -> Word16 -> Maybe Word8
-loadVideoRAM GPUControl { _gpuMode = mode } (VideoRAM m) addr = do
-  guard (mode /= ModeVRAM)
-  VU.indexM m $ fromIntegral (addr .&. 0x1fff)
+loadVideoRAM :: VideoRAM -> Word16 -> Word8
+loadVideoRAM (VideoRAM m) addr = m VU.! fromIntegral (addr .&. 0x1fff)
 
 {-# INLINE storeVideoRAM #-}
-storeVideoRAM :: GPUControl -> VideoRAM -> Word16 -> Word8 -> Maybe VideoRAM
-storeVideoRAM GPUControl { _gpuMode = mode } (VideoRAM m) addr b = do
-  guard (mode /= ModeVRAM)
-  return $ VideoRAM $ VU.modify (\v -> VUM.write v (fromIntegral (addr .&. 0x1fff)) b) m
+storeVideoRAM :: VideoRAM -> Word16 -> Word8 -> VideoRAM
+storeVideoRAM (VideoRAM m) addr b = VideoRAM $ VU.modify (\v -> VUM.write v (fromIntegral (addr .&. 0x1fff)) b) m
 
 {-# INLINE loadOAM #-}
-loadOAM :: GPUControl -> OAM -> Word16 -> Maybe Word8
-loadOAM GPUControl { _gpuMode = mode } (OAM m) addr = do
-  guard (mode /= ModeVRAM || mode /= ModeOAM)
-  VU.indexM m $ fromIntegral (addr .&. 0x9f)
+loadOAM :: OAM -> Word16 -> Word8
+loadOAM (OAM m) addr = m VU.! fromIntegral (addr .&. 0x9f)
 
 {-# INLINE storeOAM #-}
-storeOAM :: GPUControl -> OAM -> Word16 -> Word8 -> Maybe OAM
-storeOAM GPUControl { _gpuMode = mode } (OAM m) addr b = do
-  guard (mode /= ModeVRAM || mode /= ModeOAM)
-  return $ OAM $ VU.modify (\v -> VUM.write v (fromIntegral (addr .&. 0x9f)) b) m
+storeOAM :: OAM -> Word16 -> Word8 -> OAM
+storeOAM (OAM m) addr b = OAM $ VU.modify (\v -> VUM.write v (fromIntegral (addr .&. 0x9f)) b) m

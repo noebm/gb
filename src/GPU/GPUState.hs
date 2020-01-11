@@ -56,8 +56,12 @@ inGPURange addr = inVideoRAM addr || inOAM addr || inGPUMMIO addr
 
 loadGPU :: GPUState -> Word16 -> Word8
 loadGPU g addr
-  | inVideoRAM addr = maybe 0xff id $ loadVideoRAM (gpuConfig g) (gpuVideoRAM g) addr
-  | inOAM addr      = maybe 0xff id $ loadOAM conf (gpuOAM g) addr
+  | inVideoRAM addr = maybe 0xff id $ do
+      guard (_gpuMode (gpuConfig g) /= ModeVRAM)
+      return $ loadVideoRAM (gpuVideoRAM g) addr
+  | inOAM addr      = maybe 0xff id $ do
+      guard (_gpuMode (gpuConfig g) /= ModeVRAM || _gpuMode (gpuConfig g) /= ModeOAM )
+      return $ loadOAM (gpuOAM g) addr
   | inGPUMMIO addr  = loadGPUControl conf addr
   | otherwise = error "loadGPU: not in range"
   where conf = gpuConfig g
@@ -71,9 +75,11 @@ dmaTransfer access baseaddr g = do
 
 storeGPU :: GPUState -> Word16 -> Word8 -> GPUState
 storeGPU g@GPUState { gpuConfig = conf } addr b
-  | inVideoRAM addr =
-    maybe g (\x -> g { gpuVideoRAM = x }) $ storeVideoRAM conf (gpuVideoRAM g) addr b
-  | inOAM addr && addr /= 0xff46 =
-    maybe g (\oam -> g { gpuOAM = oam }) $ storeOAM conf (gpuOAM g) addr b
+  | inVideoRAM addr = maybe g (\x -> g { gpuVideoRAM = x }) $ do
+      guard (_gpuMode (gpuConfig g) /= ModeVRAM)
+      return $ storeVideoRAM (gpuVideoRAM g) addr b
+  | inOAM addr && addr /= 0xff46 = maybe g (\oam -> g { gpuOAM = oam }) $ do
+      guard (_gpuMode (gpuConfig g) /= ModeVRAM || _gpuMode (gpuConfig g) /= ModeOAM )
+      return $ storeOAM (gpuOAM g) addr b
   | inGPUMMIO addr = g { gpuConfig = storeGPUControl conf addr b }
   | otherwise = error "storeGPU: not in range"
