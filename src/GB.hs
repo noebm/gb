@@ -123,9 +123,7 @@ loadAddr' :: MonadIO m => Int -> GB m Word8
 loadAddr' idx
   | inGPURange idx = do
       gpu <- getGPU
-      let (b , mgpu') = loadGPU gpu (fromIntegral idx)
-      forM_ mgpu' putGPU
-      return b
+      return $ loadGPU gpu (fromIntegral idx)
   | inInterruptRange (fromIntegral idx) = do
       s <- getInterrupt
       return $ loadInterrupt s (fromIntegral idx)

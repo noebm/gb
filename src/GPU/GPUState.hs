@@ -54,12 +54,11 @@ inGPURange addr = inVideoRAM addr || inOAM addr || inGPUMMIO addr
 {-# INLINE inGPUMMIO #-}
 {-# INLINE inGPURange #-}
 
-loadGPU :: GPUState -> Word16 -> (Word8 , Maybe GPUState)
+loadGPU :: GPUState -> Word16 -> Word8
 loadGPU g addr
-  | inVideoRAM addr = (maybe 0xff id (loadVideoRAM (gpuConfig g) (gpuVideoRAM g) addr), Nothing)
-  | inOAM addr =
-    (maybe 0xff id $ loadOAM conf (gpuOAM g) addr, Nothing)
-  | inGPUMMIO addr = (loadGPUControl conf addr , Nothing)
+  | inVideoRAM addr = maybe 0xff id $ loadVideoRAM (gpuConfig g) (gpuVideoRAM g) addr
+  | inOAM addr      = maybe 0xff id $ loadOAM conf (gpuOAM g) addr
+  | inGPUMMIO addr  = loadGPUControl conf addr
   | otherwise = error "loadGPU: not in range"
   where conf = gpuConfig g
 
