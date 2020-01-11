@@ -25,11 +25,11 @@ getTile gctrl mem f x y = tile mem $ tileAddress gctrl $ loadVideoRAM' mem $ til
 
 backgroundLine :: GPUControl -> VideoRAM -> V.Vector Word8
 backgroundLine g vram =
-  let y' = (+) <$> view gpuLine <*> view (gpuScroll._y) $ g
-  in V.generate 160 $ \x ->
-    let x' = fromIntegral x + (g ^. gpuScroll._x)
-        t = getTile g vram (g ^. gpuBGTileMapSelect) (x' `div` 8) (y' `div` 8)
-    in paletteValue (_gpuBGPalette g) $ getTileColor t x' y'
+  let y = (+) <$> view gpuLine <*> view (gpuScroll._y) $ g
+  in V.generate 160 $ \i ->
+    let x = fromIntegral i + (g ^. gpuScroll._x)
+        t = getTile g vram (g ^. gpuBGTileMapSelect) (x `div` 8) (y `div` 8)
+    in paletteValue (_gpuBGPalette g) $ getTileColor t x y
 
 displayLine :: GPUControl -> VideoRAM -> (Word8, V.Vector Word8)
 displayLine g vram =
