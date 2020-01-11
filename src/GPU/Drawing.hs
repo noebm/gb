@@ -43,7 +43,7 @@ windowLine g vram =
         t = getTile' vram (g ^. gpuTileDataSelect) (g ^. gpuWindowTileMapSelect) (x `div` 8) (y' `div` 8)
     in paletteValue (_gpuBGPalette g) $ getTileColor t x y'
 
-generateLine :: PrimMonad m => GPUControl -> VideoRAM -> m (VM.MVector (PrimState m) Word8)
+generateLine :: PrimMonad m => GPUControl -> VideoRAM -> m (V.Vector Word8)
 generateLine gctrl mem = do
   pixels <- VM.new 160
   when (gctrl ^. displayBG) $ do
@@ -52,7 +52,7 @@ generateLine gctrl mem = do
   when (gctrl ^. displayWindow) $ when (gctrl ^. gpuWindow._y <= gctrl ^. gpuLine) $ do
     let (offset, disp) = windowLine gctrl mem
     V.copy (VM.drop (fromIntegral offset) pixels) disp
-  return pixels
+  V.freeze pixels
 
 updateTextureLine :: MonadIO m => Texture -> Int -> VS.Vector (V4 Word8) -> m ()
 updateTextureLine tex line vs = do
@@ -75,7 +75,7 @@ paletteColorToGrayscale w = V4 c c c 0xff
 genPixelRow :: (MonadIO m) => Texture -> GPUState -> m ()
 genPixelRow im g = do
   let y = _gpuLine $ gpuConfig g
-  v <- liftIO $ V.freeze =<< generateLine (gpuConfig g) (gpuVideoRAM g)
+  v <- liftIO $ generateLine (gpuConfig g) (gpuVideoRAM g)
   updateTextureLine im (fromIntegral y)
     $ VS.map paletteColorToGrayscale
     $ VS.convert
