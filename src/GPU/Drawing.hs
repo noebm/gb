@@ -20,15 +20,17 @@ import Control.Lens
 import Control.Monad.Primitive
 import Control.Monad
 
-getTile' :: GPUControl -> VideoRAM -> Bool -> Word8 -> Word8 -> Tile
-getTile' gctrl mem f x y = getTile mem $ getTileAddr gctrl mem $ tileTableIndex f x y
+getTile' :: VideoRAM -> Bool -> Bool -> Word8 -> Word8 -> Tile
+getTile' mem tileDataSelect tileMapSelect x y = getTile mem
+  $ getTileAddr tileDataSelect mem
+  $ tileTableIndex tileMapSelect x y
 
 backgroundLine :: GPUControl -> VideoRAM -> V.Vector Word8
 backgroundLine g vram =
   let y = (+) <$> view gpuLine <*> view (gpuScroll._y) $ g
   in V.generate 160 $ \i ->
     let x = fromIntegral i + (g ^. gpuScroll._x)
-        t = getTile' g vram (g ^. gpuBGTileMapSelect) (x `div` 8) (y `div` 8)
+        t = getTile' vram (g ^. gpuTileDataSelect) (g ^. gpuBGTileMapSelect) (x `div` 8) (y `div` 8)
     in paletteValue (_gpuBGPalette g) $ getTileColor t x y
 
 windowLine :: GPUControl -> VideoRAM -> (Word8, V.Vector Word8)
@@ -38,7 +40,7 @@ windowLine g vram =
   in (,) windowX $ V.generate (160 - fromIntegral windowX) $ \i ->
     let x' = fromIntegral i + (g ^. gpuScroll._x) + windowX
         x = if x' >= windowX then fromIntegral i else x'
-        t = getTile' g vram (g ^. gpuWindowTileMapSelect) (x `div` 8) (y' `div` 8)
+        t = getTile' vram (g ^. gpuTileDataSelect) (g ^. gpuWindowTileMapSelect) (x `div` 8) (y' `div` 8)
     in paletteValue (_gpuBGPalette g) $ getTileColor t x y'
 
 generateLine :: PrimMonad m => GPUControl -> VideoRAM -> m (VM.MVector (PrimState m) Word8)

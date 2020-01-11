@@ -67,8 +67,8 @@ getTileColor (Tile t) x y = Color
         byte2 = t VU.! (byteOffset + 1)
 
 {-# INLINE getTileAddr #-}
-getTileAddr :: GPUControl -> VideoRAM -> TileMapAddr -> TileAddr
-getTileAddr g (VideoRAM m) (TileMapAddr addr) = tileAddr g $ m VU.! fromIntegral addr
+getTileAddr :: Bool -> VideoRAM -> TileMapAddr -> TileAddr
+getTileAddr tileDataSelect (VideoRAM m) (TileMapAddr addr) = tileAddr tileDataSelect $ m VU.! fromIntegral addr
 
 {-
 external interface
