@@ -1,6 +1,7 @@
 module GPU.GPUState
   ( module X
   , GPUState (..)
+  , GPURequest(..)
   , defaultGPUState
   , updateGPUState
   , dmaTransfer
@@ -37,12 +38,12 @@ defaultGPUState = GPUState
   , gpuConfig          = defaultGPUControl
   }
 
-updateGPUState :: Word -> GPUState -> (Bool, GPUState)
+updateGPUState :: Word -> GPUState -> (Bool, Maybe GPURequest, GPUState)
 updateGPUState cycles s = do
   if view gpuEnabled (gpuConfig s) then
-    let (f, c) = updateGPUControl cycles (gpuConfig s)
-    in (f , s { gpuConfig = c })
-    else (False, s)
+    let (f, req, c) = updateGPUControl cycles (gpuConfig s)
+    in (f , req, s { gpuConfig = c })
+    else (False, Nothing, s)
 
 inVideoRAM, inOAM, inGPUMMIO, inGPURange :: (Num a, Ord a) => a -> Bool
 inVideoRAM addr = 0x8000 <= addr && addr < 0xA000

@@ -2,6 +2,7 @@
 module GPU.GPUControl
   ( GPUMode (..)
   , GPUControl (..)
+  , GPURequest (..)
   , defaultGPUControl
   , updateGPUControl
   , loadGPUControl
@@ -110,43 +111,34 @@ defaultGPUControl = GPUControl
   , _gpuWindow = zero
   }
 
-clearInterrupts :: GPUControl -> GPUControl
-clearInterrupts gpu = gpu
-  { _gpuOAMInterrupt      = False
-  , _gpuVblankInterrupt   = False
-  , _gpuHblankInterrupt   = False
-  , _gpuLineCompareInterrupt = False
-  }
+data GPURequest = Draw | NewLine
+  deriving (Eq)
 
-updateStatusInterrupts :: GPUControl -> (Bool, GPUControl)
-updateStatusInterrupts gpu = case _gpuMode gpu of
-  ModeOAM    -> (True, gpu' & gpuOAMInterrupt .~ True & gpuLineCompareInterrupt .~ gpuYAtCompare gpu)
-  ModeHBlank -> (True, gpu' & gpuHblankInterrupt .~ True)
-  ModeVBlank -> let f1 = _gpuLine gpu == 144
-                    f2 = gpuYAtCompare gpu
-                in ( f1 || f2
-                   , gpu' & gpuVblankInterrupt .~ f1 & gpuLineCompareInterrupt .~ f2 )
-  _ -> (False, gpu')
-  where gpu' = clearInterrupts gpu
+lineInterrupt gpu = (gpu ^. gpuLineCompareInterrupt && gpuYAtCompare gpu)
 
-updateGPUControl :: Word -> GPUControl -> (Bool, GPUControl)
+-- returns stat interrupt, renderer requests and new state
+updateGPUControl :: Word -> GPUControl -> (Bool, Maybe GPURequest, GPUControl)
 updateGPUControl cycles g =
   let cyclesMode = gpuModeDuration (_gpuMode g)
       g' = g { _gpuClock = _gpuClock g + cycles }
   in if _gpuClock g' >= cyclesMode
-     then updateStatusInterrupts $ gpuNextConfig $ g' { _gpuClock = _gpuClock g' - cyclesMode }
-     else (False , g')
+     then gpuNextConfig $ g' { _gpuClock = _gpuClock g' - cyclesMode }
+     else (False, Nothing, g')
 
-gpuNextConfig :: GPUControl -> GPUControl
+gpuNextConfig :: GPUControl -> (Bool, Maybe GPURequest, GPUControl)
 gpuNextConfig g = case _gpuMode g of
-  ModeHBlank -> if y < 143
-                then g & gpuMode .~ ModeOAM    & gpuLine +~ 1
-                else g & gpuMode .~ ModeVBlank & gpuLine +~ 1
-  ModeVBlank -> if _gpuLine g < 153
-                then g & gpuLine +~ 1
-                else g & gpuMode .~ ModeOAM & gpuLine .~ 0
-  ModeOAM    -> g & gpuMode .~ ModeVRAM
-  ModeVRAM   -> g & gpuMode .~ ModeHBlank
+  ModeHBlank ->
+    let (f, req, g') = if y < 143
+                       then (g ^. gpuOAMInterrupt   , Nothing  , g & gpuMode .~ ModeOAM    & gpuLine +~ 1)
+                       else (g ^. gpuVblankInterrupt, Just Draw, g & gpuMode .~ ModeVBlank & gpuLine +~ 1)
+    in (f || lineInterrupt g', req, g')
+  ModeVBlank ->
+    let (f, req, g') = if _gpuLine g < 153
+                       then (False, Nothing, g & gpuLine +~ 1)
+                       else (g ^. gpuOAMInterrupt, Nothing, g & gpuMode .~ ModeOAM & gpuLine .~ 0)
+    in (f || lineInterrupt g', req, g')
+  ModeOAM    -> (False , Nothing, g & gpuMode .~ ModeVRAM)
+  ModeVRAM   -> (g ^. gpuHblankInterrupt, Just NewLine, g & gpuMode .~ ModeHBlank)
   where y = _gpuLine g
 
 {-# INLINE gpuYAtCompare #-}
