@@ -5,6 +5,7 @@ import Data.Bits
 import Control.Lens
 
 newtype TileMapAddr = TileMapAddr Word16
+  deriving (Show)
 
 {-# INLINE tileTableIndex #-}
 tileTableIndex :: Bool -> Word8 -> Word8 -> TileMapAddr
@@ -14,6 +15,7 @@ tileTableIndex tileMapSelect col row =
   in TileMapAddr $ (bgrdTableBase + bgrdTableIndex) .&. 0x1fff
 
 newtype TileAddr = TileAddr Word16
+  deriving (Show)
 
 {-# INLINE tileAddr #-}
 tileAddr :: Bool -> Word8 -> TileAddr
