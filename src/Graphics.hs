@@ -15,7 +15,7 @@ data GraphicsContext = GraphicsContext
 initializeGraphics :: MonadIO m => m GraphicsContext
 initializeGraphics = do
   let wndName = "GamerBoy"
-  let wndConfig = defaultWindow { windowInitialSize = V2 (160*2) (144*2) }
+  let wndConfig = defaultWindow { windowInitialSize = 2 *^ V2 160 144 }
   wnd  <- createWindow wndName wndConfig
   rndr <- createRenderer wnd (negate 1) defaultRenderer
   text <- createTexture rndr ARGB8888 TextureAccessStreaming (V2 160 144)
