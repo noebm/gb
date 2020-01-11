@@ -13,6 +13,7 @@ module GPU.GPUControl
   , gpuBGTileMapSelect, displayBG
   , gpuOBJSizeLarge, displayOBJ
 
+  , gpuMode
   , gpuLine
   , gpuScroll
   , gpuWindow
