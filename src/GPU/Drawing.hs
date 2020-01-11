@@ -21,7 +21,7 @@ import Control.Monad.Primitive
 import Control.Monad
 
 getTile :: GPUControl -> VideoRAM -> Bool -> Word8 -> Word8 -> Tile
-getTile gctrl mem f x y = tile mem $ tileAddress gctrl $ loadVideoRAM' mem $ tileTableIndex f x y
+getTile gctrl mem f x y = tile mem $ getTileAddr gctrl mem $ tileTableIndex f x y
 
 backgroundLine :: GPUControl -> VideoRAM -> V.Vector Word8
 backgroundLine g vram =

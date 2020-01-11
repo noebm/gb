@@ -1,12 +1,11 @@
 module GPU.Memory
   ( tileTableIndex
-  , tileAddress
 
   , Tile
   , tile
   , getTileColor
 
-  , loadVideoRAM'
+  , getTileAddr
 
   , VideoRAM
   , defaultVideoRAM
@@ -31,6 +30,7 @@ import Data.Word
 import Data.Bits
 import Data.Bits.Lens
 
+import GPU.GPUControl
 import GPU.Palette (Color(..))
 import GPU.VideoAddr
 
@@ -53,8 +53,8 @@ dumpVideoRAM (VideoRAM m) = VU.toList m
 newtype Tile = Tile (Vector Word8)
 
 {-# INLINE tile #-}
-tile :: VideoRAM -> VideoAddr -> Tile
-tile (VideoRAM vram) (VideoAddr addr) = Tile $ VU.slice addr tilesize vram
+tile :: VideoRAM -> TileAddr -> Tile
+tile (VideoRAM vram) (TileAddr addr) = Tile $ VU.slice (fromIntegral addr) tilesize vram
   where tilesize = 2 * 8 -- byte
 
 {-# INLINE getTileColor #-}
@@ -66,9 +66,9 @@ getTileColor (Tile t) x y = Color
         byte1 = t VU.! byteOffset
         byte2 = t VU.! (byteOffset + 1)
 
-{-# INLINE loadVideoRAM' #-}
-loadVideoRAM' :: VideoRAM -> VideoAddr -> Word8
-loadVideoRAM' (VideoRAM m) (VideoAddr addr) = m VU.! addr
+{-# INLINE getTileAddr #-}
+getTileAddr :: GPUControl -> VideoRAM -> TileMapAddr -> TileAddr
+getTileAddr g (VideoRAM m) (TileMapAddr addr) = tileAddr g $ m VU.! fromIntegral addr
 
 {-
 external interface
