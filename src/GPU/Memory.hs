@@ -8,10 +8,6 @@ module GPU.Memory
 
   , loadVideoRAM'
 
-  , MemoryUpdate
-  , updateVideoRAM
-  , updateOAM
-
   , VideoRAM
   , defaultVideoRAM
   , loadVideoRAM
@@ -27,6 +23,7 @@ module GPU.Memory
 where
 
 import qualified Data.Vector.Unboxed as VU
+import qualified Data.Vector.Unboxed.Mutable as VUM
 import Data.Vector.Unboxed (Vector)
 import Control.Monad
 import Control.Lens
@@ -49,19 +46,11 @@ defaultVideoRAM = VideoRAM $ VU.replicate 0x2000 0x00
 defaultOAM :: OAM
 defaultOAM = OAM $ VU.replicate 0xa0 0x00
 
-updateVideoRAM :: [ MemoryUpdate ] -> VideoRAM -> VideoRAM
-updateVideoRAM xs (VideoRAM m) = VideoRAM $! m VU.// reverse xs
-
-updateOAM :: [ MemoryUpdate ] -> OAM -> OAM
-updateOAM xs (OAM m) = OAM $! m VU.// reverse xs
-
 dumpOAM :: OAM -> [ Word8 ]
 dumpOAM (OAM m) = VU.toList m
 
 dumpVideoRAM :: VideoRAM -> [ Word8 ]
 dumpVideoRAM (VideoRAM m) = VU.toList m
-
-type MemoryUpdate = (Int, Word8)
 
 newtype Tile = Tile (Vector Word8)
 
@@ -94,10 +83,10 @@ loadVideoRAM GPUControl { _gpuMode = mode } (VideoRAM m) addr = do
   VU.indexM m $ fromIntegral (addr .&. 0x1fff)
 
 {-# INLINE storeVideoRAM #-}
-storeVideoRAM :: GPUControl -> Word16 -> Word8 -> Maybe MemoryUpdate
-storeVideoRAM GPUControl { _gpuMode = mode } addr b = do
+storeVideoRAM :: GPUControl -> VideoRAM -> Word16 -> Word8 -> Maybe VideoRAM
+storeVideoRAM GPUControl { _gpuMode = mode } (VideoRAM m) addr b = do
   guard (mode /= ModeVRAM)
-  return ( fromIntegral addr .&. 0x1fff , b )
+  return $ VideoRAM $ VU.modify (\v -> VUM.write v (fromIntegral (addr .&. 0x1fff)) b) m
 
 {-# INLINE loadOAM #-}
 loadOAM :: GPUControl -> OAM -> Word16 -> Maybe Word8
@@ -106,7 +95,7 @@ loadOAM GPUControl { _gpuMode = mode } (OAM m) addr = do
   VU.indexM m $ fromIntegral (addr .&. 0x9f)
 
 {-# INLINE storeOAM #-}
-storeOAM :: GPUControl -> Word16 -> Word8 -> Maybe MemoryUpdate
-storeOAM GPUControl { _gpuMode = mode } addr b = do
+storeOAM :: GPUControl -> OAM -> Word16 -> Word8 -> Maybe OAM
+storeOAM GPUControl { _gpuMode = mode } (OAM m) addr b = do
   guard (mode /= ModeVRAM || mode /= ModeOAM)
-  return ( fromIntegral addr .&. 0x9f , b )
+  return $ OAM $ VU.modify (\v -> VUM.write v (fromIntegral (addr .&. 0x9f)) b) m

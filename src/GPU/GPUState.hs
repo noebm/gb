@@ -24,39 +24,24 @@ import Data.Bits
 import qualified Data.Vector.Unboxed as VU
 import Data.Vector.Unboxed (Vector)
 
--- stores updates as deltas until needed
 data GPUState = GPUState
   { gpuVideoRAM        :: !VideoRAM
-  , gpuVideoRAMUpdates :: ![ MemoryUpdate ]
   , gpuOAM             :: !OAM
-  , gpuOAMUpdates      :: ![ MemoryUpdate ]
   , gpuConfig          :: GPUControl
   }
 
 defaultGPUState :: GPUState
 defaultGPUState = GPUState
   { gpuVideoRAM        = defaultVideoRAM
-  , gpuVideoRAMUpdates = []
   , gpuOAM             = defaultOAM
-  , gpuOAMUpdates      = []
   , gpuConfig          = defaultGPUControl
-  }
-
-updateVideoRAMState, updateOAMState :: GPUState -> GPUState
-updateVideoRAMState g = g
-  { gpuVideoRAM = updateVideoRAM (gpuVideoRAMUpdates g) (gpuVideoRAM g)
-  , gpuVideoRAMUpdates = []
-  }
-updateOAMState g = g
-  { gpuOAM = updateOAM (gpuOAMUpdates g) (gpuOAM g)
-  , gpuOAMUpdates = []
   }
 
 updateGPUState :: Word -> GPUState -> (Bool, GPUState)
 updateGPUState cycles s = do
   if view gpuEnabled (gpuConfig s) then
     let (f, c) = updateGPUControl cycles (gpuConfig s)
-    in (f , updateVideoRAMState $ updateOAMState $ s { gpuConfig = c })
+    in (f , s { gpuConfig = c })
     else (False, s)
 
 inVideoRAM, inOAM, inGPUMMIO, inGPURange :: (Num a, Ord a) => a -> Bool
@@ -71,14 +56,9 @@ inGPURange addr = inVideoRAM addr || inOAM addr || inGPUMMIO addr
 
 loadGPU :: GPUState -> Word16 -> (Word8 , Maybe GPUState)
 loadGPU g addr
-  | inVideoRAM addr =
-    let g' = updateVideoRAMState g
-        ram' = gpuVideoRAM g'
-    in maybe (0xff, Nothing) (\x -> (x , Just g')) $ loadVideoRAM conf ram' addr
+  | inVideoRAM addr = (maybe 0xff id (loadVideoRAM (gpuConfig g) (gpuVideoRAM g) addr), Nothing)
   | inOAM addr =
-    let g' = updateOAMState g
-        oam' = gpuOAM g'
-    in maybe (0xff, Nothing) (\x -> (x , Just g')) $ loadOAM conf oam' addr
+    (maybe 0xff id $ loadOAM conf (gpuOAM g) addr, Nothing)
   | inGPUMMIO addr = (loadGPUControl conf addr , Nothing)
   | otherwise = error "loadGPU: not in range"
   where conf = gpuConfig g
@@ -88,15 +68,13 @@ loadGPU g addr
 dmaTransfer :: Monad m => (Word16 -> m Word8) -> Word16 -> GPUState -> m GPUState
 dmaTransfer access baseaddr g = do
   vec <- VU.generateM 0xa0 $ access . fromIntegral . (fromIntegral baseaddr +)
-  return $ g { gpuOAMUpdates = [] , gpuOAM = OAM vec }
+  return $ g { gpuOAM = OAM vec }
 
 storeGPU :: GPUState -> Word16 -> Word8 -> GPUState
 storeGPU g@GPUState { gpuConfig = conf } addr b
   | inVideoRAM addr =
-    maybe g (\x -> g { gpuVideoRAMUpdates = x : gpuVideoRAMUpdates g })
-    $ storeVideoRAM conf addr b
+    maybe g (\x -> g { gpuVideoRAM = x }) $ storeVideoRAM conf (gpuVideoRAM g) addr b
   | inOAM addr && addr /= 0xff46 =
-    maybe g (\x -> g { gpuOAMUpdates = x : gpuOAMUpdates g })
-    $ storeOAM conf addr b
+    maybe g (\oam -> g { gpuOAM = oam }) $ storeOAM conf (gpuOAM g) addr b
   | inGPUMMIO addr = g { gpuConfig = storeGPUControl conf addr b }
   | otherwise = error "storeGPU: not in range"
