@@ -27,7 +27,7 @@ getTile' mem tileDataSelect tileMapSelect x y = getTile mem
 
 backgroundLine :: GPUControl -> VideoRAM -> V.Vector Word8
 backgroundLine g vram =
-  let y = (+) <$> view gpuLine <*> view (gpuScroll._y) $ g
+  let y = g ^. gpuLine + g ^. gpuScroll._y
   in V.generate 160 $ \i ->
     let x = fromIntegral i + (g ^. gpuScroll._x)
         t = getTile' vram (g ^. gpuTileDataSelect) (g ^. gpuBGTileMapSelect) (x `div` 8) (y `div` 8)
@@ -35,7 +35,7 @@ backgroundLine g vram =
 
 windowLine :: GPUControl -> VideoRAM -> (Word8, V.Vector Word8)
 windowLine g vram =
-  let y' = (-) <$> view gpuLine <*> view (gpuWindow._y) $ g
+  let y' = g ^. gpuLine + g ^. gpuWindow._y
       windowX = view (gpuWindow._x) g - 7
   in (,) windowX $ V.generate (160 - fromIntegral windowX) $ \i ->
     let x' = fromIntegral i + (g ^. gpuScroll._x) + windowX
