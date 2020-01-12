@@ -52,7 +52,7 @@ type GB = GBT RealWorld
 
 makeGBState :: CartridgeState s -> ST s (GBState s)
 makeGBState cart = do
-  memory <- V.replicate (0xFFFF + 0xC) 0x00
+  memory <- V.replicate (0x10000 + 0xC) 0x00
   GBState
     <$> pure memory
     <*> newSTRef 0
@@ -149,7 +149,7 @@ loadAddr idx
   | 0xFEA0 <= idx && idx < 0xFF00 = return 0xff
   | otherwise = GBT $ do
       addrspace <- asks addressSpace
-      liftIO $ V.unsafeRead addrspace idx
+      liftIO $ V.read addrspace idx
 
 {-# INLINE storeAddr #-}
 storeAddr :: MonadIO m => Int -> Word8 -> GB m ()
@@ -179,7 +179,7 @@ storeAddr idx b
   | 0xFEA0 <= idx && idx < 0xFF00 = return ()
   | otherwise = GBT $ do
       addrspace <- asks addressSpace
-      liftIO $ V.unsafeWrite addrspace idx b
+      liftIO $ V.write addrspace idx b
 
 instance MonadIO m => MonadEmulator (GB m) where
   {-# INLINE store8 #-}
