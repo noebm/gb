@@ -7,6 +7,7 @@ import Data.Bits.Lens (bitAt)
 
 import Control.Lens hiding (op, to, from)
 import Control.Monad
+import GB
 
 import Text.Printf
 
@@ -210,6 +211,7 @@ shiftRightArithmetic v =
       c' = v `testBit` 0
   in (v' & bitAt 7 .~ (v `testBit` 7), c')
 
+{-# SPECIALISE interpretM :: Instruction Arg -> GB IO Word #-}
 interpretM :: (MonadEmulator m, Argument a, Show a) => Instruction a -> m Word
 interpretM instr@(Instruction _ op t args) = case op of
   NOP -> return $ getTime True t
