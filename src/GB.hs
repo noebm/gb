@@ -109,11 +109,10 @@ reg8index E = 5
 reg8index H = 6
 reg8index L = 7
 
-{-# INLINE ls8ToIndex #-}
-ls8ToIndex :: LoadStore8 -> Int
-ls8ToIndex (Register8 r) = rbase + reg8index r
+{-# INLINE reg8ToIndex #-}
+reg8ToIndex :: Reg8 -> Int
+reg8ToIndex r = rbase + reg8index r
   where rbase = 0x10000
-ls8ToIndex (Addr8 addr) = fromIntegral addr
 
 {-# INLINE echoRam #-}
 echoRam :: Int -> Bool
@@ -176,14 +175,14 @@ storeAddr' idx b
       liftIO $ V.write addrspace idx b
 
 instance MonadIO m => MonadEmulator (GB m) where
-  storeReg r = storeAddr' (ls8ToIndex (Register8 r))
-  storeAddr addr = storeAddr' (ls8ToIndex (Addr8 addr))
+  storeReg r = storeAddr' (reg8ToIndex r)
+  storeAddr addr = storeAddr' (fromIntegral addr)
 
   storeSP = writeState stackpointer
   storePC = writeState programCounter
 
-  loadReg r = loadAddr' (ls8ToIndex (Register8 r))
-  loadAddr addr = loadAddr' (ls8ToIndex (Addr8 addr))
+  loadReg r = loadAddr' (reg8ToIndex r)
+  loadAddr addr = loadAddr' (fromIntegral addr)
 
   loadSP = readState stackpointer
   loadPC = readState programCounter
