@@ -17,7 +17,6 @@ import GB
 
 import Instruction.Interpret
 import Instruction.Instruction
-import Instruction.Disassembler
 import Interrupt.Interrupt
 import Interrupt.InterruptType
 

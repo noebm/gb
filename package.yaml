@@ -40,16 +40,6 @@ executables:
     dependencies:
     - gb
 
-  gb-asm:
-    main:                Main.hs
-    source-dirs:         asm
-    ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - gb
-
 tests:
   gb-rewrite-test:
     main:                Spec.hs
