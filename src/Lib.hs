@@ -119,7 +119,7 @@ someFunc fp' = do
 
     let update fx s = do
           -- forM_ [0..0] $ \_ -> do
-          pc <- load16 (Register16 PC)
+          pc <- loadPC
           t <- getCycles
           (i, dt') <- updateCPU
           advCycles dt'

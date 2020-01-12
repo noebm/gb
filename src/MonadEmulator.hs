@@ -50,13 +50,12 @@ import Interrupt.InterruptType
 showRegisters :: MonadEmulator m => m String
 showRegisters = do
   let rs8 = [A, F, B, C, D, E, H, L]
-  let rs16 = [PC , SP]
   s1 <- forM rs8 $ \r -> do
     v <- load8 (Register8 r)
     return $ show r ++ printf ": %02x " v
-  s2 <- forM rs16 $ \r -> do
-    v <- load16 r
-    return $ show r ++ printf ": %04x " v
+  s2 <- forM [("PC", loadPC), ("SP", loadSP)] $ \(name, get) -> do
+    v <- get
+    return $ name ++ printf ": %04x " v
   return $ concat s1 ++ concat s2
 
 {-# INLINE load16LE #-}
@@ -73,7 +72,7 @@ store16LE b0 b1 w = let (h , l) = w ^. from word16 in b0 l >> b1 h
 data LoadStore8 = Register8 !Reg8 | Addr8 !Word16
   deriving (Eq, Show)
 
-data LoadStore16 = Register16 !Reg16 | Addr16 !Word16 | PC | SP
+data LoadStore16 = Register16 !Reg16 | Addr16 !Word16
   deriving (Eq, Show)
 
 -- | Allow reading and writing inside the address space.
@@ -119,8 +118,6 @@ store16 :: MonadEmulator m => LoadStore16 -> Word16 -> m ()
 store16 (Register16 r) =
   let (r0, r1) = regPair r
   in store16LE (storeReg r1) (storeReg r0)
-store16 PC = storePC
-store16 SP = storeSP
 store16 (Addr16 addr) = store16LE (storeAddr addr) (storeAddr $ addr + 1)
 
 load8 :: MonadEmulator m => LoadStore8 -> m Word8
@@ -131,8 +128,6 @@ load16 :: MonadEmulator m => LoadStore16 -> m Word16
 load16 (Register16 r) =
   let (r0, r1) = regPair r
   in load16LE (loadReg r1) (loadReg r0)
-load16 PC = loadPC
-load16 SP = loadSP
 load16 (Addr16 addr) = load16LE (loadAddr addr) (loadAddr $ addr + 1)
 
 modifyInterrupt f = putInterrupt . f =<< getInterrupt
@@ -248,8 +243,8 @@ flagC = bitAt 4
 {-# INLINE byte #-}
 byte :: MonadEmulator m => m Word8
 byte = do
-  pc <- load16 PC
-  store16 PC (pc + 1)
+  pc <- loadPC
+  storePC (pc + 1)
   load8 (Addr8 pc)
 
 {-# INLINE word #-}
@@ -261,7 +256,7 @@ sbyte :: MonadEmulator m => m Int8
 sbyte = fromIntegral <$> byte
 
 jump :: MonadEmulator m => Word16 -> m ()
-jump = store16 PC
+jump = storePC
 
 {-# INLINE addRelative #-}
 addRelative :: Word16 -> Int8 -> Word16
@@ -269,24 +264,24 @@ addRelative addr x = fromIntegral $ (fromIntegral addr :: Int) + fromIntegral x
 
 jumpRelative :: MonadEmulator m => Int8 -> m ()
 jumpRelative addrdiff = do
-  pc <- load16 PC
+  pc <- loadPC
   jump $ addRelative pc addrdiff
 
 push :: MonadEmulator m => Word16 -> m ()
 push w = do
-  sp <- load16 SP
+  sp <- loadSP
   store16 (Addr16 (sp - 2)) w
-  store16 SP (sp - 2)
+  storeSP (sp - 2)
 
 pop :: MonadEmulator m => m Word16
 pop = do
-  sp <- load16 SP
-  store16 SP (sp + 2)
+  sp <- loadSP
+  storeSP (sp + 2)
   load16 (Addr16 sp)
 
 call :: MonadEmulator m => Word16 -> m ()
 call addr = do
-  push =<< load16 PC
+  push =<< loadPC
   jump addr
 
 ret :: MonadEmulator m => m ()
@@ -294,5 +289,5 @@ ret = jump =<< pop
 
 restart :: MonadEmulator m => Word8 -> m ()
 restart b = do
-  push =<< load16 PC
+  push =<< loadPC
   jump $ (0x00, b) ^. word16

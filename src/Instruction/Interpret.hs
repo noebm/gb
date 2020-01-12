@@ -43,7 +43,7 @@ getArgM :: MonadEmulator m => Arg -> Either (m Word8) (m Word16)
 getArgM arg = case arg of
   -- single byte data
   ArgDirect8 r -> Left (load8 (Register8 r))
-  ArgSP        -> Right (load16 SP)
+  ArgSP        -> Right (loadSP)
   Immediate8   -> Left byte
   -- double byte data
   ArgDirect16 r -> Right (load16 $ Register16 r)
@@ -79,7 +79,7 @@ setArgM arg = case arg of
   ArgDirect8 r -> Left (store8 (Register8 r))
   -- double byte data
   ArgDirect16 r -> Right (store16 $ Register16 r)
-  ArgSP -> Right (store16 SP)
+  ArgSP -> Right (storeSP)
 
   -- pointers
   ArgPointerRegFF r -> Left (\b -> (`store8` b) . Addr8 . addrFF =<< load8 (Register8 r))
@@ -431,13 +431,13 @@ interpretM instr@(Instruction _ op t args) = case op of
   JP -> case args of
     [ arg ]
       | Right g <- getArgumentM arg ->
-          g >>= store16 PC >> return (getTime True t)
+          g >>= storePC >> return (getTime True t)
     [ argf , arg ]
       | Right g <- getArgumentM arg
       , ArgFlag f <- toArg argf -> do
           t' <- getFlag f <$> load8 (Register8 F)
           addr <- g
-          when t' $ store16 PC addr
+          when t' $ storePC addr
           return $ getTime t' t
     _ -> msg
   CALL -> case args of
