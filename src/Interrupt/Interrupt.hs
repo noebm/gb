@@ -10,7 +10,7 @@ module Interrupt.Interrupt
 
   , defaultInterruptState
 
-  , handleInterrupt
+  , checkForInterrupts
   , interruptAddress
   , interrupt
   , Interrupt
@@ -78,15 +78,6 @@ interrupts f s
 -- find first set interrupt ordered by priority
 checkForInterrupts :: InterruptState -> Maybe Interrupt
 checkForInterrupts is = findIndexOf interrupts isTriggered is
-
--- should be moved somewhere else
--- probably inside processInterrupts
-handleInterrupt :: InterruptState -> Maybe (Interrupt, InterruptState)
-handleInterrupt s = do
-  guard (s ^. interruptMasterEnableFlag)
-  i <- checkForInterrupts s
-  let s' = s & interrupt i.interruptFlag .~ False & interruptMasterEnableFlag .~ False
-  return (i , s')
 
 {-# INLINE interruptBit #-}
 interruptBit :: Interrupt -> Int

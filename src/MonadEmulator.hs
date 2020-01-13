@@ -193,9 +193,12 @@ getCycles = do
 
 processInterrupts :: MonadEmulator m => m Bool
 processInterrupts = do
-  int <- handleInterrupt <$> getInterrupt
-  forM_ int $ \(i , s) -> do
-    putInterrupt s
+  int <- checkForInterrupts <$> getInterrupt
+  forM_ int $ \i -> do
+    s <- getInterrupt
+    h <- halt
+    when (not h) $ putInterrupt (s & interrupt i . interruptFlag .~ False)
+    setIEM False
     call (interruptAddress i)
     advCycles 20
   return $ isJust int
