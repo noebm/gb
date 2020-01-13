@@ -40,8 +40,9 @@ renderGraphics ctx = do
 updateTextureLine :: MonadIO m => Texture -> Int -> VS.Vector (V4 Word8) -> m ()
 updateTextureLine tex line vs = do
   let vs' = VS.unsafeCast vs
+  let rect = Rectangle (P $ V2 0 line) (V2 (VS.length vs) 1)
   _ <- updateTexture tex
-    (Just $ fromIntegral <$> Rectangle (P $ V2 0 line) (V2 160 1))
+    (Just $ fromIntegral <$> rect)
     (vectorToByteString vs')
     (fromIntegral $ VS.length vs')
   return ()
