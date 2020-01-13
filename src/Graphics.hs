@@ -5,6 +5,7 @@ import Control.Monad.IO.Class
 import SDL.Video
 import SDL.Vect
 import Data.Word
+import Data.Text (Text)
 
 import GPU.GPUState
 import GPU.Drawing
@@ -19,14 +20,16 @@ data GraphicsContext = GraphicsContext
   , image :: Texture
   }
 
-initializeGraphics :: MonadIO m => m GraphicsContext
-initializeGraphics = do
-  let wndName = "GamerBoy"
-  let wndConfig = defaultWindow { windowInitialSize = 2 *^ V2 160 144 }
+newWindow :: MonadIO m => Text -> V2 Int -> Int -> m GraphicsContext
+newWindow wndName wndSize textureScale = do
+  let wndConfig = defaultWindow -- { windowInitialSize = fromIntegral <$> textureScale *^ wndSize }
   wnd  <- createWindow wndName wndConfig
   rndr <- createRenderer wnd (negate 1) defaultRenderer
-  text <- createTexture rndr ARGB8888 TextureAccessStreaming (V2 160 144)
+  text <- createTexture rndr ARGB8888 TextureAccessStreaming (fromIntegral <$> wndSize)
   return $ GraphicsContext wnd rndr text
+
+initializeGraphics :: MonadIO m => m GraphicsContext
+initializeGraphics = newWindow "GamerBoy" (V2 160 144) 1 -- 2
 
 renderImage :: MonadIO m => Renderer -> Texture -> m ()
 renderImage rend text = copy rend text Nothing Nothing
