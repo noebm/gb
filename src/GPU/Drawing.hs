@@ -20,13 +20,15 @@ getTile' mem tileDataSelect tileMapSelect x y = getTile mem
   $ getTileAddr tileDataSelect mem
   $ tileTableIndex tileMapSelect x y
 
+pixel :: VideoRAM -> Bool -> Bool -> V2 Word8 -> Color
+pixel mem tileSelect mapSelect (V2 x y) = getTileColor t x y
+  where t = getTile' mem tileSelect mapSelect (x `div` 8) (y `div` 8)
+
 backgroundLine :: GPUControl -> VideoRAM -> V.Vector Word8
-backgroundLine g vram =
-  let y = g ^. gpuLine + g ^. gpuScroll._y
-  in V.generate 160 $ \i ->
-    let x = fromIntegral i + (g ^. gpuScroll._x)
-        t = getTile' vram (g ^. gpuTileDataSelect) (g ^. gpuBGTileMapSelect) (x `div` 8) (y `div` 8)
-    in paletteValue (_gpuBGPalette g) $ getTileColor t x y
+backgroundLine g vram = V.generate 160 $ \i ->
+  paletteValue (_gpuBGPalette g)
+  $ pixel vram (g ^. gpuTileDataSelect) (g ^. gpuBGTileMapSelect)
+  $ V2 (fromIntegral i) (g ^. gpuLine) + g ^. gpuScroll
 
 windowLine :: GPUControl -> VideoRAM -> (Word8, V.Vector Word8)
 windowLine g vram =
@@ -35,8 +37,8 @@ windowLine g vram =
   in (,) windowX $ V.generate (160 - fromIntegral windowX) $ \i ->
     let x' = fromIntegral i + (g ^. gpuScroll._x) + windowX
         x = if x' >= windowX then fromIntegral i else x'
-        t = getTile' vram (g ^. gpuTileDataSelect) (g ^. gpuWindowTileMapSelect) (x `div` 8) (y' `div` 8)
-    in paletteValue (_gpuBGPalette g) $ getTileColor t x y'
+    in paletteValue (_gpuBGPalette g) $
+       pixel vram (g ^. gpuTileDataSelect) (g ^. gpuWindowTileMapSelect) (V2 x y')
 
 generateLine :: PrimMonad m => GPUControl -> VideoRAM -> m (V.Vector Word8)
 generateLine gctrl mem = do
