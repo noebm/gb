@@ -72,11 +72,6 @@ updateJoypad s = do
   return s'
 -}
 
-updateTimer' cyc = do
-  overflow <- updateTimer cyc
-  when overflow $
-    modifyInterrupt $ interruptTimer.interruptFlag .~ True
-
 updateCPU :: MonadEmulator m => m (Maybe (Instruction Arg), Word)
 updateCPU = do
   halted <- halt
@@ -132,7 +127,7 @@ someFunc fp' = do
           updateGraphics fx
           t' <- getCycles
           let dt = t' - t
-          updateTimer' dt
+          updateTimer dt
           -- updateJoypad s
           return s
 

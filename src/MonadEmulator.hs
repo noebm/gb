@@ -133,12 +133,13 @@ updateGPU f = do
     gpuInterrupts gpu'
     f gpu'
 
-updateTimer :: MonadEmulator m => Word -> m Bool
+updateTimer :: MonadEmulator m => Word -> m ()
 updateTimer cycles = do
   ts <- getTimerState
-  let (i, ts') = updateTimerState cycles ts
+  let (overflow, ts') = updateTimerState cycles ts
   putTimerState ts'
-  return i
+  when overflow $
+    modifyInterrupt $ interruptTimer.interruptFlag .~ True
 
 gpuInterrupts :: MonadEmulator m => GPUState -> m ()
 gpuInterrupts gpu = do
