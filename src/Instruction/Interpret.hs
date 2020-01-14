@@ -43,9 +43,7 @@ getArgM arg = case arg of
   Immediate16   -> Right word
 
   -- addresses
-  Address    -> Right word
   -- AddressRel -> Right (addrRel =<< sbyte)
-  AddressRel -> Left byte
 
   -- pointers
   ArgPointerImm16   -> Right (load16 . Addr16 =<< word)
@@ -371,22 +369,19 @@ interpretM instr@(Instruction _ t op) = case op of
           s v'
           store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
           return $ getTime True t
-  JR f arg
-    | Left g <- getArgumentM arg -> do
+  JR f -> do
         t' <- getFlag f <$> load8 (Register8 F)
-        r <- fromIntegral <$> g
+        r <- sbyte
         when t' $ jumpRelative r
         return $ getTime t' t
-  JP f arg
-    | Right g <- getArgumentM arg -> do
+  JP f addr -> do
         t' <- getFlag f <$> load8 (Register8 F)
-        addr <- g
+        addr <- getAddress addr
         when t' $ storePC addr
         return $ getTime t' t
-  CALL f arg
-    | Right g <- getArgumentM arg -> do
+  CALL f -> do
         t' <- getFlag f <$> load8 (Register8 F)
-        when t' . call =<< g
+        when t' . call =<< word
         return $ getTime t' t
   RET f -> do
     t' <- getFlag f <$> load8 (Register8 F)

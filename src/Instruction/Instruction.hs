@@ -20,9 +20,6 @@ data Arg = ArgDirect16 Reg16
 
          | Immediate16
 
-         | Address
-         | AddressRel
-
          | ArgPointerImm16
          deriving (Eq)
 
@@ -32,9 +29,6 @@ instance Show Arg where
     ArgSP -> "SP"
 
     Immediate16 -> "d16"
-
-    Address    -> "a16"
-    AddressRel -> "r8"
 
     ArgPointerImm16   -> "(a16)"
 
@@ -51,8 +45,8 @@ data InstructionExpr
   = LD In8 Out8 -- from -> to
   | PUSH Arg | POP Arg
 
-  | JP (Maybe Flag) Arg | JR (Maybe Flag) Arg
-  | CALL (Maybe Flag) Arg | RET (Maybe Flag)
+  | JP (Maybe Flag) Addr | JR (Maybe Flag)
+  | CALL (Maybe Flag) | RET (Maybe Flag)
 
   | NOP | STOP | HALT
 
@@ -171,8 +165,8 @@ parseInstruction b =
     (0,0,0) -> o (ConstantTime 4) NOP
     (0,2,0) -> o (ConstantTime 4) STOP
     (0,1,0) -> o (ConstantTime 20) (LD16 ArgSP ArgPointerImm16)
-    (0,3,0) -> o (ConstantTime 12) (JR Nothing AddressRel)
-    (0,y,0) -> o (VariableTime 8 12) (JR (Just $ flag (y .&. 0x3)) AddressRel)
+    (0,3,0) -> o (ConstantTime 12) (JR Nothing)
+    (0,y,0) -> o (VariableTime 8 12) (JR (Just $ flag (y .&. 0x3)))
 
     (0,0,1) -> o (ConstantTime 12) $ LD16 Immediate16 (ArgDirect16 BC)
     (0,2,1) -> o (ConstantTime 12) $ LD16 Immediate16 (ArgDirect16 DE)
@@ -237,31 +231,31 @@ parseInstruction b =
 
     (3,1,1) -> o (ConstantTime 16) $ RET Nothing
     (3,3,1) -> o (ConstantTime 16) RETI
-    (3,5,1) -> o (ConstantTime  4) $ JP Nothing (ArgDirect16 HL)
+    (3,5,1) -> o (ConstantTime  4) $ JP Nothing AddrHL
     (3,7,1) -> o (ConstantTime  8) $ LD16 (ArgDirect16 HL) ArgSP
 
     (3,4,2) -> o (ConstantTime 8)  $ LD (InReg8 A) (OutAddr8 ZeroPageC)
     (3,6,2) -> o (ConstantTime 8)  $ LD (InAddr8 ZeroPageC) (OutReg8 A)
     (3,5,2) -> o (ConstantTime 16) $ LD (InReg8 A) (OutAddr8 AddrDirect)
     (3,7,2) -> o (ConstantTime 16) $ LD (InAddr8 AddrDirect) (OutReg8 A)
-    (3,y,2) -> o (VariableTime 12 16) $ JP (Just $ flag y) Address
+    (3,y,2) -> o (VariableTime 12 16) $ JP (Just $ flag y) AddrDirect
 
-    (3,0,3) -> o (ConstantTime 16) (JP Nothing Address)
+    (3,0,3) -> o (ConstantTime 16) (JP Nothing AddrDirect)
     (3,1,3) -> error "0xCB"
 
     (3,6,3) -> o (ConstantTime 4) DI
     (3,7,3) -> o (ConstantTime 4) EI
 
-    (3,f@0,4) -> o (VariableTime 12 24) $ CALL (Just $ flag f) Address
-    (3,f@1,4) -> o (VariableTime 12 24) $ CALL (Just $ flag f) Address
-    (3,f@2,4) -> o (VariableTime 12 24) $ CALL (Just $ flag f) Address
-    (3,f@3,4) -> o (VariableTime 12 24) $ CALL (Just $ flag f) Address
+    (3,f@0,4) -> o (VariableTime 12 24) $ CALL (Just $ flag f)
+    (3,f@1,4) -> o (VariableTime 12 24) $ CALL (Just $ flag f)
+    (3,f@2,4) -> o (VariableTime 12 24) $ CALL (Just $ flag f)
+    (3,f@3,4) -> o (VariableTime 12 24) $ CALL (Just $ flag f)
 
     (3,0,5) -> o (ConstantTime 16) $ PUSH (ArgDirect16 BC)
     (3,2,5) -> o (ConstantTime 16) $ PUSH (ArgDirect16 DE)
     (3,4,5) -> o (ConstantTime 16) $ PUSH (ArgDirect16 HL)
     (3,6,5) -> o (ConstantTime 16) $ PUSH (ArgDirect16 AF)
-    (3,1,5) -> o (ConstantTime 24) $ CALL Nothing Address
+    (3,1,5) -> o (ConstantTime 24) $ CALL Nothing
 
     (3,y,6) -> o (ConstantTime 8)  $ aluMnemonic y InImm8
     (3,y,7) -> o (ConstantTime 16) $ RST y
