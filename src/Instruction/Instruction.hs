@@ -66,7 +66,7 @@ instance Show Flag where
   show FlagNC = "NC"
 
 data InstructionExpr
-  = LD Arg Arg -- from -> to
+  = LD In8 Out8 -- from -> to
   | PUSH Arg | POP Arg
 
   | JP (Maybe Flag) Arg | JR (Maybe Flag) Arg
@@ -101,6 +101,13 @@ data Instruction
   = Instruction Word8 (Time Word) InstructionExpr
   deriving Show
 
+data In8 = InReg8 Reg8 | InImm8 | InAddr8 Addr
+  deriving Show
+data Out8 = OutReg8 Reg8 | OutAddr8 Addr
+  deriving Show
+data Addr = AddrBC | AddrDE | AddrHL | AddrHLi | AddrHLd | AddrDirect | ZeroPage | ZeroPageC
+  deriving Show
+
 {-# INLINE basicRegisterArg #-}
 basicRegisterArg :: Word8 -> Arg
 basicRegisterArg w = case w of
@@ -114,6 +121,18 @@ basicRegisterArg w = case w of
   7 -> ArgDirect8 A
   _ -> error "basicRegisterArg: this should not be possible"
 
+basicRegisterArg' :: Word8 -> Either Reg8 Addr
+basicRegisterArg' w = case w of
+  0 -> Left $ B
+  1 -> Left $ C
+  2 -> Left $ D
+  3 -> Left $ E
+  4 -> Left $ H
+  5 -> Left $ L
+  6 -> Right $ AddrHL
+  7 -> Left $ A
+  _ -> error "basicRegisterArg: this should not be possible"
+
 {-# INLINE registerPointerArg #-}
 registerPointerArg :: Word8 -> Arg
 registerPointerArg y = case y .&. 0x6 of
@@ -121,6 +140,14 @@ registerPointerArg y = case y .&. 0x6 of
   2 -> ArgPointerReg DE
   4 -> ArgPointerHLi
   6 -> ArgPointerHLd
+  _ -> error "registerPointer: invalid argument"
+
+registerPointerArg' :: Word8 -> Addr
+registerPointerArg' y = case y .&. 0x6 of
+  0 -> AddrBC
+  2 -> AddrDE
+  4 -> AddrHLi
+  6 -> AddrHLd
   _ -> error "registerPointer: invalid argument"
 
 {-# INLINE aluMnemonic #-}
@@ -192,15 +219,15 @@ parseInstruction b =
     (0,5,1) -> o (ConstantTime 8) $ ADD16_HL $ ArgDirect16 HL
     (0,7,1) -> o (ConstantTime 8) $ ADD16_HL $ ArgSP
 
-    (0,y@1,2) -> o (ConstantTime 8) $ LD (registerPointerArg y) (ArgDirect8 A)
-    (0,y@3,2) -> o (ConstantTime 8) $ LD (registerPointerArg y) (ArgDirect8 A)
-    (0,y@5,2) -> o (ConstantTime 8) $ LD (registerPointerArg y) (ArgDirect8 A)
-    (0,y@7,2) -> o (ConstantTime 8) $ LD (registerPointerArg y) (ArgDirect8 A)
+    (0,y@1,2) -> o (ConstantTime 8) $ LD (InAddr8 $ registerPointerArg' y) (OutReg8 A)
+    (0,y@3,2) -> o (ConstantTime 8) $ LD (InAddr8 $ registerPointerArg' y) (OutReg8 A)
+    (0,y@5,2) -> o (ConstantTime 8) $ LD (InAddr8 $ registerPointerArg' y) (OutReg8 A)
+    (0,y@7,2) -> o (ConstantTime 8) $ LD (InAddr8 $ registerPointerArg' y) (OutReg8 A)
 
-    (0,y@0,2) -> o (ConstantTime 8) $ LD (ArgDirect8 A) (registerPointerArg y)
-    (0,y@2,2) -> o (ConstantTime 8) $ LD (ArgDirect8 A) (registerPointerArg y)
-    (0,y@4,2) -> o (ConstantTime 8) $ LD (ArgDirect8 A) (registerPointerArg y)
-    (0,y@6,2) -> o (ConstantTime 8) $ LD (ArgDirect8 A) (registerPointerArg y)
+    (0,y@0,2) -> o (ConstantTime 8) $ LD (InReg8 A) (OutAddr8 $ registerPointerArg' y)
+    (0,y@2,2) -> o (ConstantTime 8) $ LD (InReg8 A) (OutAddr8 $ registerPointerArg' y)
+    (0,y@4,2) -> o (ConstantTime 8) $ LD (InReg8 A) (OutAddr8 $ registerPointerArg' y)
+    (0,y@6,2) -> o (ConstantTime 8) $ LD (InReg8 A) (OutAddr8 $ registerPointerArg' y)
 
     (0,0,3) -> o (ConstantTime 8) $ INC16 $ ArgDirect16 BC
     (0,2,3) -> o (ConstantTime 8) $ INC16 $ ArgDirect16 DE
@@ -214,7 +241,7 @@ parseInstruction b =
 
     (0,y,4) -> o (ConstantTime $ if y == 6 then 12 else 4) $ INC (basicRegisterArg y)
     (0,y,5) -> o (ConstantTime $ if y == 6 then 12 else 4) $ DEC (basicRegisterArg y)
-    (0,y,6) -> o (ConstantTime $ if y == 6 then 12 else 8) $ LD Immediate8 (basicRegisterArg y)
+    (0,y,6) -> o (ConstantTime $ if y == 6 then 12 else 8) $ LD InImm8 (either OutReg8 OutAddr8 $ basicRegisterArg' y)
 
     (0,0,7) -> o (ConstantTime 4) RLCA
     (0,1,7) -> o (ConstantTime 4) RRCA
@@ -227,12 +254,13 @@ parseInstruction b =
     (0,7,7) -> o (ConstantTime 4) CCF
 
     (1,6,6) -> o (ConstantTime 4) HALT
-    (1,y,z) -> o (ConstantTime $ if y == 6 || z == 6 then 8 else 4) $ LD (basicRegisterArg z) (basicRegisterArg y)
+    (1,y,z) -> o (ConstantTime $ if y == 6 || z == 6 then 8 else 4)
+      $ LD (either InReg8 InAddr8 $ basicRegisterArg' z) (either OutReg8 OutAddr8 $ basicRegisterArg' y)
 
     (2,y,z) -> o (ConstantTime $ if z == 6 then 8 else 4) (aluMnemonic y $ basicRegisterArg z)
 
-    (3,4,0) -> o (ConstantTime 12) $ LD (ArgDirect8 A) ArgPointerImmFF
-    (3,6,0) -> o (ConstantTime 12) $ LD ArgPointerImmFF (ArgDirect8 A)
+    (3,4,0) -> o (ConstantTime 12) $ LD (InReg8 A) (OutAddr8 ZeroPage)
+    (3,6,0) -> o (ConstantTime 12) $ LD (InAddr8 ZeroPage) (OutReg8 A)
     (3,5,0) -> o (ConstantTime 16) ADD16_SP
     (3,7,0) -> o (ConstantTime 12) LD16_SP_HL
     (3,y,0) -> o (VariableTime 8 20) $ RET (Just $ flag y)
@@ -247,10 +275,11 @@ parseInstruction b =
     (3,5,1) -> o (ConstantTime  4) $ JP Nothing (ArgDirect16 HL)
     (3,7,1) -> o (ConstantTime  8) $ LD16 (ArgDirect16 HL) ArgSP
 
-    (3,4,2) -> o (ConstantTime 8)  $ LD (ArgDirect8 A) (ArgPointerRegFF C)
-    (3,6,2) -> o (ConstantTime 8)  $ LD (ArgPointerRegFF C) (ArgDirect8 A)
-    (3,5,2) -> o (ConstantTime 16) $ LD (ArgDirect8 A) ArgPointerImm8
-    (3,7,2) -> o (ConstantTime 16) $ LD ArgPointerImm8 (ArgDirect8 A)
+    (3,4,2) -> o (ConstantTime 8)  $ LD (InReg8 A) (OutAddr8 ZeroPageC) -- ArgPointerRegFF C)
+    (3,6,2) -> o (ConstantTime 8)  $ LD (InAddr8 ZeroPageC) (OutReg8 A)
+    (3,5,2) -> o (ConstantTime 16) $ LD (InReg8 A) (OutAddr8 AddrDirect)
+    (3,7,2) -> o (ConstantTime 16) $ LD (InAddr8 AddrDirect) (OutReg8 A)
+                                         -- ArgPointerImm8 (ArgDirect8 A)
     (3,y,2) -> o (VariableTime 12 16) $ JP (Just $ flag y) Address
 
     (3,0,3) -> o (ConstantTime 16) (JP Nothing Address)

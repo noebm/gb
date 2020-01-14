@@ -106,6 +106,25 @@ instance GetArgument Arg where
 instance SetArgument Arg where
   setArgumentM = setArgM
 
+addrToArg :: Addr -> Arg
+addrToArg AddrBC = ArgPointerReg BC
+addrToArg AddrDE = ArgPointerReg DE
+addrToArg AddrHL = ArgPointerReg HL
+addrToArg AddrHLi = ArgPointerHLi
+addrToArg AddrHLd = ArgPointerHLd
+addrToArg AddrDirect = ArgPointerImm8
+addrToArg ZeroPage = ArgPointerImmFF
+addrToArg ZeroPageC = ArgPointerRegFF C
+
+instance GetArgument In8 where
+  getArgumentM (InReg8 r) = getArgM (ArgDirect8 r)
+  getArgumentM (InAddr8 addr) = getArgM (addrToArg addr)
+  getArgumentM  InImm8 = getArgM Immediate8
+
+instance SetArgument Out8 where
+  setArgumentM (OutReg8 r) = setArgM (ArgDirect8 r)
+  setArgumentM (OutAddr8 addr) = setArgM (addrToArg addr)
+
 daa :: MonadEmulator m => m ()
 daa = do
   f <- load8 (Register8 F)
