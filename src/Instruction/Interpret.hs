@@ -380,25 +380,21 @@ interpretM instr@(Instruction _ t op) = case op of
             -> arith add (getIn8 arg) False >> return (getTime True t)
 
   ADD16_HL from
-      | Right s <- setArgumentM (ArgDirect16 HL)
-      , Right gs <- getArgumentM (ArgDirect16 HL)
-      , Right g  <- getArgumentM from -> do
-          v <- gs
+      | Right g  <- getArgM from -> do
+          v <- load16 (Register16 HL)
           dv <- g
           let v' = v + dv
-          s v'
+          store16 (Register16 HL) v'
           modifyFlags $ \f -> f
             & flagN .~ False
             & flagC .~ (v' < v)
             & flagH .~ ((v' .&. 0x0FFF) < (v .&. 0x0FFF))
           return $ getTime True t
-  ADD16_SP
-      | Right s  <- setArgumentM ArgSP
-      , Right gs <- getArgumentM ArgSP -> do
-          v <- gs
+  ADD16_SP -> do
+          v <- loadSP
           dv <- sbyte
           let v' = addRelative v dv
-          s v'
+          storeSP v'
           modifyFlags $ \f -> 0x00
             & flagC .~ ((v' .&. 0xFF) < (v .&. 0xFF))
             & flagH .~ ((v' .&. 0x0F) < (v .&. 0x0F))
