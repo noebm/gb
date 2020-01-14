@@ -98,12 +98,10 @@ setArgM arg = case arg of
 class Argument a where
   getArgumentM :: MonadEmulator m => a -> Either (m Word8) (m Word16)
   setArgumentM :: MonadEmulator m => a -> Either (Word8 -> m ()) (Word16 -> m ())
-  toArg :: a -> Arg
 
 instance Argument Arg where
   setArgumentM = setArgM
   getArgumentM = getArgM
-  toArg = id
 
 daa :: MonadEmulator m => m ()
 daa = do
@@ -409,7 +407,7 @@ interpretM instr@(Instruction _ t op) = case op of
   POP arg
     | Right s <- setArgumentM arg -> do
       pop >>= s
-      when (toArg arg == ArgDirect16 AF) (modifyFlags (.&. 0xF0))
+      when (arg == ArgDirect16 AF) (modifyFlags (.&. 0xF0))
       return $ getTime True t
 
   ADD arg
