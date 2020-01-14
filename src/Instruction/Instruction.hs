@@ -95,16 +95,16 @@ outToIn :: Out8 -> In8
 outToIn (OutReg8 r) = InReg8 r
 outToIn (OutAddr8 addr) = InAddr8 addr
 
-basicRegisterArg :: Word8 -> Either Reg8 Addr
+basicRegisterArg :: Word8 -> Out8
 basicRegisterArg w = case w of
-  0 -> Left $ B
-  1 -> Left $ C
-  2 -> Left $ D
-  3 -> Left $ E
-  4 -> Left $ H
-  5 -> Left $ L
-  6 -> Right $ AddrHL
-  7 -> Left $ A
+  0 -> OutReg8 $ B
+  1 -> OutReg8 $ C
+  2 -> OutReg8 $ D
+  3 -> OutReg8 $ E
+  4 -> OutReg8 $ H
+  5 -> OutReg8 $ L
+  6 -> OutAddr8 $ AddrHL
+  7 -> OutReg8 $ A
   _ -> error "basicRegisterArg: this should not be possible"
 
 registerPointerArg' :: Word8 -> Addr
@@ -153,11 +153,11 @@ parseExtendedInstruction b =
     case byteCodeDecompose b of
       (0,y,z) ->
         let op = case y of { 0 -> RLC ; 1 -> RRC ; 2 -> RL; 3 -> RR; 4 -> SLA; 5 -> SRA; 6 -> SWAP; _ -> SRL }
-        in o (ConstantTime $ if z == 6 then 16 else 8) (op (either OutReg8 OutAddr8 $ basicRegisterArg z))
+        in o (ConstantTime $ if z == 6 then 16 else 8) (op (basicRegisterArg z))
 
-      (1,y,z) -> o (ConstantTime $ if z == 6 then 12 else 8) (BIT y $ either InReg8 InAddr8 $ basicRegisterArg z)
-      (2,y,z) -> o (ConstantTime $ if z == 6 then 16 else 8) (RES y $ either OutReg8 OutAddr8 $ basicRegisterArg z)
-      (3,y,z) -> o (ConstantTime $ if z == 6 then 16 else 8) (SET y $ either OutReg8 OutAddr8 $ basicRegisterArg z)
+      (1,y,z) -> o (ConstantTime $ if z == 6 then 12 else 8) (BIT y $ outToIn $ basicRegisterArg z)
+      (2,y,z) -> o (ConstantTime $ if z == 6 then 16 else 8) (RES y $ basicRegisterArg z)
+      (3,y,z) -> o (ConstantTime $ if z == 6 then 16 else 8) (SET y $ basicRegisterArg z)
       _ -> error $ printf "unknown bytecode 0x%02x" b
 
 parseInstruction :: Word8 -> Instruction
@@ -204,9 +204,9 @@ parseInstruction b =
     (0,5,3) -> o (ConstantTime 8) $ DEC16 $ ArgDirect16 HL
     (0,7,3) -> o (ConstantTime 8) $ DEC16 $ ArgSP
 
-    (0,y,4) -> o (ConstantTime $ if y == 6 then 12 else 4) $ INC (either OutReg8 OutAddr8 $ basicRegisterArg y)
-    (0,y,5) -> o (ConstantTime $ if y == 6 then 12 else 4) $ DEC (either OutReg8 OutAddr8 $ basicRegisterArg y)
-    (0,y,6) -> o (ConstantTime $ if y == 6 then 12 else 8) $ LD InImm8 (either OutReg8 OutAddr8 $ basicRegisterArg y)
+    (0,y,4) -> o (ConstantTime $ if y == 6 then 12 else 4) $ INC (basicRegisterArg y)
+    (0,y,5) -> o (ConstantTime $ if y == 6 then 12 else 4) $ DEC (basicRegisterArg y)
+    (0,y,6) -> o (ConstantTime $ if y == 6 then 12 else 8) $ LD InImm8 (basicRegisterArg y)
 
     (0,0,7) -> o (ConstantTime 4) RLCA
     (0,1,7) -> o (ConstantTime 4) RRCA
@@ -220,9 +220,9 @@ parseInstruction b =
 
     (1,6,6) -> o (ConstantTime 4) HALT
     (1,y,z) -> o (ConstantTime $ if y == 6 || z == 6 then 8 else 4)
-      $ LD (either InReg8 InAddr8 $ basicRegisterArg z) (either OutReg8 OutAddr8 $ basicRegisterArg y)
+      $ LD (outToIn $ basicRegisterArg z) (basicRegisterArg y)
 
-    (2,y,z) -> o (ConstantTime $ if z == 6 then 8 else 4) (aluMnemonic y $ either InReg8 InAddr8 $ basicRegisterArg z)
+    (2,y,z) -> o (ConstantTime $ if z == 6 then 8 else 4) (aluMnemonic y $ outToIn $ basicRegisterArg z)
 
     (3,4,0) -> o (ConstantTime 12) $ LD (InReg8 A) (OutAddr8 ZeroPage)
     (3,6,0) -> o (ConstantTime 12) $ LD (InAddr8 ZeroPage) (OutReg8 A)
