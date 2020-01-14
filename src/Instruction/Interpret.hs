@@ -289,7 +289,7 @@ interpretM instr@(Instruction _ t op) = case op of
       return $ getTime True t
 
   SWAP arg
-      | Left g <- getArgumentM arg
+      | Left g <- getArgumentM (outToIn arg)
       , Left s <- setArgumentM arg -> do
           x <- g
           let x' = ((x `shiftL` 4) .&. 0xF0) .|. ((x `shiftR` 4) .&. 0x0F)
@@ -299,17 +299,17 @@ interpretM instr@(Instruction _ t op) = case op of
 
   RES bidx arg
       | Left s <- setArgumentM arg
-      , Left g <- getArgumentM arg -> do
+      , Left g <- getArgumentM (outToIn arg) -> do
           s . (`clearBit` fromIntegral bidx) =<< g
           return $ getTime True t
   SET bidx arg
       | Left s <- setArgumentM arg
-      , Left g <- getArgumentM arg -> do
+      , Left g <- getArgumentM (outToIn arg) -> do
           s . (`setBit` fromIntegral bidx) =<< g
           return $ getTime True t
 
   RL arg
-            | Left g <- getArgumentM arg
+            | Left g <- getArgumentM (outToIn arg)
             , Left s <- setArgumentM arg -> do
                 v <- g
                 c <- view flagC <$> load8 (Register8 F)
@@ -325,7 +325,7 @@ interpretM instr@(Instruction _ t op) = case op of
     store8 (Register8 F) (0x00 & flagC .~ c')
     return $ getTime True t
   RR arg
-            | Left g <- getArgumentM arg
+            | Left g <- getArgumentM (outToIn arg)
             , Left s <- setArgumentM arg -> do
                 v <- g
                 c <- view flagC <$> load8 (Register8 F)
@@ -353,7 +353,7 @@ interpretM instr@(Instruction _ t op) = case op of
     store8 (Register8 F) (0x00 & flagC .~ c')
     return $ getTime True t
   RLC arg
-      | Left g <- getArgumentM arg
+      | Left g <- getArgumentM (outToIn arg)
       , Left s <- setArgumentM arg -> do
           v <- g
           let (v' , c') = rotateLeftCarry v
@@ -361,7 +361,7 @@ interpretM instr@(Instruction _ t op) = case op of
           store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
           return $ getTime True t
   RRC arg
-      | Left g <- getArgumentM arg
+      | Left g <- getArgumentM (outToIn arg)
       , Left s <- setArgumentM arg -> do
           v <- g
           let (v' , c') = rotateRightCarry v
@@ -369,7 +369,7 @@ interpretM instr@(Instruction _ t op) = case op of
           store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
           return $ getTime True t
   SRL arg
-            | Left g <- getArgumentM arg
+            | Left g <- getArgumentM (outToIn arg)
             , Left s <- setArgumentM arg -> do
                 v <- g
                 let v' = v `shiftR` 1
@@ -379,7 +379,7 @@ interpretM instr@(Instruction _ t op) = case op of
                   & flagZ .~ (v' == 0)
                 return $ getTime True t
   SLA arg
-      | Left g <- getArgumentM arg
+      | Left g <- getArgumentM (outToIn arg)
       , Left s <- setArgumentM arg -> do
           v <- g
           let (v' , c') = shiftLeftArithmetic v
@@ -387,7 +387,7 @@ interpretM instr@(Instruction _ t op) = case op of
           store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
           return $ getTime True t
   SRA arg
-      | Left g <- getArgumentM arg
+      | Left g <- getArgumentM (outToIn arg)
       , Left s <- setArgumentM arg -> do
           v <- g
           let (v' , c') = shiftRightArithmetic v
@@ -474,7 +474,7 @@ interpretM instr@(Instruction _ t op) = case op of
                 store8 (Register8 F) f
                 return $ getTime True t
   INC arg
-            | Left g <- getArgumentM arg
+            | Left g <- getArgumentM (outToIn arg)
             , Left s <- setArgumentM arg -> do
                 v <- g
                 let v' = v + 1
@@ -496,7 +496,7 @@ interpretM instr@(Instruction _ t op) = case op of
                 s . subtract 1 =<< g
                 return $ getTime True t
   DEC arg
-            | Left g <- getArgumentM arg
+            | Left g <- getArgumentM (outToIn arg)
             , Left s <- setArgumentM arg -> do
                 v <- g
                 let v' = v - 1
