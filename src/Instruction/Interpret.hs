@@ -37,9 +37,7 @@ addrFF k = (0xFF , k) ^. word16
 getArgM :: MonadEmulator m => Arg -> Either (m Word8) (m Word16)
 getArgM arg = case arg of
   -- single byte data
-  ArgDirect8 r -> Left (load8 (Register8 r))
   ArgSP        -> Right (loadSP)
-  Immediate8   -> Left byte
   -- double byte data
   ArgDirect16 r -> Right (load16 $ Register16 r)
   Immediate16   -> Right word
@@ -50,43 +48,16 @@ getArgM arg = case arg of
   AddressRel -> Left byte
 
   -- pointers
-  ArgPointerImmFF   -> Left (load8 . Addr8 . addrFF =<< byte)
-  ArgPointerImm8    -> Left (load8 . Addr8 =<< word)
   ArgPointerImm16   -> Right (load16 . Addr16 =<< word)
-  ArgPointerRegFF r -> Left (load8 . Addr8 . addrFF =<< load8 (Register8 r))
-  ArgPointerReg   r -> Left (load8 . Addr8 =<< load16 (Register16 r))
-  ArgPointerHLi -> Left $ do
-    hl <- load16 (Register16 HL)
-    store16 (Register16 HL) (hl + 1)
-    load8 (Addr8 hl)
-  ArgPointerHLd -> Left $ do
-    hl <- load16 (Register16 HL)
-    store16 (Register16 HL) (hl - 1)
-    load8 (Addr8 hl)
 
 {-# INLINE setArgM #-}
 setArgM :: MonadEmulator m => Arg -> Either (Word8 -> m ()) (Word16 -> m ())
 setArgM arg = case arg of
-  -- single byte data
-  ArgDirect8 r -> Left (store8 (Register8 r))
   -- double byte data
   ArgDirect16 r -> Right (store16 $ Register16 r)
   ArgSP -> Right (storeSP)
 
   -- pointers
-  ArgPointerRegFF r -> Left (\b -> (`store8` b) . Addr8 . addrFF =<< load8 (Register8 r))
-  ArgPointerReg   r -> Left (\b -> (`store8` b) . Addr8 =<< load16 (Register16 r))
-  ArgPointerHLi -> Left $ \b -> do
-    hl <- load16 (Register16 HL)
-    store16 (Register16 HL) (hl + 1)
-    store8 (Addr8 hl) b
-  ArgPointerHLd -> Left $ \b -> do
-    hl <- load16 (Register16 HL)
-    store16 (Register16 HL) (hl - 1)
-    store8 (Addr8 hl) b
-
-  ArgPointerImmFF -> Left (\b -> (`store8` b) . Addr8 . addrFF =<< byte)
-  ArgPointerImm8  -> Left (\b -> (`store8` b) . Addr8 =<< word)
   ArgPointerImm16 -> Right (\w -> (`store16` w) . Addr16 =<< word)
 
   x -> error $ "setArgM: cannot write to " ++ show x
@@ -105,16 +76,6 @@ instance GetArgument Arg where
   getArgumentM = getArgM
 instance SetArgument Arg where
   setArgumentM = setArgM
-
-addrToArg :: Addr -> Arg
-addrToArg AddrBC = ArgPointerReg BC
-addrToArg AddrDE = ArgPointerReg DE
-addrToArg AddrHL = ArgPointerReg HL
-addrToArg AddrHLi = ArgPointerHLi
-addrToArg AddrHLd = ArgPointerHLd
-addrToArg AddrDirect = ArgPointerImm8
-addrToArg ZeroPage = ArgPointerImmFF
-addrToArg ZeroPageC = ArgPointerRegFF C
 
 getAddress :: MonadEmulator m => Addr -> m Word16
 getAddress AddrBC = load16 (Register16 BC)
@@ -254,7 +215,7 @@ interpretM instr@(Instruction _ t op) = case op of
   LD16_SP_HL
     | Right sHL <- setArgumentM (ArgDirect16 HL)
     , Right gSP <- getArgumentM ArgSP
-    , Left getRel <- getArgumentM Immediate8
+    , Left getRel <- getArgumentM InImm8
         -> do
       sp <- gSP
       r <- fromIntegral <$> getRel
@@ -467,7 +428,7 @@ interpretM instr@(Instruction _ t op) = case op of
   ADD16_SP
       | Right s  <- setArgumentM ArgSP
       , Right gs <- getArgumentM ArgSP
-      , Left getRel <- getArgumentM Immediate8 -> do
+      , Left getRel <- getArgumentM InImm8 -> do
           v <- gs
           dv <- fromIntegral <$> getRel
           let v' = addRelative v dv

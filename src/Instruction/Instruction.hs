@@ -15,46 +15,28 @@ byteCodeDecompose b =
   ((b `shiftR` 6) .&. 0x3, (b `shiftR` 3) .&. 0x7, b .&. 0x7)
 {-# INLINE byteCodeDecompose #-}
 
-data Arg = ArgDirect8 Reg8
-         | ArgDirect16 Reg16
+data Arg = ArgDirect16 Reg16
          | ArgSP
 
-         | Immediate8
          | Immediate16
 
          | Address
          | AddressRel
 
-         | ArgPointerRegFF Reg8
-         | ArgPointerReg Reg16
-         | ArgPointerImmFF
-
-         | ArgPointerImm8
          | ArgPointerImm16
-
-         | ArgPointerHLi
-         | ArgPointerHLd
          deriving (Eq)
 
 instance Show Arg where
   show arg = case arg of
-    ArgDirect8 r -> show r
     ArgDirect16 r -> show r
     ArgSP -> "SP"
 
-    Immediate8 -> "d8"
     Immediate16 -> "d16"
 
     Address    -> "a16"
     AddressRel -> "r8"
 
-    ArgPointerImmFF   -> "($FF00+a8)"
-    ArgPointerImm8    -> "(a16)"
     ArgPointerImm16   -> "(a16)"
-    ArgPointerRegFF r -> printf "($FF00+%s)" (show r)
-    ArgPointerReg r   -> printf "(%s)" (show r)
-    ArgPointerHLi     -> "(HL+)"
-    ArgPointerHLd     -> "(HL-)"
 
 data Flag = FlagZ | FlagC | FlagNZ | FlagNC
   deriving (Eq)
@@ -124,15 +106,6 @@ basicRegisterArg w = case w of
   6 -> Right $ AddrHL
   7 -> Left $ A
   _ -> error "basicRegisterArg: this should not be possible"
-
-{-# INLINE registerPointerArg #-}
-registerPointerArg :: Word8 -> Arg
-registerPointerArg y = case y .&. 0x6 of
-  0 -> ArgPointerReg BC
-  2 -> ArgPointerReg DE
-  4 -> ArgPointerHLi
-  6 -> ArgPointerHLd
-  _ -> error "registerPointer: invalid argument"
 
 registerPointerArg' :: Word8 -> Addr
 registerPointerArg' y = case y .&. 0x6 of
@@ -267,11 +240,10 @@ parseInstruction b =
     (3,5,1) -> o (ConstantTime  4) $ JP Nothing (ArgDirect16 HL)
     (3,7,1) -> o (ConstantTime  8) $ LD16 (ArgDirect16 HL) ArgSP
 
-    (3,4,2) -> o (ConstantTime 8)  $ LD (InReg8 A) (OutAddr8 ZeroPageC) -- ArgPointerRegFF C)
+    (3,4,2) -> o (ConstantTime 8)  $ LD (InReg8 A) (OutAddr8 ZeroPageC)
     (3,6,2) -> o (ConstantTime 8)  $ LD (InAddr8 ZeroPageC) (OutReg8 A)
     (3,5,2) -> o (ConstantTime 16) $ LD (InReg8 A) (OutAddr8 AddrDirect)
     (3,7,2) -> o (ConstantTime 16) $ LD (InAddr8 AddrDirect) (OutReg8 A)
-                                         -- ArgPointerImm8 (ArgDirect8 A)
     (3,y,2) -> o (VariableTime 12 16) $ JP (Just $ flag y) Address
 
     (3,0,3) -> o (ConstantTime 16) (JP Nothing Address)
