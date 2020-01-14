@@ -95,13 +95,16 @@ setArgM arg = case arg of
   -- AddressFF  -> Right (addrFF <$> byte)
   -- AddressRel -> Right (addrRel =<< sbyte)
 
-class Argument a where
+class GetArgument a where
   getArgumentM :: MonadEmulator m => a -> Either (m Word8) (m Word16)
+
+class SetArgument a where
   setArgumentM :: MonadEmulator m => a -> Either (Word8 -> m ()) (Word16 -> m ())
 
-instance Argument Arg where
-  setArgumentM = setArgM
+instance GetArgument Arg where
   getArgumentM = getArgM
+instance SetArgument Arg where
+  setArgumentM = setArgM
 
 daa :: MonadEmulator m => m ()
 daa = do
