@@ -113,7 +113,7 @@ opcodeSize op
   | otherwise = 1
 
 instructionSize :: Instruction Arg -> Int
-instructionSize (Instruction _ op _ args) = opcodeSize op + sum (argSize <$> args)
+instructionSize (Instruction _ op _ args out) = opcodeSize op + sum (argSize <$> args) + maybe 0 argSize out
 
 data Flag = FlagZ | FlagC | FlagNZ | FlagNC
   deriving (Eq)
@@ -129,20 +129,12 @@ data Instruction a = Instruction
   , mnemonic :: !Mnemonic
   , time :: !(Time Word)
   , arguments :: ![ a ]
+  , output :: Maybe a
   }
 
-instance Functor Instruction where
-  fmap f (Instruction code op t args) = Instruction code op t (fmap f args)
-
-instance Foldable Instruction where
-  foldMap = foldMapDefault
-
-instance Traversable Instruction where
-  traverse f (Instruction code op t args) = Instruction code op t <$> traverse f args
-
 instance Show a => Show (Instruction a) where
-  show (Instruction code mnemonic t args)
-    = printf "0x%02x - %s %s" code (show mnemonic) (showArgStructure $ show <$> args)
+  show (Instruction code mnemonic t args out)
+    = printf "0x%02x - %s %s" code (show mnemonic) (showArgStructure $ show <$> maybe id (:) out args)
 
 {-# INLINE basicRegisterArg #-}
 basicRegisterArg :: Word8 -> Arg
@@ -204,11 +196,11 @@ parseExtendedInstruction b =
     case byteCodeDecompose b of
       (0,y,z) ->
         let op = case y of { 0 -> RLC ; 1 -> RRC ; 2 -> RL; 3 -> RR; 4 -> SLA; 5 -> SRA; 6 -> SWAP; _ -> SRL }
-        in o op (ConstantTime $ if z == 6 then 16 else 8) [ basicRegisterArg z ]
+        in o op (ConstantTime $ if z == 6 then 16 else 8) [ basicRegisterArg z ] Nothing
 
-      (1,y,z) -> o BIT (ConstantTime $ if z == 6 then 12 else 8) [ ArgByteCode y, basicRegisterArg z ]
-      (2,y,z) -> o RES (ConstantTime $ if z == 6 then 16 else 8) [ ArgByteCode y, basicRegisterArg z ]
-      (3,y,z) -> o SET (ConstantTime $ if z == 6 then 16 else 8) [ ArgByteCode y, basicRegisterArg z ]
+      (1,y,z) -> o BIT (ConstantTime $ if z == 6 then 12 else 8) [ ArgByteCode y, basicRegisterArg z ] Nothing
+      (2,y,z) -> o RES (ConstantTime $ if z == 6 then 16 else 8) [ ArgByteCode y, basicRegisterArg z ] Nothing
+      (3,y,z) -> o SET (ConstantTime $ if z == 6 then 16 else 8) [ ArgByteCode y, basicRegisterArg z ] Nothing
       _ -> error $ printf "unknown bytecode 0x%02x" b
 
 parseInstruction :: Word8 -> Instruction Arg
@@ -219,100 +211,100 @@ parseInstruction b =
   in
     case byteCodeDecompose b of
 
-    (0,0,0) -> o NOP  (ConstantTime 4)  []
-    (0,2,0) -> o STOP (ConstantTime 4)  []
-    (0,1,0) -> o LD16 (ConstantTime 20) [ ArgPointerImm16, ArgSP ]
-    (0,3,0) -> o JR   (ConstantTime 12) [ AddressRel ]
-    (0,y,0) -> o JR   (VariableTime 8 12) [ ArgFlag $! flag (y .&. 0x3), AddressRel ]
+    (0,0,0) -> o NOP  (ConstantTime 4)  [] Nothing
+    (0,2,0) -> o STOP (ConstantTime 4)  [] Nothing
+    (0,1,0) -> o LD16 (ConstantTime 20) [ ArgSP ] (Just ArgPointerImm16)
+    (0,3,0) -> o JR   (ConstantTime 12) [ AddressRel ] Nothing
+    (0,y,0) -> o JR   (VariableTime 8 12) [ ArgFlag $! flag (y .&. 0x3), AddressRel ] Nothing
 
-    (0,0,1) -> o LD16 (ConstantTime 12) [ ArgDirect16 BC, Immediate16 ]
-    (0,2,1) -> o LD16 (ConstantTime 12) [ ArgDirect16 DE, Immediate16 ]
-    (0,4,1) -> o LD16 (ConstantTime 12) [ ArgDirect16 HL, Immediate16 ]
-    (0,6,1) -> o LD16 (ConstantTime 12) [ ArgSP, Immediate16 ]
+    (0,0,1) -> o LD16 (ConstantTime 12) [ Immediate16 ]  (Just $ ArgDirect16 BC)
+    (0,2,1) -> o LD16 (ConstantTime 12) [ Immediate16 ]  (Just $ ArgDirect16 DE)
+    (0,4,1) -> o LD16 (ConstantTime 12) [ Immediate16 ]  (Just $ ArgDirect16 HL)
+    (0,6,1) -> o LD16 (ConstantTime 12) [ Immediate16 ]  (Just ArgSP)
 
-    (0,1,1) -> o ADD16 (ConstantTime 8) [ ArgDirect16 HL, ArgDirect16 BC]
-    (0,3,1) -> o ADD16 (ConstantTime 8) [ ArgDirect16 HL, ArgDirect16 DE]
-    (0,5,1) -> o ADD16 (ConstantTime 8) [ ArgDirect16 HL, ArgDirect16 HL]
-    (0,7,1) -> o ADD16 (ConstantTime 8) [ ArgDirect16 HL, ArgSP]
+    (0,1,1) -> o ADD16 (ConstantTime 8) [ ArgDirect16 BC ] (Just $ ArgDirect16 HL)
+    (0,3,1) -> o ADD16 (ConstantTime 8) [ ArgDirect16 DE ] (Just $ ArgDirect16 HL)
+    (0,5,1) -> o ADD16 (ConstantTime 8) [ ArgDirect16 HL ] (Just $ ArgDirect16 HL)
+    (0,7,1) -> o ADD16 (ConstantTime 8) [ ArgSP ]          (Just $ ArgDirect16 HL)
 
-    (0,y@1,2) -> o LD (ConstantTime 8) [ ArgDirect8 A, registerPointerArg y ]
-    (0,y@3,2) -> o LD (ConstantTime 8) [ ArgDirect8 A, registerPointerArg y ]
-    (0,y@5,2) -> o LD (ConstantTime 8) [ ArgDirect8 A, registerPointerArg y ]
-    (0,y@7,2) -> o LD (ConstantTime 8) [ ArgDirect8 A, registerPointerArg y ]
+    (0,y@1,2) -> o LD (ConstantTime 8) [ registerPointerArg y ] (Just $ ArgDirect8 A)
+    (0,y@3,2) -> o LD (ConstantTime 8) [ registerPointerArg y ] (Just $ ArgDirect8 A)
+    (0,y@5,2) -> o LD (ConstantTime 8) [ registerPointerArg y ] (Just $ ArgDirect8 A)
+    (0,y@7,2) -> o LD (ConstantTime 8) [ registerPointerArg y ] (Just $ ArgDirect8 A)
 
-    (0,y@0,2) -> o LD (ConstantTime 8) [ registerPointerArg y, ArgDirect8 A ]
-    (0,y@2,2) -> o LD (ConstantTime 8) [ registerPointerArg y, ArgDirect8 A ]
-    (0,y@4,2) -> o LD (ConstantTime 8) [ registerPointerArg y, ArgDirect8 A ]
-    (0,y@6,2) -> o LD (ConstantTime 8) [ registerPointerArg y, ArgDirect8 A ]
+    (0,y@0,2) -> o LD (ConstantTime 8) [ ArgDirect8 A ] (Just $ registerPointerArg y)
+    (0,y@2,2) -> o LD (ConstantTime 8) [ ArgDirect8 A ] (Just $ registerPointerArg y)
+    (0,y@4,2) -> o LD (ConstantTime 8) [ ArgDirect8 A ] (Just $ registerPointerArg y)
+    (0,y@6,2) -> o LD (ConstantTime 8) [ ArgDirect8 A ] (Just $ registerPointerArg y)
 
-    (0,0,3) -> o INC16 (ConstantTime 8) [ ArgDirect16 BC ]
-    (0,2,3) -> o INC16 (ConstantTime 8) [ ArgDirect16 DE ]
-    (0,4,3) -> o INC16 (ConstantTime 8) [ ArgDirect16 HL ]
-    (0,6,3) -> o INC16 (ConstantTime 8) [ ArgSP ]
+    (0,0,3) -> o INC16 (ConstantTime 8) [ ArgDirect16 BC ] Nothing
+    (0,2,3) -> o INC16 (ConstantTime 8) [ ArgDirect16 DE ] Nothing
+    (0,4,3) -> o INC16 (ConstantTime 8) [ ArgDirect16 HL ] Nothing
+    (0,6,3) -> o INC16 (ConstantTime 8) [ ArgSP ] Nothing
 
-    (0,1,3) -> o DEC16 (ConstantTime 8) [ ArgDirect16 BC ]
-    (0,3,3) -> o DEC16 (ConstantTime 8) [ ArgDirect16 DE ]
-    (0,5,3) -> o DEC16 (ConstantTime 8) [ ArgDirect16 HL ]
-    (0,7,3) -> o DEC16 (ConstantTime 8) [ ArgSP ]
+    (0,1,3) -> o DEC16 (ConstantTime 8) [ ArgDirect16 BC ] Nothing
+    (0,3,3) -> o DEC16 (ConstantTime 8) [ ArgDirect16 DE ] Nothing
+    (0,5,3) -> o DEC16 (ConstantTime 8) [ ArgDirect16 HL ] Nothing
+    (0,7,3) -> o DEC16 (ConstantTime 8) [ ArgSP ] Nothing
 
-    (0,y,4) -> o INC (ConstantTime $ if y == 6 then 12 else 4) [ basicRegisterArg y ]
-    (0,y,5) -> o DEC (ConstantTime $ if y == 6 then 12 else 4) [ basicRegisterArg y ]
-    (0,y,6) -> o LD  (ConstantTime $ if y == 6 then 12 else 8) [ basicRegisterArg y, Immediate8 ]
+    (0,y,4) -> o INC (ConstantTime $ if y == 6 then 12 else 4) [ basicRegisterArg y ] Nothing
+    (0,y,5) -> o DEC (ConstantTime $ if y == 6 then 12 else 4) [ basicRegisterArg y ] Nothing
+    (0,y,6) -> o LD  (ConstantTime $ if y == 6 then 12 else 8) [ Immediate8 ] (Just $ basicRegisterArg y)
 
-    (0,0,7) -> o RLCA (ConstantTime 4) []
-    (0,1,7) -> o RRCA (ConstantTime 4) []
-    (0,2,7) -> o RLA  (ConstantTime 4) []
-    (0,3,7) -> o RRA  (ConstantTime 4) []
+    (0,0,7) -> o RLCA (ConstantTime 4) [] Nothing
+    (0,1,7) -> o RRCA (ConstantTime 4) [] Nothing
+    (0,2,7) -> o RLA  (ConstantTime 4) [] Nothing
+    (0,3,7) -> o RRA  (ConstantTime 4) [] Nothing
 
-    (0,4,7) -> o DAA (ConstantTime 4) []
-    (0,5,7) -> o CPL (ConstantTime 4) []
-    (0,6,7) -> o SCF (ConstantTime 4) []
-    (0,7,7) -> o CCF (ConstantTime 4) []
+    (0,4,7) -> o DAA (ConstantTime 4) [] Nothing
+    (0,5,7) -> o CPL (ConstantTime 4) [] Nothing
+    (0,6,7) -> o SCF (ConstantTime 4) [] Nothing
+    (0,7,7) -> o CCF (ConstantTime 4) [] Nothing
 
-    (1,6,6) -> o HALT (ConstantTime 4) []
-    (1,y,z) -> o LD   (ConstantTime $ if y == 6 || z == 6 then 8 else 4) [ basicRegisterArg y, basicRegisterArg z ]
+    (1,6,6) -> o HALT (ConstantTime 4) [] Nothing
+    (1,y,z) -> o LD   (ConstantTime $ if y == 6 || z == 6 then 8 else 4) [ basicRegisterArg z ] (Just $ basicRegisterArg y)
 
-    (2,y,z) -> o (aluMnemonic y) (ConstantTime $ if z == 6 then 8 else 4) [ basicRegisterArg z ]
+    (2,y,z) -> o (aluMnemonic y) (ConstantTime $ if z == 6 then 8 else 4) [ basicRegisterArg z ] Nothing
 
-    (3,4,0) -> o LD  (ConstantTime 12) [ ArgPointerImmFF, ArgDirect8 A ]
-    (3,6,0) -> o LD  (ConstantTime 12) [ ArgDirect8 A, ArgPointerImmFF ]
-    (3,5,0) -> o ADD16 (ConstantTime 16) [ ArgSP, Immediate8 ]
-    (3,7,0) -> o LD16 (ConstantTime 12) [ ArgDirect16 HL, ArgSP, Immediate8 ]
-    (3,y,0) -> o RET (VariableTime 8 20) [ ArgFlag $! flag y ]
+    (3,4,0) -> o LD    (ConstantTime 12)   [ ArgDirect8 A    ] (Just ArgPointerImmFF)
+    (3,6,0) -> o LD    (ConstantTime 12)   [ ArgPointerImmFF ] (Just $ ArgDirect8 A)
+    (3,5,0) -> o ADD16 (ConstantTime 16)   [ Immediate8 ] (Just ArgSP)
+    (3,7,0) -> o LD16  (ConstantTime 12)   [ ArgSP, Immediate8 ] (Just $ ArgDirect16 HL)
+    (3,y,0) -> o RET   (VariableTime 8 20) [ ArgFlag $! flag y ] Nothing
 
-    (3,0,1) -> o POP (ConstantTime 12) [ ArgDirect16 BC ]
-    (3,2,1) -> o POP (ConstantTime 12) [ ArgDirect16 DE ]
-    (3,4,1) -> o POP (ConstantTime 12) [ ArgDirect16 HL ]
-    (3,6,1) -> o POP (ConstantTime 12) [ ArgDirect16 AF ]
+    (3,0,1) -> o POP (ConstantTime 12) [ ArgDirect16 BC ] Nothing
+    (3,2,1) -> o POP (ConstantTime 12) [ ArgDirect16 DE ] Nothing
+    (3,4,1) -> o POP (ConstantTime 12) [ ArgDirect16 HL ] Nothing
+    (3,6,1) -> o POP (ConstantTime 12) [ ArgDirect16 AF ] Nothing
 
-    (3,1,1) -> o RET  (ConstantTime 16) []
-    (3,3,1) -> o RETI (ConstantTime 16) []
-    (3,5,1) -> o JP   (ConstantTime  4) [ ArgDirect16 HL ]
-    (3,7,1) -> o LD16 (ConstantTime 8) [ ArgSP, ArgDirect16 HL ]
+    (3,1,1) -> o RET  (ConstantTime 16) [] Nothing
+    (3,3,1) -> o RETI (ConstantTime 16) [] Nothing
+    (3,5,1) -> o JP   (ConstantTime  4) [ ArgDirect16 HL ] Nothing
+    (3,7,1) -> o LD16 (ConstantTime  8) [ ArgDirect16 HL ] (Just ArgSP)
 
-    (3,4,2) -> o LD (ConstantTime 8) [ ArgPointerRegFF C, ArgDirect8 A ]
-    (3,6,2) -> o LD (ConstantTime 8) [ ArgDirect8 A, ArgPointerRegFF C ]
-    (3,5,2) -> o LD (ConstantTime 16) [ ArgPointerImm8, ArgDirect8 A ]
-    (3,7,2) -> o LD (ConstantTime 16) [ ArgDirect8 A, ArgPointerImm8 ]
-    (3,y,2) -> o JP (VariableTime 12 16) [ ArgFlag $! flag y, Address ]
+    (3,4,2) -> o LD (ConstantTime 8) [ ArgDirect8 A ] (Just $ ArgPointerRegFF C)
+    (3,6,2) -> o LD (ConstantTime 8) [ ArgPointerRegFF C ] (Just $ ArgDirect8 A)
+    (3,5,2) -> o LD (ConstantTime 16) [ ArgDirect8 A ] (Just $ ArgPointerImm8)
+    (3,7,2) -> o LD (ConstantTime 16) [ ArgPointerImm8 ] (Just $ ArgDirect8 A)
+    (3,y,2) -> o JP (VariableTime 12 16) [ ArgFlag $! flag y, Address ] Nothing
 
-    (3,0,3) -> o JP (ConstantTime 16) [ Address ]
+    (3,0,3) -> o JP (ConstantTime 16) [ Address ] Nothing
     (3,1,3) -> error "0xCB"
 
-    (3,6,3) -> o DI (ConstantTime 4) []
-    (3,7,3) -> o EI (ConstantTime 4) []
+    (3,6,3) -> o DI (ConstantTime 4) [] Nothing
+    (3,7,3) -> o EI (ConstantTime 4) [] Nothing
 
-    (3,f@0,4) -> o CALL (VariableTime 12 24) [ArgFlag $! flag f, Address ]
-    (3,f@1,4) -> o CALL (VariableTime 12 24) [ArgFlag $! flag f, Address ]
-    (3,f@2,4) -> o CALL (VariableTime 12 24) [ArgFlag $! flag f, Address ]
-    (3,f@3,4) -> o CALL (VariableTime 12 24) [ArgFlag $! flag f, Address ]
+    (3,f@0,4) -> o CALL (VariableTime 12 24) [ArgFlag $! flag f, Address ] Nothing
+    (3,f@1,4) -> o CALL (VariableTime 12 24) [ArgFlag $! flag f, Address ] Nothing
+    (3,f@2,4) -> o CALL (VariableTime 12 24) [ArgFlag $! flag f, Address ] Nothing
+    (3,f@3,4) -> o CALL (VariableTime 12 24) [ArgFlag $! flag f, Address ] Nothing
 
-    (3,0,5) -> o PUSH (ConstantTime 16) [ ArgDirect16 BC ]
-    (3,2,5) -> o PUSH (ConstantTime 16) [ ArgDirect16 DE ]
-    (3,4,5) -> o PUSH (ConstantTime 16) [ ArgDirect16 HL ]
-    (3,6,5) -> o PUSH (ConstantTime 16) [ ArgDirect16 AF ]
-    (3,1,5) -> o CALL (ConstantTime 24) [ Address ]
+    (3,0,5) -> o PUSH (ConstantTime 16) [ ArgDirect16 BC ] Nothing
+    (3,2,5) -> o PUSH (ConstantTime 16) [ ArgDirect16 DE ] Nothing
+    (3,4,5) -> o PUSH (ConstantTime 16) [ ArgDirect16 HL ] Nothing
+    (3,6,5) -> o PUSH (ConstantTime 16) [ ArgDirect16 AF ] Nothing
+    (3,1,5) -> o CALL (ConstantTime 24) [ Address ] Nothing
 
-    (3,y,6) -> o (aluMnemonic y) (ConstantTime 8) [Immediate8]
-    (3,y,7) -> o RST (ConstantTime 16) [ ArgByteCode y ]
+    (3,y,6) -> o (aluMnemonic y) (ConstantTime 8) [Immediate8] Nothing
+    (3,y,7) -> o RST (ConstantTime 16) [ ArgByteCode y ] Nothing
     _ -> error $ printf "unknown bytecode 0x%02x" b

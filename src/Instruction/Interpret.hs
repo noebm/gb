@@ -23,7 +23,7 @@ modifyFlags g = do
 
 {-# INLINE isControlStatement #-}
 isControlStatement :: Instruction a -> Bool
-isControlStatement (Instruction _ op _ _) = op `elem`
+isControlStatement (Instruction _ op _ _ _) = op `elem`
   [ JP, JR, CALL, RET, RETI, RST, STOP, HALT ]
 
 {-# INLINE getFlag #-}
@@ -209,26 +209,26 @@ shiftRightArithmetic v =
 
 {-# SPECIALISE interpretM :: Instruction Arg -> GB IO Word #-}
 interpretM :: (MonadEmulator m, Argument a, Show a) => Instruction a -> m Word
-interpretM instr@(Instruction _ op t args) = case op of
+interpretM instr@(Instruction _ op t args out) = case op of
   NOP -> return $ getTime True t
   LD -> case args of
-    [to , from]
-      | Left s <- setArgumentM to
+    [from]
+      | Just (Left s) <- setArgumentM <$> out
       , Left g <- getArgumentM from
         -> do
       s =<< g
       return $ getTime True t
     _ -> msg
   LD16 -> case args of
-    [to , from]
-      | Right s <- setArgumentM to
+    [from]
+      | Just (Right s) <- setArgumentM <$> out
       , Right g <- getArgumentM from
         -> do
       s =<< g
       return $ getTime True t
-    l@[ rHL, rSP, ptrRel ]
-      | [ ArgDirect16 HL, ArgSP, Immediate8 ] <- toArg <$> l
-      , Right sHL <- setArgumentM rHL
+    l@[ rSP, ptrRel ]
+      | [ ArgSP, Immediate8 ] <- toArg <$> l
+      , Just (Right sHL) <- setArgumentM <$> out
       , Right gSP <- getArgumentM rSP
       , Left  getRel <- getArgumentM ptrRel
         -> do
@@ -484,10 +484,10 @@ interpretM instr@(Instruction _ op t args) = case op of
     _ -> msg
 
   ADD16 -> case args of
-    [ to , from ]
-      | ArgDirect16 HL <- toArg to
-      , Right s  <- setArgumentM to
-      , Right gs <- getArgumentM to
+    [ from ]
+      | Just (ArgDirect16 HL) <- toArg <$> out
+      , Just (Right s) <- setArgumentM <$> out
+      , Just (Right gs) <- getArgumentM <$> out
       , Right g  <- getArgumentM from -> do
           v <- gs
           dv <- g
@@ -498,9 +498,9 @@ interpretM instr@(Instruction _ op t args) = case op of
             & flagC .~ (v' < v)
             & flagH .~ ((v' .&. 0x0FFF) < (v .&. 0x0FFF))
           return $ getTime True t
-      | ArgSP <- toArg to
-      , Right s <- setArgumentM to
-      , Right gs <- getArgumentM to
+      | Just ArgSP <- toArg <$> out
+      , Just (Right s) <- setArgumentM <$> out
+      , Just (Right gs) <- getArgumentM <$> out
       , Left getRel <- getArgumentM from -> do
           v <- gs
           dv <- fromIntegral <$> getRel
@@ -597,4 +597,4 @@ interpretM instr@(Instruction _ op t args) = case op of
 
   _ -> error $ "failed at " ++ show instr
 
-  where msg = error $ printf "interpretM: %s - invalid arguments %s" (show op) (show args)
+  where msg = error $ printf "interpretM: %s - invalid arguments %s (%s)" (show op) (show args) (show instr)
