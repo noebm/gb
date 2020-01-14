@@ -116,14 +116,30 @@ addrToArg AddrDirect = ArgPointerImm8
 addrToArg ZeroPage = ArgPointerImmFF
 addrToArg ZeroPageC = ArgPointerRegFF C
 
+getAddress :: MonadEmulator m => Addr -> m Word16
+getAddress AddrBC = load16 (Register16 BC)
+getAddress AddrDE = load16 (Register16 DE)
+getAddress AddrHL = load16 (Register16 HL)
+getAddress AddrHLi = do
+  hl <- load16 (Register16 HL)
+  store16 (Register16 HL) (hl + 1)
+  return hl
+getAddress AddrHLd = do
+  hl <- load16 (Register16 HL)
+  store16 (Register16 HL) (hl - 1)
+  return hl
+getAddress AddrDirect = word
+getAddress ZeroPage   = addrFF <$> byte
+getAddress ZeroPageC  = addrFF <$> load8 (Register8 C)
+
 instance GetArgument In8 where
-  getArgumentM (InReg8 r) = getArgM (ArgDirect8 r)
-  getArgumentM (InAddr8 addr) = getArgM (addrToArg addr)
-  getArgumentM  InImm8 = getArgM Immediate8
+  getArgumentM (InReg8 r) = Left (load8 (Register8 r))
+  getArgumentM (InAddr8 addr) = Left (load8 . Addr8 =<< getAddress addr)
+  getArgumentM  InImm8 = Left byte
 
 instance SetArgument Out8 where
-  setArgumentM (OutReg8 r) = setArgM (ArgDirect8 r)
-  setArgumentM (OutAddr8 addr) = setArgM (addrToArg addr)
+  setArgumentM (OutReg8 r) = Left (store8 (Register8 r))
+  setArgumentM (OutAddr8 addr) = Left (\b -> (`store8` b) . Addr8 =<< getAddress addr)
 
 daa :: MonadEmulator m => m ()
 daa = do
