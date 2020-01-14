@@ -43,7 +43,7 @@ instance Show Flag where
 
 data InstructionExpr
   = LD In8 Out8 -- from -> to
-  | PUSH Arg | POP Arg
+  | PUSH Reg16 | POP Reg16
 
   | JP (Maybe Flag) Addr | JR (Maybe Flag)
   | CALL (Maybe Flag) | RET (Maybe Flag)
@@ -224,10 +224,10 @@ parseInstruction b =
     (3,7,0) -> o (ConstantTime 12) LD16_SP_HL
     (3,y,0) -> o (VariableTime 8 20) $ RET (Just $ flag y)
 
-    (3,0,1) -> o (ConstantTime 12) $ POP (ArgDirect16 BC)
-    (3,2,1) -> o (ConstantTime 12) $ POP (ArgDirect16 DE)
-    (3,4,1) -> o (ConstantTime 12) $ POP (ArgDirect16 HL)
-    (3,6,1) -> o (ConstantTime 12) $ POP (ArgDirect16 AF)
+    (3,0,1) -> o (ConstantTime 12) $ POP BC
+    (3,2,1) -> o (ConstantTime 12) $ POP DE
+    (3,4,1) -> o (ConstantTime 12) $ POP HL
+    (3,6,1) -> o (ConstantTime 12) $ POP AF
 
     (3,1,1) -> o (ConstantTime 16) $ RET Nothing
     (3,3,1) -> o (ConstantTime 16) RETI
@@ -251,10 +251,10 @@ parseInstruction b =
     (3,f@2,4) -> o (VariableTime 12 24) $ CALL (Just $ flag f)
     (3,f@3,4) -> o (VariableTime 12 24) $ CALL (Just $ flag f)
 
-    (3,0,5) -> o (ConstantTime 16) $ PUSH (ArgDirect16 BC)
-    (3,2,5) -> o (ConstantTime 16) $ PUSH (ArgDirect16 DE)
-    (3,4,5) -> o (ConstantTime 16) $ PUSH (ArgDirect16 HL)
-    (3,6,5) -> o (ConstantTime 16) $ PUSH (ArgDirect16 AF)
+    (3,0,5) -> o (ConstantTime 16) $ PUSH BC
+    (3,2,5) -> o (ConstantTime 16) $ PUSH DE
+    (3,4,5) -> o (ConstantTime 16) $ PUSH HL
+    (3,6,5) -> o (ConstantTime 16) $ PUSH AF
     (3,1,5) -> o (ConstantTime 24) $ CALL Nothing
 
     (3,y,6) -> o (ConstantTime 8)  $ aluMnemonic y InImm8

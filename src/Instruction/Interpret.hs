@@ -395,13 +395,12 @@ interpretM instr@(Instruction _ t op) = case op of
   RST g -> do
       restart $ (* 8) g
       return $ getTime True t
-  PUSH arg
-    | Right g <- getArgumentM arg
-     -> g >>= push >> return (getTime True t)
-  POP arg
-    | Right s <- setArgumentM arg -> do
-      pop >>= s
-      when (arg == ArgDirect16 AF) (modifyFlags (.&. 0xF0))
+  PUSH reg -> do
+      push =<< load16 (Register16 reg)
+      return $ getTime True t
+  POP reg -> do
+      pop >>= store16 (Register16 reg)
+      when (reg == AF) (modifyFlags (.&. 0xF0))
       return $ getTime True t
 
   ADD arg
