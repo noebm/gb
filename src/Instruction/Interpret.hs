@@ -21,18 +21,13 @@ modifyFlags g = do
   flags <- load8 rF
   store8 rF $ g flags
 
-{-# INLINE isControlStatement #-}
-isControlStatement :: Instruction a -> Bool
-isControlStatement (Instruction _ op _ _ _) = op `elem`
-  [ JP, JR, CALL, RET, RETI, RST, STOP, HALT ]
-
 {-# INLINE getFlag #-}
-getFlag :: Flag -> Word8 -> Bool
-getFlag FlagC = view flagC
-getFlag FlagZ = view flagZ
-getFlag FlagNC = views flagC not
-getFlag FlagNZ = views flagZ not
-
+getFlag :: Maybe Flag -> Word8 -> Bool
+getFlag Nothing = \_ -> True
+getFlag (Just FlagC) = view flagC
+getFlag (Just FlagZ) = view flagZ
+getFlag (Just FlagNC) = views flagC not
+getFlag (Just FlagNZ) = views flagZ not
 
 {-# INLINE addrFF #-}
 addrFF :: Word8 -> Word16
@@ -68,9 +63,6 @@ getArgM arg = case arg of
     hl <- load16 (Register16 HL)
     store16 (Register16 HL) (hl - 1)
     load8 (Addr8 hl)
-  ArgFlag _ -> Left (load8 (Register8 F))
-
-  ArgByteCode b -> Left (return b)
 
 {-# INLINE setArgM #-}
 setArgM :: MonadEmulator m => Arg -> Either (Word8 -> m ()) (Word16 -> m ())
@@ -207,30 +199,26 @@ shiftRightArithmetic v =
       c' = v `testBit` 0
   in (v' & bitAt 7 .~ (v `testBit` 7), c')
 
-{-# SPECIALISE interpretM :: Instruction Arg -> GB IO Word #-}
-interpretM :: (MonadEmulator m, Argument a, Show a) => Instruction a -> m Word
-interpretM instr@(Instruction _ op t args out) = case op of
+{-# SPECIALISE interpretM :: Instruction -> GB IO Word #-}
+interpretM :: MonadEmulator m => Instruction -> m Word
+interpretM instr@(Instruction _ t op) = case op of
   NOP -> return $ getTime True t
-  LD -> case args of
-    [from]
-      | Just (Left s) <- setArgumentM <$> out
-      , Left g <- getArgumentM from
-        -> do
-      s =<< g
-      return $ getTime True t
-    _ -> msg
-  LD16 -> case args of
-    [from]
-      | Just (Right s) <- setArgumentM <$> out
+  LD from to
+    | Left s <- setArgumentM to
+    , Left g <- getArgumentM from
+      -> do
+        s =<< g
+        return $ getTime True t
+  LD16 from to
+      | Right s <- setArgumentM to
       , Right g <- getArgumentM from
         -> do
       s =<< g
       return $ getTime True t
-    l@[ rSP, ptrRel ]
-      | [ ArgSP, Immediate8 ] <- toArg <$> l
-      , Just (Right sHL) <- setArgumentM <$> out
-      , Right gSP <- getArgumentM rSP
-      , Left  getRel <- getArgumentM ptrRel
+  LD16_SP_HL
+    | Right sHL <- setArgumentM (ArgDirect16 HL)
+    , Right gSP <- getArgumentM ArgSP
+    , Left getRel <- getArgumentM Immediate8
         -> do
       sp <- gSP
       r <- fromIntegral <$> getRel
@@ -240,10 +228,8 @@ interpretM instr@(Instruction _ op t args out) = case op of
         & flagC .~ ((v .&. 0xFF) < (sp .&. 0xFF))
         & flagH .~ ((v .&. 0x0F) < (sp .&. 0x0F))
       return $ getTime True t
-    _ -> msg
-
-  AND -> case getArgumentM <$> args of
-    [ Left g ] -> do
+  AND arg
+    | Left g <- getArgumentM arg -> do
       v <- g
       a <- load8 (Register8 A)
       let a' = a .&. v
@@ -251,10 +237,9 @@ interpretM instr@(Instruction _ op t args out) = case op of
       modifyFlags $ \_ -> 0x20
         & flagZ .~ (a' == 0)
       return $ getTime True t
-    _ -> msg
 
-  OR -> case getArgumentM <$> args of
-    [ Left g ] -> do
+  OR arg
+    | Left g <- getArgumentM arg -> do
       v <- g
       a <- load8 (Register8 A)
       let a' = a .|. v
@@ -262,10 +247,9 @@ interpretM instr@(Instruction _ op t args out) = case op of
       modifyFlags $ \_ -> 0x00
         & flagZ .~ (a' == 0)
       return $ getTime True t
-    _ -> msg
 
-  XOR -> case getArgumentM <$> args of
-    [ Left g ] -> do
+  XOR arg
+    | Left g <- getArgumentM arg -> do
       v <- g
       a <- load8 (Register8 A)
       let a' = a `xor` v
@@ -273,22 +257,18 @@ interpretM instr@(Instruction _ op t args out) = case op of
       modifyFlags $ \_ -> 0x00
         & flagZ .~ (a' == 0)
       return $ getTime True t
-    _ -> msg
 
   {- 0xCB instructions and specialization for A -}
-  BIT -> case getArgumentM <$> args of
-    [ Left gb, Left g ] -> do
-      y <- gb
+  BIT y arg
+    | Left g <- getArgumentM arg -> do
       v <- g
       modifyFlags $ \f -> f
         & flagZ .~ not (v `testBit` fromIntegral y)
         & flagN .~ False
         & flagH .~ True
       return $ getTime True t
-    _ -> msg
 
-  SWAP -> case args of
-    [ arg ]
+  SWAP arg
       | Left g <- getArgumentM arg
       , Left s <- setArgumentM arg -> do
           x <- g
@@ -296,29 +276,20 @@ interpretM instr@(Instruction _ op t args out) = case op of
           s x'
           modifyFlags $ \_ -> 0x00 & flagZ .~ (x' == 0)
           return $ getTime True t
-    _ -> msg
 
-  RES -> case args of
-    [ whatBit , arg ]
-      | Left getbit <- getArgumentM whatBit
-      , Left s <- setArgumentM arg
+  RES bidx arg
+      | Left s <- setArgumentM arg
       , Left g <- getArgumentM arg -> do
-          bidx <- getbit
           s . (`clearBit` fromIntegral bidx) =<< g
           return $ getTime True t
-    _ -> msg
-  SET -> case args of
-    [ whatBit , arg ]
-      | Left getbit <- getArgumentM whatBit
-      , Left s <- setArgumentM arg
+  SET bidx arg
+      | Left s <- setArgumentM arg
       , Left g <- getArgumentM arg -> do
-          bidx <- getbit
           s . (`setBit` fromIntegral bidx) =<< g
           return $ getTime True t
-    _ -> msg
 
-  RL -> case args of
-    [ arg ] | Left g <- getArgumentM arg
+  RL arg
+            | Left g <- getArgumentM arg
             , Left s <- setArgumentM arg -> do
                 v <- g
                 c <- view flagC <$> load8 (Register8 F)
@@ -326,7 +297,6 @@ interpretM instr@(Instruction _ op t args out) = case op of
                 s v'
                 store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
                 return $ getTime True t
-    _ -> msg
   RLA -> do
     v <- load8 (Register8 A)
     c <- view flagC <$> load8 (Register8 F)
@@ -334,8 +304,8 @@ interpretM instr@(Instruction _ op t args out) = case op of
     store8 (Register8 A) v'
     store8 (Register8 F) (0x00 & flagC .~ c')
     return $ getTime True t
-  RR -> case args of
-    [ arg ] | Left g <- getArgumentM arg
+  RR arg
+            | Left g <- getArgumentM arg
             , Left s <- setArgumentM arg -> do
                 v <- g
                 c <- view flagC <$> load8 (Register8 F)
@@ -343,7 +313,6 @@ interpretM instr@(Instruction _ op t args out) = case op of
                 s v'
                 store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
                 return $ getTime True t
-    _ -> msg
   RRA -> do
     v <- load8 (Register8 A)
     c <- view flagC <$> load8 (Register8 F)
@@ -363,8 +332,7 @@ interpretM instr@(Instruction _ op t args out) = case op of
     store8 (Register8 A) v'
     store8 (Register8 F) (0x00 & flagC .~ c')
     return $ getTime True t
-  RLC -> case args of
-    [ arg ]
+  RLC arg
       | Left g <- getArgumentM arg
       , Left s <- setArgumentM arg -> do
           v <- g
@@ -372,9 +340,7 @@ interpretM instr@(Instruction _ op t args out) = case op of
           s v'
           store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
           return $ getTime True t
-    _ -> msg
-  RRC -> case args of
-    [ arg ]
+  RRC arg
       | Left g <- getArgumentM arg
       , Left s <- setArgumentM arg -> do
           v <- g
@@ -382,9 +348,8 @@ interpretM instr@(Instruction _ op t args out) = case op of
           s v'
           store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
           return $ getTime True t
-    _ -> msg
-  SRL -> case args of
-    [ arg ] | Left g <- getArgumentM arg
+  SRL arg
+            | Left g <- getArgumentM arg
             , Left s <- setArgumentM arg -> do
                 v <- g
                 let v' = v `shiftR` 1
@@ -393,9 +358,7 @@ interpretM instr@(Instruction _ op t args out) = case op of
                   & flagC .~ (v `testBit` 0)
                   & flagZ .~ (v' == 0)
                 return $ getTime True t
-    _ -> msg
-  SLA -> case args of
-    [ arg ]
+  SLA arg
       | Left g <- getArgumentM arg
       , Left s <- setArgumentM arg -> do
           v <- g
@@ -403,9 +366,7 @@ interpretM instr@(Instruction _ op t args out) = case op of
           s v'
           store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
           return $ getTime True t
-    _ -> msg
-  SRA -> case args of
-    [ arg ]
+  SRA arg
       | Left g <- getArgumentM arg
       , Left s <- setArgumentM arg -> do
           v <- g
@@ -413,81 +374,50 @@ interpretM instr@(Instruction _ op t args out) = case op of
           s v'
           store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
           return $ getTime True t
-    _ -> msg
-  JR -> case args of
-    [ arg ]
-      | Left g <- getArgumentM arg -> do
-          r <- fromIntegral <$> g
-          jumpRelative r
-          return $ getTime True t
-    [ argf , arg ]
-      | Left g <- getArgumentM arg
-      , ArgFlag f <- toArg argf -> do
-          t' <- getFlag f <$> load8 (Register8 F)
-          r <- fromIntegral <$> g
-          when t' $ jumpRelative r
-          return $ getTime t' t
-    _ -> msg
-  JP -> case args of
-    [ arg ]
-      | Right g <- getArgumentM arg ->
-          g >>= storePC >> return (getTime True t)
-    [ argf , arg ]
-      | Right g <- getArgumentM arg
-      , ArgFlag f <- toArg argf -> do
-          t' <- getFlag f <$> load8 (Register8 F)
-          addr <- g
-          when t' $ storePC addr
-          return $ getTime t' t
-    _ -> msg
-  CALL -> case args of
-    [ arg ]
-      | Right g <- getArgumentM arg -> do
-          call =<< g
-          return $ getTime True t
-    [ argf , arg ]
-      | Right g <- getArgumentM arg
-      , ArgFlag f <- toArg argf -> do
-          t' <- getFlag f <$> load8 (Register8 F)
-          when t' . call =<< g
-          return $ getTime t' t
-    _ -> msg
-  RET -> case toArg <$> args of
-    [ ArgFlag f ] -> do
-          t' <- getFlag f <$> load8 (Register8 F)
-          when t' ret
-          return $ getTime t'  t
-    [] -> ret >> return (getTime True t)
-    _ -> msg
+  JR f arg
+    | Left g <- getArgumentM arg -> do
+        t' <- getFlag f <$> load8 (Register8 F)
+        r <- fromIntegral <$> g
+        when t' $ jumpRelative r
+        return $ getTime t' t
+  JP f arg
+    | Right g <- getArgumentM arg -> do
+        t' <- getFlag f <$> load8 (Register8 F)
+        addr <- g
+        when t' $ storePC addr
+        return $ getTime t' t
+  CALL f arg
+    | Right g <- getArgumentM arg -> do
+        t' <- getFlag f <$> load8 (Register8 F)
+        when t' . call =<< g
+        return $ getTime t' t
+  RET f -> do
+    t' <- getFlag f <$> load8 (Register8 F)
+    when t' ret
+    return $ getTime t'  t
   RETI -> do
     setIEM True
     ret
     return $ getTime True t
 
-  RST -> case getArgumentM <$> args of
-    [ Left g ] -> do
-      restart . (* 8) =<< g
+  RST g -> do
+      restart $ (* 8) g
       return $ getTime True t
-    _ -> msg
-  PUSH -> case getArgumentM <$> args of
-    [ Right g ] -> g >>= push >> return (getTime True t)
-    _ -> msg
-  POP -> case setArgumentM <$> args of
-    [ Right s ] -> do
+  PUSH arg
+    | Right g <- getArgumentM arg
+     -> g >>= push >> return (getTime True t)
+  POP arg
+    | Right s <- setArgumentM arg -> do
       pop >>= s
-      when (fmap toArg args == [ ArgDirect16 AF ]) (modifyFlags (.&. 0xF0))
+      when (toArg arg == ArgDirect16 AF) (modifyFlags (.&. 0xF0))
       return $ getTime True t
-    _ -> msg
 
-  ADD -> case args of
-    [ arg ] | Left g <- getArgumentM arg -> arith add g False >> return (getTime True t)
-    _ -> msg
+  ADD arg
+            | Left g <- getArgumentM arg -> arith add g False >> return (getTime True t)
 
-  ADD16 -> case args of
-    [ from ]
-      | Just (ArgDirect16 HL) <- toArg <$> out
-      , Just (Right s) <- setArgumentM <$> out
-      , Just (Right gs) <- getArgumentM <$> out
+  ADD16_HL from
+      | Right s <- setArgumentM (ArgDirect16 HL)
+      , Right gs <- getArgumentM (ArgDirect16 HL)
       , Right g  <- getArgumentM from -> do
           v <- gs
           dv <- g
@@ -498,10 +428,10 @@ interpretM instr@(Instruction _ op t args out) = case op of
             & flagC .~ (v' < v)
             & flagH .~ ((v' .&. 0x0FFF) < (v .&. 0x0FFF))
           return $ getTime True t
-      | Just ArgSP <- toArg <$> out
-      , Just (Right s) <- setArgumentM <$> out
-      , Just (Right gs) <- getArgumentM <$> out
-      , Left getRel <- getArgumentM from -> do
+  ADD16_SP
+      | Right s  <- setArgumentM ArgSP
+      , Right gs <- getArgumentM ArgSP
+      , Left getRel <- getArgumentM Immediate8 -> do
           v <- gs
           dv <- fromIntegral <$> getRel
           let v' = addRelative v dv
@@ -510,26 +440,21 @@ interpretM instr@(Instruction _ op t args out) = case op of
             & flagC .~ ((v' .&. 0xFF) < (v .&. 0xFF))
             & flagH .~ ((v' .&. 0x0F) < (v .&. 0x0F))
           return $ getTime True t
-    _ -> msg
-  SUB -> case args of
-    [ arg ] | Left g <- getArgumentM arg -> arith sub g False >> return (getTime True t)
-    _ -> msg
-  ADC -> case args of
-    [ arg ] | Left g <- getArgumentM arg -> arith add g True >> return (getTime True t)
-    _ -> msg
-  SBC -> case args of
-    [ arg ] | Left g <- getArgumentM arg -> arith sub g True >> return (getTime True t)
-    _ -> msg
-  CP -> case args of
-    [ arg ] | Left g <- getArgumentM arg -> do
+  SUB arg
+            | Left g <- getArgumentM arg -> arith sub g False >> return (getTime True t)
+  ADC arg
+            | Left g <- getArgumentM arg -> arith add g True >> return (getTime True t)
+  SBC arg
+            | Left g <- getArgumentM arg -> arith sub g True >> return (getTime True t)
+  CP arg
+            | Left g <- getArgumentM arg -> do
                 k <- g
                 a <- load8 (Register8 A)
                 let (_, f) = sub a k False
                 store8 (Register8 F) f
                 return $ getTime True t
-    _ -> msg
-  INC -> case args of
-    [ arg ] | Left g <- getArgumentM arg
+  INC arg
+            | Left g <- getArgumentM arg
             , Left s <- setArgumentM arg -> do
                 v <- g
                 let v' = v + 1
@@ -539,22 +464,19 @@ interpretM instr@(Instruction _ op t args out) = case op of
                   & flagN .~ False
                   & flagH .~ (v .&. 0x0F == 0x0F)
                 return $ getTime True t
-    _ -> msg
-  INC16 -> case args of
-    [ arg ] | Right g <- getArgumentM arg
+  INC16 arg
+            | Right g <- getArgumentM arg
             , Right s <- setArgumentM arg -> do
                 s . (+1) =<< g
                 return $ getTime True t
-    _ -> msg
 
-  DEC16 -> case args of
-    [ arg ] | Right g <- getArgumentM arg
+  DEC16 arg
+            | Right g <- getArgumentM arg
             , Right s <- setArgumentM arg -> do
                 s . subtract 1 =<< g
                 return $ getTime True t
-    _ -> msg
-  DEC -> case args of
-    [ arg ] | Left g <- getArgumentM arg
+  DEC arg
+            | Left g <- getArgumentM arg
             , Left s <- setArgumentM arg -> do
                 v <- g
                 let v' = v - 1
@@ -564,7 +486,6 @@ interpretM instr@(Instruction _ op t args out) = case op of
                   & flagN .~ True
                   & flagH .~ (v .&. 0x0F == 0x00)
                 return $ getTime True t
-    _ -> msg
 
 
   DI -> setIEM False >> return (getTime True t)
@@ -596,5 +517,3 @@ interpretM instr@(Instruction _ op t args out) = case op of
     return $ getTime True t
 
   _ -> error $ "failed at " ++ show instr
-
-  where msg = error $ printf "interpretM: %s - invalid arguments %s (%s)" (show op) (show args) (show instr)

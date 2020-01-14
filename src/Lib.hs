@@ -72,7 +72,7 @@ updateJoypad s = do
   return s'
 -}
 
-updateCPU :: MonadEmulator m => m (Maybe (Instruction Arg), Word)
+updateCPU :: MonadEmulator m => m (Maybe Instruction, Word)
 updateCPU = do
   halted <- halt
   if not halted then do
