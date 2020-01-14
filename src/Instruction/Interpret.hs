@@ -64,17 +64,6 @@ setArgM arg = case arg of
   -- AddressFF  -> Right (addrFF <$> byte)
   -- AddressRel -> Right (addrRel =<< sbyte)
 
-class GetArgument a where
-  getArgumentM :: MonadEmulator m => a -> Either (m Word8) (m Word16)
-
-class SetArgument a where
-  setArgumentM :: MonadEmulator m => a -> Either (Word8 -> m ()) (Word16 -> m ())
-
-instance GetArgument Arg where
-  getArgumentM = getArgM
-instance SetArgument Arg where
-  setArgumentM = setArgM
-
 getAddress :: MonadEmulator m => Addr -> m Word16
 getAddress AddrBC = load16 (Register16 BC)
 getAddress AddrDE = load16 (Register16 DE)
@@ -203,14 +192,14 @@ interpretM instr@(Instruction _ t op) = case op of
         setOut8 to =<< getIn8 from
         return $ getTime True t
   LD16 from to
-      | Right s <- setArgumentM to
-      , Right g <- getArgumentM from
+      | Right s <- setArgM to
+      , Right g <- getArgM from
         -> do
       s =<< g
       return $ getTime True t
   LD16_SP_HL
-    | Right sHL <- setArgumentM (ArgDirect16 HL)
-    , Right gSP <- getArgumentM ArgSP
+    | Right sHL <- setArgM (ArgDirect16 HL)
+    , Right gSP <- getArgM ArgSP
         -> do
       sp <- gSP
       r <- sbyte
@@ -422,14 +411,14 @@ interpretM instr@(Instruction _ t op) = case op of
                   & flagH .~ (v .&. 0x0F == 0x0F)
                 return $ getTime True t
   INC16 arg
-            | Right g <- getArgumentM arg
-            , Right s <- setArgumentM arg -> do
+            | Right g <- getArgM arg
+            , Right s <- setArgM arg -> do
                 s . (+1) =<< g
                 return $ getTime True t
 
   DEC16 arg
-            | Right g <- getArgumentM arg
-            , Right s <- setArgumentM arg -> do
+            | Right g <- getArgM arg
+            , Right s <- setArgM arg -> do
                 s . subtract 1 =<< g
                 return $ getTime True t
   DEC arg -> do
