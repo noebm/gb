@@ -42,12 +42,11 @@ getArgM arg = case arg of
   InImmAddr16   -> load16 . Addr16 =<< word
 
 {-# INLINE setArgM #-}
-setArgM :: MonadEmulator m => In16 -> Word16 -> m ()
+setArgM :: MonadEmulator m => Out16 -> Word16 -> m ()
 setArgM arg = case arg of
-  InReg16 r -> store16 (Register16 r)
-  InSP -> storeSP
-  InImmAddr16 -> \w -> (`store16` w) . Addr16 =<< word
-  x -> error $ "setArgM: cannot write to " ++ show x
+  OutReg16 r -> store16 (Register16 r)
+  OutSP -> storeSP
+  OutImmAddr16 -> \w -> (`store16` w) . Addr16 =<< word
 
 getAddress :: MonadEmulator m => Addr -> m Word16
 getAddress AddrBC = load16 (Register16 BC)
@@ -394,13 +393,13 @@ interpretM instr@(Instruction _ t op) = case op of
                   & flagH .~ (v .&. 0x0F == 0x0F)
                 return $ getTime True t
   INC16 arg
-            | g <- getArgM arg
+            | g <- getArgM (out16ToIn16 arg)
             , s <- setArgM arg -> do
                 s . (+1) =<< g
                 return $ getTime True t
 
   DEC16 arg
-            | g <- getArgM arg
+            | g <- getArgM (out16ToIn16 arg)
             , s <- setArgM arg -> do
                 s . subtract 1 =<< g
                 return $ getTime True t

@@ -21,12 +21,27 @@ data In16 = InReg16 Reg16
          | InImmAddr16
          deriving (Eq)
 
+data Out16 = OutReg16 Reg16
+           | OutSP
+           | OutImmAddr16
+
+out16ToIn16 :: Out16 -> In16
+out16ToIn16 (OutReg16 r) = InReg16 r
+out16ToIn16 OutSP = InSP
+out16ToIn16 OutImmAddr16 = InImmAddr16
+
 instance Show In16 where
   show arg = case arg of
     InReg16 r -> show r
     InSP -> "SP"
     InImm16 -> "d16"
     InImmAddr16   -> "(a16)"
+
+instance Show Out16 where
+  show arg = case arg of
+    OutReg16 r -> show r
+    OutSP -> "SP"
+    OutImmAddr16 -> "(a16)"
 
 data Flag = FlagZ | FlagC | FlagNZ | FlagNC
   deriving (Eq)
@@ -46,9 +61,9 @@ data InstructionExpr
 
   | NOP | STOP | HALT
 
-  | LD16 In16 In16 -- from -> to
+  | LD16 In16 Out16 -- from -> to
   | LD16_SP_HL -- sp + imm8 = hl
-  | INC16 In16 | DEC16 In16
+  | INC16 Out16 | DEC16 Out16
   | ADD16_HL In16
   | ADD16_SP
 
@@ -160,14 +175,14 @@ parseInstruction b =
 
     (0,0,0) -> o (ConstantTime 4) NOP
     (0,2,0) -> o (ConstantTime 4) STOP
-    (0,1,0) -> o (ConstantTime 20) (LD16 InSP InImmAddr16)
+    (0,1,0) -> o (ConstantTime 20) (LD16 InSP OutImmAddr16)
     (0,3,0) -> o (ConstantTime 12) (JR Nothing)
     (0,y,0) -> o (VariableTime 8 12) (JR (Just $ flag (y .&. 0x3)))
 
-    (0,0,1) -> o (ConstantTime 12) $ LD16 InImm16 (InReg16 BC)
-    (0,2,1) -> o (ConstantTime 12) $ LD16 InImm16 (InReg16 DE)
-    (0,4,1) -> o (ConstantTime 12) $ LD16 InImm16 (InReg16 HL)
-    (0,6,1) -> o (ConstantTime 12) $ LD16 InImm16 InSP
+    (0,0,1) -> o (ConstantTime 12) $ LD16 InImm16 (OutReg16 BC)
+    (0,2,1) -> o (ConstantTime 12) $ LD16 InImm16 (OutReg16 DE)
+    (0,4,1) -> o (ConstantTime 12) $ LD16 InImm16 (OutReg16 HL)
+    (0,6,1) -> o (ConstantTime 12) $ LD16 InImm16 OutSP
 
     (0,1,1) -> o (ConstantTime 8) $ ADD16_HL $ InReg16 BC
     (0,3,1) -> o (ConstantTime 8) $ ADD16_HL $ InReg16 DE
@@ -184,15 +199,15 @@ parseInstruction b =
     (0,y@4,2) -> o (ConstantTime 8) $ LD (InReg8 A) (OutAddr8 $ registerPointerArg' y)
     (0,y@6,2) -> o (ConstantTime 8) $ LD (InReg8 A) (OutAddr8 $ registerPointerArg' y)
 
-    (0,0,3) -> o (ConstantTime 8) $ INC16 $ InReg16 BC
-    (0,2,3) -> o (ConstantTime 8) $ INC16 $ InReg16 DE
-    (0,4,3) -> o (ConstantTime 8) $ INC16 $ InReg16 HL
-    (0,6,3) -> o (ConstantTime 8) $ INC16 $ InSP
+    (0,0,3) -> o (ConstantTime 8) $ INC16 $ OutReg16 BC
+    (0,2,3) -> o (ConstantTime 8) $ INC16 $ OutReg16 DE
+    (0,4,3) -> o (ConstantTime 8) $ INC16 $ OutReg16 HL
+    (0,6,3) -> o (ConstantTime 8) $ INC16 $ OutSP
 
-    (0,1,3) -> o (ConstantTime 8) $ DEC16 $ InReg16 BC
-    (0,3,3) -> o (ConstantTime 8) $ DEC16 $ InReg16 DE
-    (0,5,3) -> o (ConstantTime 8) $ DEC16 $ InReg16 HL
-    (0,7,3) -> o (ConstantTime 8) $ DEC16 $ InSP
+    (0,1,3) -> o (ConstantTime 8) $ DEC16 $ OutReg16 BC
+    (0,3,3) -> o (ConstantTime 8) $ DEC16 $ OutReg16 DE
+    (0,5,3) -> o (ConstantTime 8) $ DEC16 $ OutReg16 HL
+    (0,7,3) -> o (ConstantTime 8) $ DEC16 $ OutSP
 
     (0,y,4) -> o (ConstantTime $ if y == 6 then 12 else 4) $ INC (basicRegisterArg y)
     (0,y,5) -> o (ConstantTime $ if y == 6 then 12 else 4) $ DEC (basicRegisterArg y)
@@ -228,7 +243,7 @@ parseInstruction b =
     (3,1,1) -> o (ConstantTime 16) $ RET Nothing
     (3,3,1) -> o (ConstantTime 16) RETI
     (3,5,1) -> o (ConstantTime  4) $ JP Nothing AddrHL
-    (3,7,1) -> o (ConstantTime  8) $ LD16 (InReg16 HL) InSP
+    (3,7,1) -> o (ConstantTime  8) $ LD16 (InReg16 HL) OutSP
 
     (3,4,2) -> o (ConstantTime 8)  $ LD (InReg8 A) (OutAddr8 ZeroPageC)
     (3,6,2) -> o (ConstantTime 8)  $ LD (InAddr8 ZeroPageC) (OutReg8 A)
