@@ -33,17 +33,17 @@ getFlag (Just FlagNZ) = views flagZ not
 addrFF :: Word8 -> Word16
 addrFF k = (0xFF , k) ^. word16
 
-{-# INLINE getArgM #-}
-getArgM :: MonadEmulator m => In16 -> m Word16
-getArgM arg = case arg of
+{-# INLINE getIn16 #-}
+getIn16 :: MonadEmulator m => In16 -> m Word16
+getIn16 arg = case arg of
   InSP        -> loadSP
   InReg16 r -> load16 $ Register16 r
   InImm16   -> word
   InImmAddr16   -> load16 . Addr16 =<< word
 
-{-# INLINE setArgM #-}
-setArgM :: MonadEmulator m => Out16 -> Word16 -> m ()
-setArgM arg = case arg of
+{-# INLINE setOut16 #-}
+setOut16 :: MonadEmulator m => Out16 -> Word16 -> m ()
+setOut16 arg = case arg of
   OutReg16 r -> store16 (Register16 r)
   OutSP -> storeSP
   OutImmAddr16 -> \w -> (`store16` w) . Addr16 =<< word
@@ -176,8 +176,8 @@ interpretM instr@(Instruction _ t op) = case op of
         setOut8 to =<< getIn8 from
         return $ getTime True t
   LD16 from to
-      | s <- setArgM to
-      , g <- getArgM from
+      | s <- setOut16 to
+      , g <- getIn16 from
         -> do
       s =<< g
       return $ getTime True t
@@ -351,7 +351,7 @@ interpretM instr@(Instruction _ t op) = case op of
             -> arith add (getIn8 arg) False >> return (getTime True t)
 
   ADD16_HL from
-      | g  <- getArgM from -> do
+      | g  <- getIn16 from -> do
           v <- load16 (Register16 HL)
           dv <- g
           let v' = v + dv
@@ -393,14 +393,14 @@ interpretM instr@(Instruction _ t op) = case op of
                   & flagH .~ (v .&. 0x0F == 0x0F)
                 return $ getTime True t
   INC16 arg
-            | g <- getArgM (out16ToIn16 arg)
-            , s <- setArgM arg -> do
+            | g <- getIn16 (out16ToIn16 arg)
+            , s <- setOut16 arg -> do
                 s . (+1) =<< g
                 return $ getTime True t
 
   DEC16 arg
-            | g <- getArgM (out16ToIn16 arg)
-            , s <- setArgM arg -> do
+            | g <- getIn16 (out16ToIn16 arg)
+            , s <- setOut16 arg -> do
                 s . subtract 1 =<< g
                 return $ getTime True t
   DEC arg -> do
