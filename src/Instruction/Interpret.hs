@@ -34,29 +34,29 @@ addrFF :: Word8 -> Word16
 addrFF k = (0xFF , k) ^. word16
 
 {-# INLINE getArgM #-}
-getArgM :: MonadEmulator m => Arg -> Either (m Word8) (m Word16)
+getArgM :: MonadEmulator m => Arg -> m Word16
 getArgM arg = case arg of
   -- single byte data
-  ArgSP        -> Right (loadSP)
+  ArgSP        -> loadSP
   -- double byte data
-  ArgDirect16 r -> Right (load16 $ Register16 r)
-  Immediate16   -> Right word
+  ArgDirect16 r -> load16 $ Register16 r
+  Immediate16   -> word
 
   -- addresses
   -- AddressRel -> Right (addrRel =<< sbyte)
 
   -- pointers
-  ArgPointerImm16   -> Right (load16 . Addr16 =<< word)
+  ArgPointerImm16   -> load16 . Addr16 =<< word
 
 {-# INLINE setArgM #-}
-setArgM :: MonadEmulator m => Arg -> Either (Word8 -> m ()) (Word16 -> m ())
+setArgM :: MonadEmulator m => Arg -> Word16 -> m ()
 setArgM arg = case arg of
   -- double byte data
-  ArgDirect16 r -> Right (store16 $ Register16 r)
-  ArgSP -> Right (storeSP)
+  ArgDirect16 r -> store16 (Register16 r)
+  ArgSP -> storeSP
 
   -- pointers
-  ArgPointerImm16 -> Right (\w -> (`store16` w) . Addr16 =<< word)
+  ArgPointerImm16 -> \w -> (`store16` w) . Addr16 =<< word
 
   x -> error $ "setArgM: cannot write to " ++ show x
   -- ArgFlag f -> Left (load8 (Register8 F))
@@ -192,8 +192,8 @@ interpretM instr@(Instruction _ t op) = case op of
         setOut8 to =<< getIn8 from
         return $ getTime True t
   LD16 from to
-      | Right s <- setArgM to
-      , Right g <- getArgM from
+      | s <- setArgM to
+      , g <- getArgM from
         -> do
       s =<< g
       return $ getTime True t
@@ -367,7 +367,7 @@ interpretM instr@(Instruction _ t op) = case op of
             -> arith add (getIn8 arg) False >> return (getTime True t)
 
   ADD16_HL from
-      | Right g  <- getArgM from -> do
+      | g  <- getArgM from -> do
           v <- load16 (Register16 HL)
           dv <- g
           let v' = v + dv
@@ -409,14 +409,14 @@ interpretM instr@(Instruction _ t op) = case op of
                   & flagH .~ (v .&. 0x0F == 0x0F)
                 return $ getTime True t
   INC16 arg
-            | Right g <- getArgM arg
-            , Right s <- setArgM arg -> do
+            | g <- getArgM arg
+            , s <- setArgM arg -> do
                 s . (+1) =<< g
                 return $ getTime True t
 
   DEC16 arg
-            | Right g <- getArgM arg
-            , Right s <- setArgM arg -> do
+            | g <- getArgM arg
+            , s <- setArgM arg -> do
                 s . subtract 1 =<< g
                 return $ getTime True t
   DEC arg -> do
