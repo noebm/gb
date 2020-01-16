@@ -15,6 +15,7 @@ import Instruction.Instruction
 import Instruction.Time
 import MonadEmulator
 
+{-# INLINE modifyFlags #-}
 modifyFlags :: MonadEmulator m => (Word8 -> Word8) -> m ()
 modifyFlags g = do
   let rF = Register8 F
@@ -37,15 +38,15 @@ addrFF k = (0xFF , k) ^. word16
 getIn16 :: MonadEmulator m => In16 -> m Word16
 getIn16 arg = case arg of
   InSP        -> loadSP
-  InReg16 r -> load16 $ Register16 r
-  InImm16   -> word
-  InImmAddr16   -> load16 . Addr16 =<< word
+  InReg16 r   -> load16 $ Register16 r
+  InImm16     -> word
+  InImmAddr16 -> load16 . Addr16 =<< word
 
 {-# INLINE setOut16 #-}
 setOut16 :: MonadEmulator m => Out16 -> Word16 -> m ()
 setOut16 arg = case arg of
-  OutReg16 r -> store16 (Register16 r)
-  OutSP -> storeSP
+  OutReg16 r   -> store16 (Register16 r)
+  OutSP        -> storeSP
   OutImmAddr16 -> \w -> (`store16` w) . Addr16 =<< word
 
 getAddress :: MonadEmulator m => Addr -> m Word16
@@ -171,80 +172,84 @@ shiftRightArithmetic v =
 interpretM :: MonadEmulator m => Instruction -> m Word
 interpretM instr@(Instruction _ t op) = case op of
   NOP -> return $ getTime True t
-  LD from to
-      -> do
-        setOut8 to =<< getIn8 from
-        return $ getTime True t
+
+  LD from to -> do
+    setOut8 to =<< getIn8 from
+    return $ getTime True t
+
   LD16 from to -> do
-      setOut16 to =<< getIn16 from
-      return $ getTime True t
-  LD16_SP_HL
-        -> do
-      sp <- loadSP
-      r <- sbyte
-      let v = addRelative sp r
-      store16 (Register16 HL) v
-      store8 (Register8 F) $ 0x00
-        & flagC .~ ((v .&. 0xFF) < (sp .&. 0xFF))
-        & flagH .~ ((v .&. 0x0F) < (sp .&. 0x0F))
-      return $ getTime True t
+    setOut16 to =<< getIn16 from
+    return $ getTime True t
+
+  LD16_SP_HL -> do
+    sp <- loadSP
+    r <- sbyte
+    let v = addRelative sp r
+    store16 (Register16 HL) v
+    store8 (Register8 F) $ 0x00
+      & flagC .~ ((v .&. 0xFF) < (sp .&. 0xFF))
+      & flagH .~ ((v .&. 0x0F) < (sp .&. 0x0F))
+    return $ getTime True t
+
   AND arg -> do
-      v <- getIn8 arg
-      a <- load8 (Register8 A)
-      let a' = a .&. v
-      store8 (Register8 A) a'
-      modifyFlags $ \_ -> 0x20
-        & flagZ .~ (a' == 0)
-      return $ getTime True t
+    v <- getIn8 arg
+    a <- load8 (Register8 A)
+    let a' = a .&. v
+    store8 (Register8 A) a'
+    modifyFlags $ \_ -> 0x20
+      & flagZ .~ (a' == 0)
+    return $ getTime True t
 
   OR arg -> do
-      v <- getIn8 arg
-      a <- load8 (Register8 A)
-      let a' = a .|. v
-      store8 (Register8 A) a'
-      modifyFlags $ \_ -> 0x00
-        & flagZ .~ (a' == 0)
-      return $ getTime True t
+    v <- getIn8 arg
+    a <- load8 (Register8 A)
+    let a' = a .|. v
+    store8 (Register8 A) a'
+    modifyFlags $ \_ -> 0x00
+      & flagZ .~ (a' == 0)
+    return $ getTime True t
 
   XOR arg -> do
-      v <- getIn8 arg
-      a <- load8 (Register8 A)
-      let a' = a `xor` v
-      store8 (Register8 A) (a `xor` v)
-      modifyFlags $ \_ -> 0x00
-        & flagZ .~ (a' == 0)
-      return $ getTime True t
+    v <- getIn8 arg
+    a <- load8 (Register8 A)
+    let a' = a `xor` v
+    store8 (Register8 A) (a `xor` v)
+    modifyFlags $ \_ -> 0x00
+      & flagZ .~ (a' == 0)
+    return $ getTime True t
 
   {- 0xCB instructions and specialization for A -}
   BIT y arg -> do
-      v <- getIn8 arg
-      modifyFlags $ \f -> f
-        & flagZ .~ not (v `testBit` fromIntegral y)
-        & flagN .~ False
-        & flagH .~ True
-      return $ getTime True t
+    v <- getIn8 arg
+    modifyFlags $ \f -> f
+      & flagZ .~ not (v `testBit` fromIntegral y)
+      & flagN .~ False
+      & flagH .~ True
+    return $ getTime True t
 
   SWAP arg -> do
-          x <- getIn8 (outToIn arg)
-          let x' = ((x `shiftL` 4) .&. 0xF0) .|. ((x `shiftR` 4) .&. 0x0F)
-          setOut8 arg x'
-          modifyFlags $ \_ -> 0x00 & flagZ .~ (x' == 0)
-          return $ getTime True t
+    x <- getIn8 (outToIn arg)
+    let x' = ((x `shiftL` 4) .&. 0xF0) .|. ((x `shiftR` 4) .&. 0x0F)
+    setOut8 arg x'
+    modifyFlags $ \_ -> 0x00 & flagZ .~ (x' == 0)
+    return $ getTime True t
 
   RES bidx arg -> do
-          setOut8 arg . (`clearBit` fromIntegral bidx) =<< getIn8 (outToIn arg)
-          return $ getTime True t
+    setOut8 arg . (`clearBit` fromIntegral bidx) =<< getIn8 (outToIn arg)
+    return $ getTime True t
+
   SET bidx arg -> do
-          setOut8 arg . (`setBit` fromIntegral bidx) =<< getIn8 (outToIn arg)
-          return $ getTime True t
+    setOut8 arg . (`setBit` fromIntegral bidx) =<< getIn8 (outToIn arg)
+    return $ getTime True t
 
   RL arg -> do
-                v <- getIn8 (outToIn arg)
-                c <- view flagC <$> load8 (Register8 F)
-                let (v' , c') = rotateLeft v c
-                setOut8 arg v'
-                store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
-                return $ getTime True t
+    v <- getIn8 (outToIn arg)
+    c <- view flagC <$> load8 (Register8 F)
+    let (v' , c') = rotateLeft v c
+    setOut8 arg v'
+    store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
+    return $ getTime True t
+
   RLA -> do
     v <- load8 (Register8 A)
     c <- view flagC <$> load8 (Register8 F)
@@ -252,13 +257,15 @@ interpretM instr@(Instruction _ t op) = case op of
     store8 (Register8 A) v'
     store8 (Register8 F) (0x00 & flagC .~ c')
     return $ getTime True t
+
   RR arg -> do
-                v <- getIn8 (outToIn arg)
-                c <- view flagC <$> load8 (Register8 F)
-                let (v' , c') = rotateRight v c
-                setOut8 arg v'
-                store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
-                return $ getTime True t
+    v <- getIn8 (outToIn arg)
+    c <- view flagC <$> load8 (Register8 F)
+    let (v' , c') = rotateRight v c
+    setOut8 arg v'
+    store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
+    return $ getTime True t
+
   RRA -> do
     v <- load8 (Register8 A)
     c <- view flagC <$> load8 (Register8 F)
@@ -266,149 +273,181 @@ interpretM instr@(Instruction _ t op) = case op of
     store8 (Register8 A) v'
     store8 (Register8 F) (0x00 & flagC .~ c')
     return $ getTime True t
+
   RLCA -> do
     v <- load8 (Register8 A)
     let (v' , c') = rotateLeftCarry v
     store8 (Register8 A) v'
     store8 (Register8 F) (0x00 & flagC .~ c')
     return $ getTime True t
+
   RRCA -> do
     v <- load8 (Register8 A)
     let (v' , c') = rotateRightCarry v
     store8 (Register8 A) v'
     store8 (Register8 F) (0x00 & flagC .~ c')
     return $ getTime True t
+
   RLC arg -> do
-          v <- getIn8 (outToIn arg)
-          let (v' , c') = rotateLeftCarry v
-          setOut8 arg v'
-          store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
-          return $ getTime True t
+    v <- getIn8 (outToIn arg)
+    let (v' , c') = rotateLeftCarry v
+    setOut8 arg v'
+    store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
+    return $ getTime True t
+
   RRC arg -> do
-          v <- getIn8 (outToIn arg)
-          let (v' , c') = rotateRightCarry v
-          setOut8 arg v'
-          store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
-          return $ getTime True t
+    v <- getIn8 (outToIn arg)
+    let (v' , c') = rotateRightCarry v
+    setOut8 arg v'
+    store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
+    return $ getTime True t
+
   SRL arg -> do
-                v <- getIn8 (outToIn arg)
-                let v' = v `shiftR` 1
-                setOut8 arg v'
-                modifyFlags $ \_ -> 0x00
-                  & flagC .~ (v `testBit` 0)
-                  & flagZ .~ (v' == 0)
-                return $ getTime True t
+    v <- getIn8 (outToIn arg)
+    let v' = v `shiftR` 1
+    setOut8 arg v'
+    modifyFlags $ \_ -> 0x00
+      & flagC .~ (v `testBit` 0)
+      & flagZ .~ (v' == 0)
+    return $ getTime True t
+
   SLA arg -> do
-          v <- getIn8 (outToIn arg)
-          let (v' , c') = shiftLeftArithmetic v
-          setOut8 arg v'
-          store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
-          return $ getTime True t
+    v <- getIn8 (outToIn arg)
+    let (v' , c') = shiftLeftArithmetic v
+    setOut8 arg v'
+    store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
+    return $ getTime True t
+
   SRA arg -> do
-          v <- getIn8 (outToIn arg)
-          let (v' , c') = shiftRightArithmetic v
-          setOut8 arg v'
-          store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
-          return $ getTime True t
+    v <- getIn8 (outToIn arg)
+    let (v' , c') = shiftRightArithmetic v
+    setOut8 arg v'
+    store8 (Register8 F) (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
+    return $ getTime True t
+
   JR f -> do
-        t' <- getFlag f <$> load8 (Register8 F)
-        r <- sbyte
-        when t' $ jumpRelative r
-        return $ getTime t' t
+    t' <- getFlag f <$> load8 (Register8 F)
+    r <- sbyte
+    when t' $ jumpRelative r
+    return $ getTime t' t
+
   JP f addr -> do
-        t' <- getFlag f <$> load8 (Register8 F)
-        addr <- getAddress addr
-        when t' $ storePC addr
-        return $ getTime t' t
+    t' <- getFlag f <$> load8 (Register8 F)
+    addr <- getAddress addr
+    when t' $ storePC addr
+    return $ getTime t' t
+
   CALL f -> do
-        t' <- getFlag f <$> load8 (Register8 F)
-        when t' . call =<< word
-        return $ getTime t' t
+    t' <- getFlag f <$> load8 (Register8 F)
+    when t' . call =<< word
+    return $ getTime t' t
+
   RET f -> do
     t' <- getFlag f <$> load8 (Register8 F)
     when t' ret
     return $ getTime t'  t
+
   RETI -> do
     setIEM True
     ret
     return $ getTime True t
 
   RST g -> do
-      restart $ (* 8) g
-      return $ getTime True t
-  PUSH reg -> do
-      push =<< load16 (Register16 reg)
-      return $ getTime True t
-  POP reg -> do
-      pop >>= store16 (Register16 reg)
-      when (reg == AF) (modifyFlags (.&. 0xF0))
-      return $ getTime True t
+    restart $ (* 8) g
+    return $ getTime True t
 
-  ADD arg
-            -> arith add (getIn8 arg) False >> return (getTime True t)
+  PUSH reg -> do
+    push =<< load16 (Register16 reg)
+    return $ getTime True t
+  POP reg -> do
+    pop >>= store16 (Register16 reg)
+    when (reg == AF) (modifyFlags (.&. 0xF0))
+    return $ getTime True t
+
+  ADD arg -> do
+    arith add (getIn8 arg) False
+    return (getTime True t)
 
   ADD16_HL from -> do
-          v <- load16 (Register16 HL)
-          dv <- getIn16 from
-          let v' = v + dv
-          store16 (Register16 HL) v'
-          modifyFlags $ \f -> f
-            & flagN .~ False
-            & flagC .~ (v' < v)
-            & flagH .~ ((v' .&. 0x0FFF) < (v .&. 0x0FFF))
-          return $ getTime True t
+    v <- load16 (Register16 HL)
+    dv <- getIn16 from
+    let v' = v + dv
+    store16 (Register16 HL) v'
+    modifyFlags $ \f -> f
+      & flagN .~ False
+      & flagC .~ (v' < v)
+      & flagH .~ ((v' .&. 0x0FFF) < (v .&. 0x0FFF))
+    return $ getTime True t
+
   ADD16_SP -> do
-          v <- loadSP
-          dv <- sbyte
-          let v' = addRelative v dv
-          storeSP v'
-          modifyFlags $ \f -> 0x00
-            & flagC .~ ((v' .&. 0xFF) < (v .&. 0xFF))
-            & flagH .~ ((v' .&. 0x0F) < (v .&. 0x0F))
-          return $ getTime True t
-  SUB arg
-            -> arith sub (getIn8 arg) False >> return (getTime True t)
-  ADC arg
-            -> arith add (getIn8 arg) True >> return (getTime True t)
-  SBC arg
-            -> arith sub (getIn8 arg) True >> return (getTime True t)
-  CP arg
-            -> do
-                k <- getIn8 arg
-                a <- load8 (Register8 A)
-                let (_, f) = sub a k False
-                store8 (Register8 F) f
-                return $ getTime True t
+    v <- loadSP
+    dv <- sbyte
+    let v' = addRelative v dv
+    storeSP v'
+    modifyFlags $ \f -> 0x00
+      & flagC .~ ((v' .&. 0xFF) < (v .&. 0xFF))
+      & flagH .~ ((v' .&. 0x0F) < (v .&. 0x0F))
+    return $ getTime True t
+
+  SUB arg -> do
+    arith sub (getIn8 arg) False
+    return (getTime True t)
+
+  ADC arg -> do
+    arith add (getIn8 arg) True
+    return (getTime True t)
+
+  SBC arg -> do
+    arith sub (getIn8 arg) True
+    return (getTime True t)
+
+  CP arg -> do
+    k <- getIn8 arg
+    a <- load8 (Register8 A)
+    let (_, f) = sub a k False
+    store8 (Register8 F) f
+    return $ getTime True t
+
   INC arg -> do
-                v <- getIn8 (outToIn arg)
-                let v' = v + 1
-                setOut8 arg v'
-                modifyFlags $ \f -> f
-                  & flagZ .~ (v == 0xFF)
-                  & flagN .~ False
-                  & flagH .~ (v .&. 0x0F == 0x0F)
-                return $ getTime True t
+    v <- getIn8 (outToIn arg)
+    let v' = v + 1
+    setOut8 arg v'
+    modifyFlags $ \f -> f
+      & flagZ .~ (v == 0xFF)
+      & flagN .~ False
+      & flagH .~ (v .&. 0x0F == 0x0F)
+    return $ getTime True t
+
   INC16 arg -> do
-                setOut16 arg . (+1) =<< getIn16 (out16ToIn16 arg)
-                return $ getTime True t
+    setOut16 arg . (+1) =<< getIn16 (out16ToIn16 arg)
+    return $ getTime True t
 
   DEC16 arg -> do
-                setOut16 arg . subtract 1 =<< getIn16 (out16ToIn16 arg)
-                return $ getTime True t
+    setOut16 arg . subtract 1 =<< getIn16 (out16ToIn16 arg)
+    return $ getTime True t
+
   DEC arg -> do
-                v <- getIn8 (outToIn arg)
-                let v' = v - 1
-                setOut8 arg v'
-                modifyFlags $ \f -> f
-                  & flagZ .~ (v == 0x01)
-                  & flagN .~ True
-                  & flagH .~ (v .&. 0x0F == 0x00)
-                return $ getTime True t
+    v <- getIn8 (outToIn arg)
+    let v' = v - 1
+    setOut8 arg v'
+    modifyFlags $ \f -> f
+      & flagZ .~ (v == 0x01)
+      & flagN .~ True
+      & flagH .~ (v .&. 0x0F == 0x00)
+    return $ getTime True t
 
+  DI -> do
+    setIEM False
+    return (getTime True t)
 
-  DI -> setIEM False >> return (getTime True t)
-  EI -> setIEM True >> return (getTime True t)
-  DAA -> daa >> return (getTime True t)
+  EI -> do
+    setIEM True
+    return (getTime True t)
+
+  DAA -> do
+    daa
+    return (getTime True t)
+
   CPL -> do
     let r = Register8 A
     store8 r . complement =<< load8 r
@@ -416,6 +455,7 @@ interpretM instr@(Instruction _ t op) = case op of
       & flagH .~ True
       & flagN .~ True
     return $ getTime True t
+
   CCF -> do
     modifyFlags $ \f -> f
       & flagH .~ False
