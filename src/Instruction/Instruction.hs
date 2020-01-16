@@ -112,8 +112,8 @@ basicRegisterArg w = case w of
   7 -> OutReg8 $ A
   _ -> error "basicRegisterArg: this should not be possible"
 
-registerPointerArg' :: Word8 -> Addr
-registerPointerArg' y = case y .&. 0x6 of
+registerPointerArg :: Word8 -> Addr
+registerPointerArg y = case y .&. 0x6 of
   0 -> AddrBC
   2 -> AddrDE
   4 -> AddrHLi
@@ -189,15 +189,15 @@ parseInstruction b =
     (0,5,1) -> o (ConstantTime 8) $ ADD16_HL $ InReg16 HL
     (0,7,1) -> o (ConstantTime 8) $ ADD16_HL $ InSP
 
-    (0,y@1,2) -> o (ConstantTime 8) $ LD (InAddr8 $ registerPointerArg' y) (OutReg8 A)
-    (0,y@3,2) -> o (ConstantTime 8) $ LD (InAddr8 $ registerPointerArg' y) (OutReg8 A)
-    (0,y@5,2) -> o (ConstantTime 8) $ LD (InAddr8 $ registerPointerArg' y) (OutReg8 A)
-    (0,y@7,2) -> o (ConstantTime 8) $ LD (InAddr8 $ registerPointerArg' y) (OutReg8 A)
+    (0,y@1,2) -> o (ConstantTime 8) $ LD (InAddr8 $ registerPointerArg y) (OutReg8 A)
+    (0,y@3,2) -> o (ConstantTime 8) $ LD (InAddr8 $ registerPointerArg y) (OutReg8 A)
+    (0,y@5,2) -> o (ConstantTime 8) $ LD (InAddr8 $ registerPointerArg y) (OutReg8 A)
+    (0,y@7,2) -> o (ConstantTime 8) $ LD (InAddr8 $ registerPointerArg y) (OutReg8 A)
 
-    (0,y@0,2) -> o (ConstantTime 8) $ LD (InReg8 A) (OutAddr8 $ registerPointerArg' y)
-    (0,y@2,2) -> o (ConstantTime 8) $ LD (InReg8 A) (OutAddr8 $ registerPointerArg' y)
-    (0,y@4,2) -> o (ConstantTime 8) $ LD (InReg8 A) (OutAddr8 $ registerPointerArg' y)
-    (0,y@6,2) -> o (ConstantTime 8) $ LD (InReg8 A) (OutAddr8 $ registerPointerArg' y)
+    (0,y@0,2) -> o (ConstantTime 8) $ LD (InReg8 A) (OutAddr8 $ registerPointerArg y)
+    (0,y@2,2) -> o (ConstantTime 8) $ LD (InReg8 A) (OutAddr8 $ registerPointerArg y)
+    (0,y@4,2) -> o (ConstantTime 8) $ LD (InReg8 A) (OutAddr8 $ registerPointerArg y)
+    (0,y@6,2) -> o (ConstantTime 8) $ LD (InReg8 A) (OutAddr8 $ registerPointerArg y)
 
     (0,0,3) -> o (ConstantTime 8) $ INC16 $ OutReg16 BC
     (0,2,3) -> o (ConstantTime 8) $ INC16 $ OutReg16 DE
