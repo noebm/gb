@@ -175,11 +175,8 @@ interpretM instr@(Instruction _ t op) = case op of
       -> do
         setOut8 to =<< getIn8 from
         return $ getTime True t
-  LD16 from to
-      | s <- setOut16 to
-      , g <- getIn16 from
-        -> do
-      s =<< g
+  LD16 from to -> do
+      setOut16 to =<< getIn16 from
       return $ getTime True t
   LD16_SP_HL
         -> do
@@ -350,10 +347,9 @@ interpretM instr@(Instruction _ t op) = case op of
   ADD arg
             -> arith add (getIn8 arg) False >> return (getTime True t)
 
-  ADD16_HL from
-      | g  <- getIn16 from -> do
+  ADD16_HL from -> do
           v <- load16 (Register16 HL)
-          dv <- g
+          dv <- getIn16 from
           let v' = v + dv
           store16 (Register16 HL) v'
           modifyFlags $ \f -> f
@@ -392,16 +388,12 @@ interpretM instr@(Instruction _ t op) = case op of
                   & flagN .~ False
                   & flagH .~ (v .&. 0x0F == 0x0F)
                 return $ getTime True t
-  INC16 arg
-            | g <- getIn16 (out16ToIn16 arg)
-            , s <- setOut16 arg -> do
-                s . (+1) =<< g
+  INC16 arg -> do
+                setOut16 arg . (+1) =<< getIn16 (out16ToIn16 arg)
                 return $ getTime True t
 
-  DEC16 arg
-            | g <- getIn16 (out16ToIn16 arg)
-            , s <- setOut16 arg -> do
-                s . subtract 1 =<< g
+  DEC16 arg -> do
+                setOut16 arg . subtract 1 =<< getIn16 (out16ToIn16 arg)
                 return $ getTime True t
   DEC arg -> do
                 v <- getIn8 (outToIn arg)
