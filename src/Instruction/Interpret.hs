@@ -198,13 +198,11 @@ interpretM instr@(Instruction _ t op) = case op of
       s =<< g
       return $ getTime True t
   LD16_SP_HL
-    | Right sHL <- setArgM (ArgDirect16 HL)
-    , Right gSP <- getArgM ArgSP
         -> do
-      sp <- gSP
+      sp <- loadSP
       r <- sbyte
       let v = addRelative sp r
-      sHL v
+      store16 (Register16 HL) v
       store8 (Register8 F) $ 0x00
         & flagC .~ ((v .&. 0xFF) < (sp .&. 0xFF))
         & flagH .~ ((v .&. 0x0F) < (sp .&. 0x0F))
