@@ -15,22 +15,18 @@ byteCodeDecompose b =
   ((b `shiftR` 6) .&. 0x3, (b `shiftR` 3) .&. 0x7, b .&. 0x7)
 {-# INLINE byteCodeDecompose #-}
 
-data Arg = ArgDirect16 Reg16
-         | ArgSP
-
-         | Immediate16
-
-         | ArgPointerImm16
+data In16 = InReg16 Reg16
+         | InSP
+         | InImm16
+         | InImmAddr16
          deriving (Eq)
 
-instance Show Arg where
+instance Show In16 where
   show arg = case arg of
-    ArgDirect16 r -> show r
-    ArgSP -> "SP"
-
-    Immediate16 -> "d16"
-
-    ArgPointerImm16   -> "(a16)"
+    InReg16 r -> show r
+    InSP -> "SP"
+    InImm16 -> "d16"
+    InImmAddr16   -> "(a16)"
 
 data Flag = FlagZ | FlagC | FlagNZ | FlagNC
   deriving (Eq)
@@ -50,10 +46,10 @@ data InstructionExpr
 
   | NOP | STOP | HALT
 
-  | LD16 Arg Arg -- from -> to
+  | LD16 In16 In16 -- from -> to
   | LD16_SP_HL -- sp + imm8 = hl
-  | INC16 Arg | DEC16 Arg
-  | ADD16_HL Arg
+  | INC16 In16 | DEC16 In16
+  | ADD16_HL In16
   | ADD16_SP
 
   | INC Out8 | DEC Out8
@@ -164,19 +160,19 @@ parseInstruction b =
 
     (0,0,0) -> o (ConstantTime 4) NOP
     (0,2,0) -> o (ConstantTime 4) STOP
-    (0,1,0) -> o (ConstantTime 20) (LD16 ArgSP ArgPointerImm16)
+    (0,1,0) -> o (ConstantTime 20) (LD16 InSP InImmAddr16)
     (0,3,0) -> o (ConstantTime 12) (JR Nothing)
     (0,y,0) -> o (VariableTime 8 12) (JR (Just $ flag (y .&. 0x3)))
 
-    (0,0,1) -> o (ConstantTime 12) $ LD16 Immediate16 (ArgDirect16 BC)
-    (0,2,1) -> o (ConstantTime 12) $ LD16 Immediate16 (ArgDirect16 DE)
-    (0,4,1) -> o (ConstantTime 12) $ LD16 Immediate16 (ArgDirect16 HL)
-    (0,6,1) -> o (ConstantTime 12) $ LD16 Immediate16 ArgSP
+    (0,0,1) -> o (ConstantTime 12) $ LD16 InImm16 (InReg16 BC)
+    (0,2,1) -> o (ConstantTime 12) $ LD16 InImm16 (InReg16 DE)
+    (0,4,1) -> o (ConstantTime 12) $ LD16 InImm16 (InReg16 HL)
+    (0,6,1) -> o (ConstantTime 12) $ LD16 InImm16 InSP
 
-    (0,1,1) -> o (ConstantTime 8) $ ADD16_HL $ ArgDirect16 BC
-    (0,3,1) -> o (ConstantTime 8) $ ADD16_HL $ ArgDirect16 DE
-    (0,5,1) -> o (ConstantTime 8) $ ADD16_HL $ ArgDirect16 HL
-    (0,7,1) -> o (ConstantTime 8) $ ADD16_HL $ ArgSP
+    (0,1,1) -> o (ConstantTime 8) $ ADD16_HL $ InReg16 BC
+    (0,3,1) -> o (ConstantTime 8) $ ADD16_HL $ InReg16 DE
+    (0,5,1) -> o (ConstantTime 8) $ ADD16_HL $ InReg16 HL
+    (0,7,1) -> o (ConstantTime 8) $ ADD16_HL $ InSP
 
     (0,y@1,2) -> o (ConstantTime 8) $ LD (InAddr8 $ registerPointerArg' y) (OutReg8 A)
     (0,y@3,2) -> o (ConstantTime 8) $ LD (InAddr8 $ registerPointerArg' y) (OutReg8 A)
@@ -188,15 +184,15 @@ parseInstruction b =
     (0,y@4,2) -> o (ConstantTime 8) $ LD (InReg8 A) (OutAddr8 $ registerPointerArg' y)
     (0,y@6,2) -> o (ConstantTime 8) $ LD (InReg8 A) (OutAddr8 $ registerPointerArg' y)
 
-    (0,0,3) -> o (ConstantTime 8) $ INC16 $ ArgDirect16 BC
-    (0,2,3) -> o (ConstantTime 8) $ INC16 $ ArgDirect16 DE
-    (0,4,3) -> o (ConstantTime 8) $ INC16 $ ArgDirect16 HL
-    (0,6,3) -> o (ConstantTime 8) $ INC16 $ ArgSP
+    (0,0,3) -> o (ConstantTime 8) $ INC16 $ InReg16 BC
+    (0,2,3) -> o (ConstantTime 8) $ INC16 $ InReg16 DE
+    (0,4,3) -> o (ConstantTime 8) $ INC16 $ InReg16 HL
+    (0,6,3) -> o (ConstantTime 8) $ INC16 $ InSP
 
-    (0,1,3) -> o (ConstantTime 8) $ DEC16 $ ArgDirect16 BC
-    (0,3,3) -> o (ConstantTime 8) $ DEC16 $ ArgDirect16 DE
-    (0,5,3) -> o (ConstantTime 8) $ DEC16 $ ArgDirect16 HL
-    (0,7,3) -> o (ConstantTime 8) $ DEC16 $ ArgSP
+    (0,1,3) -> o (ConstantTime 8) $ DEC16 $ InReg16 BC
+    (0,3,3) -> o (ConstantTime 8) $ DEC16 $ InReg16 DE
+    (0,5,3) -> o (ConstantTime 8) $ DEC16 $ InReg16 HL
+    (0,7,3) -> o (ConstantTime 8) $ DEC16 $ InSP
 
     (0,y,4) -> o (ConstantTime $ if y == 6 then 12 else 4) $ INC (basicRegisterArg y)
     (0,y,5) -> o (ConstantTime $ if y == 6 then 12 else 4) $ DEC (basicRegisterArg y)
@@ -232,7 +228,7 @@ parseInstruction b =
     (3,1,1) -> o (ConstantTime 16) $ RET Nothing
     (3,3,1) -> o (ConstantTime 16) RETI
     (3,5,1) -> o (ConstantTime  4) $ JP Nothing AddrHL
-    (3,7,1) -> o (ConstantTime  8) $ LD16 (ArgDirect16 HL) ArgSP
+    (3,7,1) -> o (ConstantTime  8) $ LD16 (InReg16 HL) InSP
 
     (3,4,2) -> o (ConstantTime 8)  $ LD (InReg8 A) (OutAddr8 ZeroPageC)
     (3,6,2) -> o (ConstantTime 8)  $ LD (InAddr8 ZeroPageC) (OutReg8 A)

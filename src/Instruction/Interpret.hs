@@ -34,19 +34,19 @@ addrFF :: Word8 -> Word16
 addrFF k = (0xFF , k) ^. word16
 
 {-# INLINE getArgM #-}
-getArgM :: MonadEmulator m => Arg -> m Word16
+getArgM :: MonadEmulator m => In16 -> m Word16
 getArgM arg = case arg of
-  ArgSP        -> loadSP
-  ArgDirect16 r -> load16 $ Register16 r
-  Immediate16   -> word
-  ArgPointerImm16   -> load16 . Addr16 =<< word
+  InSP        -> loadSP
+  InReg16 r -> load16 $ Register16 r
+  InImm16   -> word
+  InImmAddr16   -> load16 . Addr16 =<< word
 
 {-# INLINE setArgM #-}
-setArgM :: MonadEmulator m => Arg -> Word16 -> m ()
+setArgM :: MonadEmulator m => In16 -> Word16 -> m ()
 setArgM arg = case arg of
-  ArgDirect16 r -> store16 (Register16 r)
-  ArgSP -> storeSP
-  ArgPointerImm16 -> \w -> (`store16` w) . Addr16 =<< word
+  InReg16 r -> store16 (Register16 r)
+  InSP -> storeSP
+  InImmAddr16 -> \w -> (`store16` w) . Addr16 =<< word
   x -> error $ "setArgM: cannot write to " ++ show x
 
 getAddress :: MonadEmulator m => Addr -> m Word16
