@@ -36,33 +36,18 @@ addrFF k = (0xFF , k) ^. word16
 {-# INLINE getArgM #-}
 getArgM :: MonadEmulator m => Arg -> m Word16
 getArgM arg = case arg of
-  -- single byte data
   ArgSP        -> loadSP
-  -- double byte data
   ArgDirect16 r -> load16 $ Register16 r
   Immediate16   -> word
-
-  -- addresses
-  -- AddressRel -> Right (addrRel =<< sbyte)
-
-  -- pointers
   ArgPointerImm16   -> load16 . Addr16 =<< word
 
 {-# INLINE setArgM #-}
 setArgM :: MonadEmulator m => Arg -> Word16 -> m ()
 setArgM arg = case arg of
-  -- double byte data
   ArgDirect16 r -> store16 (Register16 r)
   ArgSP -> storeSP
-
-  -- pointers
   ArgPointerImm16 -> \w -> (`store16` w) . Addr16 =<< word
-
   x -> error $ "setArgM: cannot write to " ++ show x
-  -- ArgFlag f -> Left (load8 (Register8 F))
-  -- Address    -> Right word
-  -- AddressFF  -> Right (addrFF <$> byte)
-  -- AddressRel -> Right (addrRel =<< sbyte)
 
 getAddress :: MonadEmulator m => Addr -> m Word16
 getAddress AddrBC = load16 (Register16 BC)
