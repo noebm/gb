@@ -23,12 +23,12 @@ modifyFlags g = do
   store8 rF $ g flags
 
 {-# INLINE getFlag #-}
-getFlag :: Maybe Flag -> Word8 -> Bool
-getFlag Nothing = \_ -> True
-getFlag (Just FlagC) = view flagC
-getFlag (Just FlagZ) = view flagZ
-getFlag (Just FlagNC) = views flagC not
-getFlag (Just FlagNZ) = views flagZ not
+getFlag :: MonadEmulator m => Maybe Flag -> m Bool
+getFlag Nothing = return True
+getFlag (Just FlagC) = view flagC <$> load8 (Register8 F)
+getFlag (Just FlagZ) = view flagZ <$> load8 (Register8 F)
+getFlag (Just FlagNC) = views flagC not <$> load8 (Register8 F)
+getFlag (Just FlagNZ) = views flagZ not <$> load8 (Register8 F)
 
 {-# INLINE addrFF #-}
 addrFF :: Word8 -> Word16
@@ -87,7 +87,7 @@ daa = do
         + (if (f ^. flagH) || (v .&. 0x0f) > 0x09 then 0x06 else 0x00)
   let v' = if f ^. flagN then v - vcorr' else v + vcorr'
   store8 (Register8 A) v'
-  modifyFlags $ \k -> k
+  store8 (Register8 F) $ f
     & flagH .~ False
     & flagC .~ (f ^. flagC || (not (f ^. flagN) && v > 0x99))
     & flagZ .~ (v' == 0)
@@ -326,24 +326,24 @@ interpretM instr@(Instruction _ t op) = case op of
     return $ getTime True t
 
   JR f -> do
-    t' <- getFlag f <$> load8 (Register8 F)
+    t' <- getFlag f
     r <- sbyte
     when t' $ jumpRelative r
     return $ getTime t' t
 
   JP f addr -> do
-    t' <- getFlag f <$> load8 (Register8 F)
+    t' <- getFlag f
     addr <- getAddress addr
     when t' $ storePC addr
     return $ getTime t' t
 
   CALL f -> do
-    t' <- getFlag f <$> load8 (Register8 F)
+    t' <- getFlag f
     when t' . call =<< word
     return $ getTime t' t
 
   RET f -> do
-    t' <- getFlag f <$> load8 (Register8 F)
+    t' <- getFlag f
     when t' ret
     return $ getTime t'  t
 
