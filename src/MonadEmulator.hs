@@ -12,7 +12,6 @@ module MonadEmulator
   , processInterrupts
   , getIEM , setIEM
   , showRegisters
-  , getCycles
 
   , word16
 
@@ -90,9 +89,9 @@ class Monad m => MonadEmulator m where
   loadPC :: m Word16
   loadSP :: m Word16
 
-  -- | Advances / Clears internal timer.
+  -- | Advances internal timer.
   advCycles :: Word -> m ()
-  resetCycles :: m Word
+  getCycles :: m Word
 
   setStop :: m ()
   stop :: m Bool
@@ -185,7 +184,7 @@ instance MonadEmulator m => MonadEmulator (StateT s m) where
   loadSP = aux0 loadSP
 
   advCycles = aux1 advCycles
-  resetCycles = aux0 resetCycles
+  getCycles = aux0 getCycles
 
   getGPU = aux0 getGPU
   putGPU = aux1 putGPU
@@ -202,12 +201,6 @@ instance MonadEmulator m => MonadEmulator (StateT s m) where
   setHalt = aux0 setHalt
   clearHalt = aux0 clearHalt
   halt = aux0 halt
-
-getCycles :: MonadEmulator m => m Word
-getCycles = do
-  t <- resetCycles
-  advCycles t
-  return t
 
 processInterrupts :: MonadEmulator m => m Bool
 processInterrupts = do
