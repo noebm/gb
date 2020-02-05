@@ -20,16 +20,19 @@ data GraphicsContext = GraphicsContext
   , image :: Texture
   }
 
-newWindow :: MonadIO m => Text -> V2 Int -> Int -> m GraphicsContext
+newWindow :: MonadIO m => Text -> V2 Int -> Maybe Int -> m GraphicsContext
 newWindow wndName wndSize textureScale = do
-  let wndConfig = defaultWindow -- { windowInitialSize = fromIntegral <$> textureScale *^ wndSize }
+  let wndConfig
+        = maybe id (\scale x -> x { windowInitialSize = fromIntegral <$> scale *^ wndSize })
+          textureScale
+        $ defaultWindow
   wnd  <- createWindow wndName wndConfig
   rndr <- createRenderer wnd (negate 1) defaultRenderer
   text <- createTexture rndr ARGB8888 TextureAccessStreaming (fromIntegral <$> wndSize)
   return $ GraphicsContext wnd rndr text
 
 initializeGraphics :: MonadIO m => m GraphicsContext
-initializeGraphics = newWindow "GamerBoy" (V2 160 144) 1 -- 2
+initializeGraphics = newWindow "GamerBoy" (V2 160 144) Nothing
 
 renderImage :: MonadIO m => Renderer -> Texture -> m ()
 renderImage rend text = copy rend text Nothing Nothing
