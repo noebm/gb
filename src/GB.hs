@@ -87,14 +87,11 @@ getJoypad = readState gbJoypad
 putJoypad :: MonadIO m => JoypadState -> GB m ()
 putJoypad s = writeState gbJoypad s
 
-updateJoypadGB :: MonadIO m => (Joypad -> Bool) -> GB m Bool
+updateJoypadGB :: MonadIO m => (Joypad , Bool) -> GB m Bool
 updateJoypadGB f = GBT $ do
   ref <- asks gbJoypad
-  liftIO . stToIO $ do
-    s0 <- readSTRef ref
-    let (s1 , changed) = updateJoypad f s0
-    writeSTRef ref s1
-    return changed
+  liftIO . stToIO $ modifySTRef ref (updateJoypad f)
+  return (snd f)
 
 {-# INLINE reg8index #-}
 reg8index :: Reg8 -> Int

@@ -10,10 +10,19 @@ import GB
 import Instruction.Interpret
 import Instruction.Instruction
 
+import Interrupt.Interrupt
+import Interrupt.InterruptType
+
 import Cartridge.Cartridge
 import Cartridge.BootRom
 import GPU.GPUState
 import Timer
+import Joypad
+
+import qualified SDL
+import Utilities.SDL (_KeyboardEvent)
+
+import Control.Lens
 
 updateCPU :: MonadEmulator m => m (Maybe Instruction, Word)
 updateCPU = do
@@ -45,6 +54,29 @@ setupCartridge fpBoot fpRom = do
   bootrom' <- fmap eitherError <$> mapM readBootRom fpBoot
   makeCartridge bootrom' rom
 
+keymap :: SDL.Keycode -> Maybe Joypad
+keymap SDL.KeycodeUp    = Just JoypadUp
+keymap SDL.KeycodeDown  = Just JoypadDown
+keymap SDL.KeycodeLeft  = Just JoypadLeft
+keymap SDL.KeycodeRight = Just JoypadRight
+keymap SDL.KeycodeZ = Just JoypadA
+keymap SDL.KeycodeX = Just JoypadB
+keymap SDL.KeycodeA = Just JoypadSelect
+keymap SDL.KeycodeS = Just JoypadStart
+
+keymap _ = Nothing
+
+pressRelease :: SDL.InputMotion -> Bool -> Maybe Bool
+pressRelease SDL.Pressed False = Just True
+pressRelease SDL.Released _ = Just False
+pressRelease _ _ = Nothing
+
+updateKeys :: SDL.KeyboardEventData -> GB IO ()
+updateKeys (SDL.KeyboardEventData _ press repeat keysym) =
+  forM_ ((,) <$> (keymap $ SDL.keysymKeycode keysym) <*> pressRelease press repeat) $ \joykey -> do
+    f <- updateJoypadGB joykey
+    when f $ modifyInterrupt $ interruptJoypad.interruptFlag .~ True
+
 mainloop :: FilePath -> IO ()
 mainloop fp' = do
 
@@ -64,7 +96,11 @@ mainloop fp' = do
           forM_ logger $ \f -> liftIO $ f pc i
           updateGraphics fx dt
           updateTimer dt
-          -- updateJoypad s
+
+          event <- fmap SDL.eventPayload <$> SDL.pollEvent
+          let kbevent = event >>= (^? _KeyboardEvent)
+          forM_ kbevent $ \key -> do
+            updateKeys key
 
     let runTillStop fx = do
           update fx

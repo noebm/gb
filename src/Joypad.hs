@@ -75,11 +75,9 @@ makeLenses ''JoypadState
 defaultJoypadState :: JoypadState
 defaultJoypadState = JoypadState Nothing Set.empty
 
-updateJoypad :: (Joypad -> Bool) -> JoypadState -> (JoypadState , Bool)
-updateJoypad f s =
-  let s' = s & pressed .~ Set.filter f joypadAll
-      g t x = t ^.. pressed.folded.selected x
-  in (,) s' $ maybe False (\x -> g s x == g s' x) (s' ^. select)
+updateJoypad :: (Joypad , Bool) -> JoypadState -> JoypadState
+updateJoypad (joykey, True ) = pressed %~ Set.insert joykey
+updateJoypad (joykey, False) = pressed %~ Set.delete joykey
 
 inJoypadRange :: Word16 -> Bool
 inJoypadRange addr = addr == 0xff00
