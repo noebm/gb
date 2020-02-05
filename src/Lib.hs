@@ -61,7 +61,6 @@ mainloop fp' = do
     let update fx = do
           pc <- loadPC
           (i, dt) <- updateCPU
-          advCycles dt
           forM_ logger $ \f -> liftIO $ f pc i
           updateGraphics fx dt
           updateTimer dt

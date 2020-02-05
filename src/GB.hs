@@ -36,7 +36,6 @@ data GBState s = GBState
   , stackpointer   :: STRef s Word16
   , programCounter :: STRef s Word16
 
-  , clock        :: STRef s Word
   , shouldStop   :: STRef s Bool
   , isHalted     :: STRef s Bool
 
@@ -63,7 +62,6 @@ makeGBState cart = do
     <$> pure memory
     <*> newSTRef 0x0000
     <*> newSTRef 0x0000
-    <*> newSTRef 0
     <*> newSTRef False
     <*> newSTRef False
     <*> newSTRef defaultTimerState
@@ -184,14 +182,6 @@ instance MonadIO m => MonadEmulator (GB m) where
 
   loadSP = readState stackpointer
   loadPC = readState programCounter
-
-  advCycles dt = GBT $ do
-    c <- asks clock
-    liftIO $ stToIO $ modifySTRef' c (+ dt)
-
-  getCycles = GBT $ do
-    c <- asks clock
-    liftIO $ stToIO $ readSTRef c
 
   getTimerState = readState  gbTimer
   putTimerState = writeState gbTimer

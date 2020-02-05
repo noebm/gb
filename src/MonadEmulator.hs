@@ -89,10 +89,6 @@ class Monad m => MonadEmulator m where
   loadPC :: m Word16
   loadSP :: m Word16
 
-  -- | Advances internal timer.
-  advCycles :: Word -> m ()
-  getCycles :: m Word
-
   setStop :: m ()
   stop :: m Bool
 
@@ -183,9 +179,6 @@ instance MonadEmulator m => MonadEmulator (StateT s m) where
   loadAddr = aux1 loadAddr
   loadPC = aux0 loadPC
   loadSP = aux0 loadSP
-
-  advCycles = aux1 advCycles
-  getCycles = aux0 getCycles
 
   getGPU = aux0 getGPU
   putGPU = aux1 putGPU
