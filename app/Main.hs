@@ -28,4 +28,4 @@ parseCommandline argv = case getOpt Permute options argv of
 main :: IO ()
 main = do
   file <- parseCommandline =<< getArgs
-  someFunc (Just file)
+  mainloop (Just file)

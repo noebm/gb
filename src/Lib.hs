@@ -101,8 +101,8 @@ setupCartridge fpBoot fpRom = do
   c' <- defaultCartridge
   return $ fromMaybe c' c
 
-someFunc :: Maybe FilePath -> IO ()
-someFunc fp' = do
+mainloop :: Maybe FilePath -> IO ()
+mainloop fp' = do
 
   let bootStrapName = "DMG_ROM.bin"
   cart <- setupCartridge (Just $ "./" ++ bootStrapName) fp'
