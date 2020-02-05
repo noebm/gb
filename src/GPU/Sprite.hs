@@ -37,8 +37,8 @@ import Data.Bits
 import GPU.GPUControl
 
 data Sprite = Sprite
-  { _spritePositionY  :: {-# UNPACK #-} !Word8
-  , _spritePositionX  :: {-# UNPACK #-} !Word8
+  { _spritePositionY' :: {-# UNPACK #-} !Word8
+  , _spritePositionX' :: {-# UNPACK #-} !Word8
   , _spriteTile       :: {-# UNPACK #-} !Word8
   , _spriteAttributes :: {-# UNPACK #-} !Word8
   }
@@ -85,8 +85,17 @@ instance G.Vector U.Vector Sprite where
 
 makeLenses ''Sprite
 
+spritePosition' :: Lens' Sprite (V2 Word8)
+spritePosition' f (Sprite y x t attr) = (\(V2 x' y') -> Sprite y' x' t attr) <$> f (V2 x y)
+
 spritePosition :: Lens' Sprite (V2 Word8)
-spritePosition f (Sprite y x t attr) = (\(V2 x' y') -> Sprite y' x' t attr) <$> f (V2 x y)
+spritePosition = spritePosition' . iso (subtract (V2 8 16)) (+ V2 8 16)
+
+spritePositionX :: Lens' Sprite Word8
+spritePositionX = spritePositionX' . iso (subtract 8) (+8)
+
+spritePositionY :: Lens' Sprite Word8
+spritePositionY = spritePositionY' . iso (subtract 16) (+16)
 
 spriteFlippedX :: Lens' Sprite Bool
 spriteFlippedX = spriteAttributes . bitAt 5
