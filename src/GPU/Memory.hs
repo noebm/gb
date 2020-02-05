@@ -13,11 +13,6 @@ module GPU.Memory
   , storeVideoRAM
   , dumpVideoRAM
 
-  , OAM (..)
-  , defaultOAM
-  , loadOAM
-  , storeOAM
-  , dumpOAM
   )
 where
 
@@ -81,11 +76,3 @@ loadVideoRAM (VideoRAM m) addr = m VU.! fromIntegral (addr .&. 0x1fff)
 {-# INLINE storeVideoRAM #-}
 storeVideoRAM :: VideoRAM -> Word16 -> Word8 -> VideoRAM
 storeVideoRAM (VideoRAM m) addr b = VideoRAM $ VU.modify (\v -> VUM.write v (fromIntegral (addr .&. 0x1fff)) b) m
-
-{-# INLINE loadOAM #-}
-loadOAM :: OAM -> Word16 -> Word8
-loadOAM (OAM m) addr = m VU.! fromIntegral (addr .&. 0x9f)
-
-{-# INLINE storeOAM #-}
-storeOAM :: OAM -> Word16 -> Word8 -> OAM
-storeOAM (OAM m) addr b = OAM $ VU.modify (\v -> VUM.write v (fromIntegral (addr .&. 0x9f)) b) m

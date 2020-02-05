@@ -16,6 +16,7 @@ where
 import Control.Lens
 import GPU.Memory
 import GPU.GPUControl as X
+import GPU.Sprite
 
 import Control.Monad
 import Data.Word
@@ -61,8 +62,7 @@ loadGPU g addr
       guard (_gpuMode (gpuConfig g) /= ModeVRAM)
       return $ loadVideoRAM (gpuVideoRAM g) addr
   | inOAM addr      = maybe 0xff id $ do
-      guard (_gpuMode (gpuConfig g) /= ModeVRAM || _gpuMode (gpuConfig g) /= ModeOAM )
-      return $ loadOAM (gpuOAM g) addr
+      loadOAM (gpuConfig g) (gpuOAM g) addr
   | inGPUMMIO addr  = loadGPUControl conf addr
   | otherwise = error "loadGPU: not in range"
   where conf = gpuConfig g
@@ -72,15 +72,14 @@ loadGPU g addr
 dmaTransfer :: Monad m => (Word16 -> m Word8) -> Word16 -> GPUState -> m GPUState
 dmaTransfer access baseaddr g = do
   vec <- VU.generateM 0xa0 $ access . fromIntegral . (fromIntegral baseaddr +)
-  return $ g { gpuOAM = OAM vec }
+  return $ g { gpuOAM = directMemoryAccessOAM vec }
 
 storeGPU :: GPUState -> Word16 -> Word8 -> GPUState
 storeGPU g@GPUState { gpuConfig = conf } addr b
   | inVideoRAM addr = maybe g (\x -> g { gpuVideoRAM = x }) $ do
       guard (_gpuMode (gpuConfig g) /= ModeVRAM)
       return $ storeVideoRAM (gpuVideoRAM g) addr b
-  | inOAM addr && addr /= 0xff46 = maybe g (\oam -> g { gpuOAM = oam }) $ do
-      guard (_gpuMode (gpuConfig g) /= ModeVRAM || _gpuMode (gpuConfig g) /= ModeOAM )
-      return $ storeOAM (gpuOAM g) addr b
+  | inOAM addr && addr /= 0xff46 = maybe g (\oam -> g { gpuOAM = oam }) $
+      storeOAM (gpuConfig g) addr b (gpuOAM g)
   | inGPUMMIO addr = g { gpuConfig = storeGPUControl conf addr b }
   | otherwise = error "storeGPU: not in range"
