@@ -85,16 +85,16 @@ inJoypadRange :: Word16 -> Bool
 inJoypadRange addr = addr == 0xff00
 
 storeJoypad :: Word16 -> Word8 -> JoypadState -> JoypadState
-storeJoypad 0xff00 b s
-  | not (b `testBit` 4) = s & select ?~ SelectButton
-  | not (b `testBit` 5) = s & select ?~ SelectDirection
-  | otherwise = s
+storeJoypad 0xff00 b
+  | not (b `testBit` 4) = select ?~ SelectButton
+  | not (b `testBit` 5) = select ?~ SelectDirection
+  | otherwise = id
 
-storeJoypad _ _ _ = error "storeJoypad: not in range"
+storeJoypad _ _ = error "storeJoypad: not in range"
 
 loadJoypad :: JoypadState -> Word16 -> Word8
 loadJoypad s 0xff00 = case s ^. select of
-    Just SelectButton    -> foldl (.|.) 0x20 . fmap (bit . joypadIndex) $ filter button    $ toList (s ^. pressed)
-    Just SelectDirection -> foldl (.|.) 0x10 . fmap (bit . joypadIndex) $ filter direction $ toList (s ^. pressed)
+    Just SelectButton    -> foldl xor 0x2f . fmap (bit . joypadIndex) $ filter button    $ toList (s ^. pressed)
+    Just SelectDirection -> foldl xor 0x1f . fmap (bit . joypadIndex) $ filter direction $ toList (s ^. pressed)
     _ -> 0x00
 loadJoypad _ _ = error "loadJoypad: not in range"
