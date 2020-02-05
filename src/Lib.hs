@@ -20,14 +20,17 @@ updateCPU = do
   halted <- halt
   if not halted then do
     ime <- getIEM
-    when ime $ void processInterrupts
+    int <- if ime
+      then processInterrupts
+      else return False
     i <- parseInstructionM byte
     dt <- interpretM i
-    return (Just i , dt)
+    let dt' = if int then 20 + dt else dt
+    return (Just i , dt')
   else do
     f <- processInterrupts
     if f
-      then clearHalt >> return (Nothing, 0)
+      then clearHalt >> return (Nothing, 20)
       else return (Nothing, 4)
 
 updateGraphics :: (MonadIO m , MonadEmulator m) => GraphicsContext -> Word -> m ()
@@ -57,12 +60,9 @@ mainloop fp' = do
 
     let update fx = do
           pc <- loadPC
-          t <- getCycles
-          (i, dt') <- updateCPU
-          advCycles dt'
+          (i, dt) <- updateCPU
+          advCycles dt
           forM_ logger $ \f -> liftIO $ f pc i
-          t' <- getCycles
-          let dt = t' - t
           updateGraphics fx dt
           updateTimer dt
           -- updateJoypad s

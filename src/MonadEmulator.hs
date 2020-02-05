@@ -212,7 +212,6 @@ processInterrupts = do
     when (not h) $ putInterrupt (s & interrupt i . interruptFlag .~ False)
     setIEM False
     call (interruptAddress i)
-    advCycles 20
   return $ isJust int
 
 {-# INLINE word16 #-}
