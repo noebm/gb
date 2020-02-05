@@ -57,15 +57,16 @@ spriteLine gctrl mem oam pixels = do
           $ (if obj ^. spriteFlippedX then (\x -> (x, reverse x)) else (\x -> (x, x)))
           $ [0..7]
     forM_ spriteXCoords $ \(x, px) ->
-      if obj ^. spriteBGPriority
-      then do
-        c <- VM.read pixels (fromIntegral $ obj ^. spritePositionX + px)
-        when (c == 0x00) $ do
+      when (obj ^. spritePositionX + px < 160) $
+        if obj ^. spriteBGPriority
+        then do
+          c <- VM.read pixels (fromIntegral $ obj ^. spritePositionX + px)
+          when (c == 0x00) $ do
+            let objc = objPaletteValue pal $ getTileColor t x y
+            forM_ objc $ VM.write pixels (fromIntegral $ obj ^. spritePositionX + px)
+        else do
           let objc = objPaletteValue pal $ getTileColor t x y
           forM_ objc $ VM.write pixels (fromIntegral $ obj ^. spritePositionX + px)
-      else do
-        let objc = objPaletteValue pal $ getTileColor t x y
-        forM_ objc $ VM.write pixels (fromIntegral $ obj ^. spritePositionX + px)
 
 generateLine :: PrimMonad m => GPUControl -> VideoRAM -> OAM -> m (V.Vector Word8)
 generateLine gctrl mem oam = do
