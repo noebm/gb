@@ -22,3 +22,6 @@ tileAddr :: Bool -> Word8 -> TileAddr
 tileAddr tileDataSelect idx = TileAddr $ 0x1fff .&. if tileDataSelect
   then 0x8000 + fromIntegral idx `shiftL` 4
   else 0x8800 + fromIntegral (idx + 128) `shiftL` 4
+
+spriteTileAddr :: Word8 -> TileAddr
+spriteTileAddr idx = TileAddr $ 0x1fff .&. (0x8000 + fromIntegral idx `shiftL` 4)

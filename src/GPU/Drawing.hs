@@ -8,6 +8,8 @@ import qualified Data.Vector.Unboxed.Mutable as VM
 import GPU.Memory
 import GPU.Palette
 import GPU.GPUControl
+import GPU.Sprite
+import GPU.VideoAddr
 
 import SDL.Vect
 
@@ -40,8 +42,26 @@ windowLine g vram =
     in paletteValue (_gpuBGPalette g) $
        pixel vram (g ^. gpuTileDataSelect) (g ^. gpuWindowTileMapSelect) (V2 x y')
 
-generateLine :: PrimMonad m => GPUControl -> VideoRAM -> m (V.Vector Word8)
-generateLine gctrl mem = do
+spriteLine gctrl mem oam pixels = do
+  let objsize = if gctrl ^. gpuOBJSizeLarge then 16 else 8
+  V.forM_ (getLineSprites (gctrl ^. gpuLine) objsize oam) $ \obj -> do
+    let pal = gctrl ^. gpuOBJPalette (obj ^. spriteDMGPalette)
+    let (idx , y) =
+          let y0 = (if obj ^. spriteFlippedY then \a -> objsize - 1 - a else id)
+                $ gctrl ^. gpuLine - obj ^. spritePositionY
+          in if y0 >= 8
+             then (obj ^. spriteTile + 1 , y0 - 8)
+             else (obj ^. spriteTile     , y0)
+    let t = getTile mem $ spriteTileAddr idx
+    let spriteXCoords = uncurry zip
+          $ (if obj ^. spriteFlippedX then (\x -> (x, reverse x)) else (\x -> (x, x)))
+          $ [0..7]
+    forM_ spriteXCoords $ \(x, px) -> VM.write pixels
+      (fromIntegral $ obj ^. spritePositionX + px)
+      (paletteValue pal $ getTileColor t x y)
+
+generateLine :: PrimMonad m => GPUControl -> VideoRAM -> OAM -> m (V.Vector Word8)
+generateLine gctrl mem oam = do
   pixels <- VM.new 160
   when (gctrl ^. displayBG) $ do
     let bgrd = backgroundLine gctrl mem
@@ -49,4 +69,6 @@ generateLine gctrl mem = do
   when (gctrl ^. displayWindow) $ when (gctrl ^. gpuWindow._y <= gctrl ^. gpuLine) $ do
     let (offset, disp) = windowLine gctrl mem
     V.copy (VM.drop (fromIntegral offset) pixels) disp
+  when (gctrl ^. displayOBJ) $ do
+    spriteLine gctrl mem oam pixels
   V.freeze pixels
