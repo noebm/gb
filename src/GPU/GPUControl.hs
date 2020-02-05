@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 module GPU.GPUControl
   ( GPUMode (..)
@@ -13,6 +14,8 @@ module GPU.GPUControl
   , gpuWindowTileMapSelect, displayWindow
   , gpuBGTileMapSelect, displayBG
   , gpuOBJSizeLarge, displayOBJ
+
+  , gpuOBJPalette
 
   , gpuMode
   , gpuLine
@@ -88,6 +91,9 @@ gpuBGTileMapSelect     = gpuLCDControlByte . bitAt 3
 gpuOBJSizeLarge        = gpuLCDControlByte . bitAt 2
 displayOBJ             = gpuLCDControlByte . bitAt 1
 displayBG              = gpuLCDControlByte . bitAt 0
+
+gpuOBJPalette :: Bool -> Lens' GPUControl Palette
+gpuOBJPalette f = if f then gpuOBJ1Palette else gpuOBJ0Palette
 
 defaultGPUControl :: GPUControl
 defaultGPUControl = GPUControl
