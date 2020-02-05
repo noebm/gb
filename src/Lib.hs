@@ -95,13 +95,11 @@ updateGraphics gfx cyc = updateGPU cyc $ \gpu req -> case req of
 -- setupCartridge :: Maybe FilePath -> Maybe FilePath -> IO (CartridgeState )
 setupCartridge fpBoot fpRom = do
   let eitherError = either error id
-  rom      <- fmap eitherError <$> mapM readRom fpRom
+  rom      <- eitherError <$> readRom fpRom
   bootrom' <- fmap eitherError <$> mapM readBootRom fpBoot
-  c <- mapM (makeCartridge bootrom') rom
-  c' <- defaultCartridge
-  return $ fromMaybe c' c
+  makeCartridge bootrom' rom
 
-mainloop :: Maybe FilePath -> IO ()
+mainloop :: FilePath -> IO ()
 mainloop fp' = do
 
   let bootStrapName = "DMG_ROM.bin"
