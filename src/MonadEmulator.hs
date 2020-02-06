@@ -1,11 +1,11 @@
 module MonadEmulator
   ( Reg8 (..)
   , Reg16 (..)
-  , LoadStore8 (..)
-  , LoadStore16 (..)
   , MonadEmulator (..)
-  , load8, store8
-  , load16, store16
+  , storeReg16
+  , storeAddr16
+  , loadReg16
+  , loadAddr16
 
   , updateGPU
   , updateTimer
@@ -50,7 +50,7 @@ showRegisters :: MonadEmulator m => m String
 showRegisters = do
   let rs8 = [A, F, B, C, D, E, H, L]
   s1 <- forM rs8 $ \r -> do
-    v <- load8 (Register8 r)
+    v <- loadReg r
     return $ show r ++ printf ": %02x " v
   s2 <- forM [("PC", loadPC), ("SP", loadSP)] $ \(name, get) -> do
     v <- get
@@ -67,12 +67,6 @@ load16LE b0 b1 = do
 {-# INLINE store16LE #-}
 store16LE :: Monad m => (Word8 -> m ()) -> (Word8 -> m ()) -> (Word16 -> m ())
 store16LE b0 b1 w = let (h , l) = w ^. from word16 in b0 l >> b1 h
-
-data LoadStore8 = Register8 !Reg8 | Addr8 !Word16
-  deriving (Eq, Show)
-
-data LoadStore16 = Register16 !Reg16 | Addr16 !Word16
-  deriving (Eq, Show)
 
 -- | Allow reading and writing inside the address space.
 -- All loads and stores should be idempotent.
@@ -105,25 +99,21 @@ class Monad m => MonadEmulator m where
   getTimerState :: m TimerState
   putTimerState :: TimerState -> m ()
 
-store8 :: MonadEmulator m => LoadStore8 -> Word8 -> m ()
-store8 (Register8 r) = storeReg r
-store8 (Addr8 addr) = storeAddr addr
+storeAddr16 :: MonadEmulator m => Word16 -> Word16 -> m ()
+storeAddr16 addr = store16LE (storeAddr addr) (storeAddr $ addr + 1)
 
-store16 :: MonadEmulator m => LoadStore16 -> Word16 -> m ()
-store16 (Register16 r) =
+storeReg16 :: MonadEmulator m => Reg16 -> Word16 -> m ()
+storeReg16 r =
   let (r0, r1) = regPair r
   in store16LE (storeReg r1) (storeReg r0)
-store16 (Addr16 addr) = store16LE (storeAddr addr) (storeAddr $ addr + 1)
 
-load8 :: MonadEmulator m => LoadStore8 -> m Word8
-load8 (Register8 r) = loadReg r
-load8 (Addr8 addr) = loadAddr addr
+loadAddr16 :: MonadEmulator m => Word16 -> m Word16
+loadAddr16 addr = load16LE (loadAddr addr) (loadAddr $ addr + 1)
 
-load16 :: MonadEmulator m => LoadStore16 -> m Word16
-load16 (Register16 r) =
+loadReg16 :: MonadEmulator m => Reg16 -> m Word16
+loadReg16 r =
   let (r0, r1) = regPair r
   in load16LE (loadReg r1) (loadReg r0)
-load16 (Addr16 addr) = load16LE (loadAddr addr) (loadAddr $ addr + 1)
 
 modifyInterrupt f = putInterrupt . f =<< getInterrupt
 
@@ -228,7 +218,7 @@ byte :: MonadEmulator m => m Word8
 byte = do
   pc <- loadPC
   storePC (pc + 1)
-  load8 (Addr8 pc)
+  loadAddr pc
 
 {-# INLINE word #-}
 word :: MonadEmulator m => m Word16
@@ -253,14 +243,14 @@ jumpRelative addrdiff = do
 push :: MonadEmulator m => Word16 -> m ()
 push w = do
   sp <- loadSP
-  store16 (Addr16 (sp - 2)) w
+  storeAddr16 (sp - 2) w
   storeSP (sp - 2)
 
 pop :: MonadEmulator m => m Word16
 pop = do
   sp <- loadSP
   storeSP (sp + 2)
-  load16 (Addr16 sp)
+  loadAddr16 sp
 
 call :: MonadEmulator m => Word16 -> m ()
 call addr = do
