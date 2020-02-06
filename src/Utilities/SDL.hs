@@ -14,9 +14,7 @@ _KeyboardEvent = prism SDL.KeyboardEvent $ \x -> case x of
 
 {-# INLINE _QuitEvent #-}
 _QuitEvent :: Prism' SDL.EventPayload ()
-_QuitEvent = prism (const SDL.QuitEvent) $ \x -> case x of
-  SDL.QuitEvent -> Right ()
-  _ -> Left x
+_QuitEvent = only SDL.QuitEvent
 
 {- SDL.KeyboardEventData -}
 keyMotion :: Lens' SDL.KeyboardEventData SDL.InputMotion
