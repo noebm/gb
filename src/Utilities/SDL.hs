@@ -6,11 +6,13 @@ import qualified SDL
 eventPayload :: Lens' SDL.Event SDL.EventPayload
 eventPayload = lens SDL.eventPayload (\s x -> s { SDL.eventPayload = x })
 
+{-# INLINE _KeyboardEvent #-}
 _KeyboardEvent :: Prism' SDL.EventPayload SDL.KeyboardEventData
 _KeyboardEvent = prism SDL.KeyboardEvent $ \x -> case x of
   SDL.KeyboardEvent e -> Right e
   _ -> Left x
 
+{-# INLINE _QuitEvent #-}
 _QuitEvent :: Prism' SDL.EventPayload ()
 _QuitEvent = prism (const SDL.QuitEvent) $ \x -> case x of
   SDL.QuitEvent -> Right ()
