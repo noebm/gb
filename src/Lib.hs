@@ -20,7 +20,7 @@ import Timer
 import Joypad
 
 import qualified SDL
-import Utilities.SDL (_KeyboardEvent)
+import Utilities.SDL (_KeyboardEvent, _QuitEvent)
 
 import Control.Lens
 
@@ -101,11 +101,7 @@ mainloop fp' = do
           let kbevent = event >>= (^? _KeyboardEvent)
           forM_ kbevent $ \key -> do
             updateKeys key
-
-    let runTillStop fx = do
-          update fx
-          s <- stop
-          unless s $ runTillStop fx
+          unless (isn't _Empty $ event >>= (^? _QuitEvent)) $ update fx
 
     gfx <- initializeGraphics
-    runTillStop gfx
+    update gfx
