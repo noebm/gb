@@ -97,11 +97,12 @@ mainloop fp' = do
           updateGraphics fx dt
           updateTimer dt
 
-          event <- fmap SDL.eventPayload <$> SDL.pollEvent
-          let kbevent = event >>= (^? _KeyboardEvent)
+          events <- fmap SDL.eventPayload <$> SDL.pollEvents
+          let kbevent = events ^.. folded . _KeyboardEvent
           forM_ kbevent $ \key -> do
             updateKeys key
-          unless (isn't _Empty $ event >>= (^? _QuitEvent)) $ update fx
+          unless (isn't _Empty $ events ^.. folded . _QuitEvent) $
+            update fx
 
     gfx <- initializeGraphics
     update gfx
