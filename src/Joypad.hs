@@ -84,8 +84,8 @@ inJoypadRange addr = addr == 0xff00
 
 storeJoypad :: Word16 -> Word8 -> JoypadState -> JoypadState
 storeJoypad 0xff00 b
-  | not (b `testBit` 4) = select ?~ SelectButton
-  | not (b `testBit` 5) = select ?~ SelectDirection
+  | not (b `testBit` 5) = select ?~ SelectButton
+  | not (b `testBit` 4) = select ?~ SelectDirection
   | otherwise = id
 
 storeJoypad _ _ = error "storeJoypad: not in range"
