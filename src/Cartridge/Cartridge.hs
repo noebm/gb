@@ -3,6 +3,7 @@ module Cartridge.Cartridge where
 import qualified Cartridge.Header as Header
 import Cartridge.Header ( MBCType(..) )
 import Cartridge.Controller
+import Cartridge.BootRom
 
 import qualified Data.ByteString as B
 import qualified Data.Vector.Unboxed as VU
@@ -12,68 +13,45 @@ import Data.Bits
 import Data.Maybe
 import Text.Printf
 
-import Data.STRef
-
 import Control.Lens
-import Control.Monad.Primitive
 import Control.Monad
 
 import Utilities.Vector
 
-import Cartridge.BootRom
 
-{-
-data Cartridge = Cartridge
-  { header' :: Header.Header
-  , bootrom' :: Maybe BootRom
-  , rom' :: VU.Vector Word8
-  }
-
-data CartridgeS = CartridgeS
-  { ramBanks' :: V.Vector (VU.Vector Word8)
-  , ramBanksEnable' :: Bool
-  , romBankIndex' :: Int
-  -- , romBank' :: VU.Vector Word8
-  }
--}
-
-data CartridgeState s = CartridgeState
+data CartridgeState = CartridgeState
   { header :: Header.Header
   , bootrom :: Maybe BootRom
-  , bootromEnable :: STRef s Bool
-  , romBanks :: STRef s RomBank
-  , romBankIndex :: STRef s Int
-  , ramBanksEnable :: STRef s Bool
-  , ramBanks :: STRef s RamBank
+  , bootromEnable :: Bool
+  , romBanks :: RomBank
+  , romBankIndex :: Int
+  , ramBanksEnable :: Bool
+  , ramBanks :: RamBank
   }
 
-defaultCartridge :: PrimMonad m => m (CartridgeState (PrimState m))
-defaultCartridge = do
-  rom <- stToPrim $ newSTRef defaultRomBank
-  ram <- stToPrim $ newSTRef emptyRamBank
-  romIndex <- stToPrim $ newSTRef 1
-  ramEnable <- stToPrim $ newSTRef False
-  bootEnable <- stToPrim $ newSTRef False
-  return $ CartridgeState
-    { header = error "no default header implementation"
-    , bootrom = Nothing
-    , bootromEnable = bootEnable
-    , romBanks = rom
-    , romBankIndex = romIndex
-    , ramBanksEnable = ramEnable
-    , ramBanks = ram
+defaultCartridge :: CartridgeState
+defaultCartridge =
+  CartridgeState
+  { header = error "no default header implementation"
+  , bootrom = Nothing
+  , bootromEnable = False
+  , romBanks = defaultRomBank
+  , romBankIndex = 1
+  , ramBanksEnable = False
+  , ramBanks = emptyRamBank
+  }
+
+makeCartridge :: Maybe BootRom -> Rom -> CartridgeState
+makeCartridge boot (Rom h xs) =
+  CartridgeState
+    { header = h
+    , bootrom = boot
+    , bootromEnable = isJust boot
+    , romBanks = makeRomBanks xs
+    , romBankIndex = 1
+    , ramBanksEnable = False
+    , ramBanks = newRamBanks 0
     }
-
-makeCartridge :: PrimMonad m => Maybe BootRom -> Rom -> m (CartridgeState (PrimState m))
-makeCartridge boot (Rom h xs) = do
-  rom <- stToPrim . newSTRef $ makeRomBanks xs
-  ram <- stToPrim . newSTRef $ newRamBanks 0
-
-  romIndex <- stToPrim $ newSTRef 1
-  ramEnable <- stToPrim $ newSTRef False
-  bootEnable <- stToPrim $ newSTRef (isJust boot)
-
-  return $ CartridgeState h boot bootEnable rom romIndex ramEnable ram
 
 {-# INLINE inCartridgeRange #-}
 inCartridgeRange :: (Num a, Ord a, Eq a) => a -> Bool
@@ -82,34 +60,28 @@ inCartridgeRange addr
   || inRamRange addr -- ram banks
   || addr == 0xff50  -- boot rom disable
 
-loadCartridge :: PrimMonad m => CartridgeState (PrimState m) -> Word16 -> m Word8
+loadCartridge :: CartridgeState -> Word16 -> Word8
 loadCartridge s addr
-  | addr <= 0xff  = stToPrim $ do
-      e <- readSTRef (bootromEnable s)
-      let aux = (`loadRom` addr) <$> readSTRef (romBanks s)
-      maybe aux return $ do
-        guard e
-        loadBootRom addr <$> bootrom s
-  | 0xff < addr && addr < 0x8000 = do
-      x <- stToPrim $ readSTRef $ romBanks s
-      return $ loadRom x addr
-      -- loadRom (romBanks s) addr
-  | inRamRange addr = do
-      e <- stToPrim $ readSTRef (ramBanksEnable s)
-      if e
+  | addr <= 0xff  =
+      let aux = (`loadRom` addr) (romBanks s)
+      in maybe aux id $ do
+        guard (bootromEnable s)
+        loadBootRom addr <$> (bootrom s)
+  | 0xff < addr && addr < 0x8000 = loadRom (romBanks s) addr
+  | inRamRange addr =
+      if ramBanksEnable s
         then
-        (`loadRam` addr) <$> stToPrim (readSTRef $ ramBanks s)
-        else return 0xff
+        (`loadRam` addr) (ramBanks s)
+        else 0xff
   | addr == 0xff50 =
-      fromIntegral . fromEnum . not <$> stToPrim ( readSTRef $ bootromEnable s)
+      fromIntegral . fromEnum . not $ (bootromEnable s)
   | otherwise = error "loadCartridge: out of range"
 
-storeCartridge :: PrimMonad m => Word16 -> Word8 -> CartridgeState (PrimState m) -> m ()
+storeCartridge :: Word16 -> Word8 -> CartridgeState -> CartridgeState
 storeCartridge addr b c
   | addr < 0x8000 = storeMBC (view Header.mbcType $ Header.headerType (header c)) addr b c
-  | inRamRange addr =
-      stToPrim $ modifySTRef' (ramBanks c) (storeRam addr b)
-  | addr == 0xff50 = stToPrim $ writeSTRef (bootromEnable c) (b == 0)
+  | inRamRange addr = c { ramBanks = storeRam addr b (ramBanks c) }
+  | addr == 0xff50 = c { bootromEnable = b == 0 }
   | otherwise = error "storeCartridge: out of range"
 
 data Rom = Rom Header.Header (VU.Vector Word8)
@@ -124,19 +96,18 @@ readRom fp = do
     h <- maybe (Left "readRom: reader parsing failed") Right $ Header.header bytes
     return (Rom h vs)
 
-storeMBC :: PrimMonad m => MBCType -> Word16 -> Word8 -> CartridgeState (PrimState m) -> m () -- RomBank s
-storeMBC OnlyROM addr _ _
-  | addr < 0x8000 = return ()
+storeMBC :: MBCType -> Word16 -> Word8 -> CartridgeState -> CartridgeState
+storeMBC OnlyROM addr _ s
+  | addr < 0x8000 = s
   | otherwise = error "storeMBC: out of range"
 storeMBC MBC1 addr b s
-  | addr < 0x2000 =
-    stToPrim $ writeSTRef (ramBanksEnable s) $ b .&. 0xF == 0xA
-    -- error "storeMBC: MBC1 enable ram"
-  | addr < 0x4000 = stToPrim $ do
+  | addr < 0x2000 = s { ramBanksEnable = b .&. 0xF == 0xA }
+  | addr < 0x4000 =
       let b' = let x = b .&. 0x1f in if x == 0 then 1 else x
-      modifySTRef' (romBankIndex s) (\idx -> (idx .&. 0xe0) .|. fromIntegral b')
-      i <- readSTRef (romBankIndex s)
-      modifySTRef' (romBanks s) (selectRomBank i)
+          idx' = (\idx -> (idx .&. 0xe0) .|. fromIntegral b') (romBankIndex s)
+      in s { romBankIndex = idx'
+           , romBanks = selectRomBank idx' (romBanks s)
+           }
   | addr < 0x6000 = error "storeMBC: MBC1 higher rom/ram bits"
   | addr < 0x8000 = error "storeMBC: MBC1 rom/ram mode select"
   | otherwise = error "storeMBC: out of range"

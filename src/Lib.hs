@@ -52,7 +52,7 @@ setupCartridge fpBoot fpRom = do
   let eitherError = either error id
   rom      <- eitherError <$> readRom fpRom
   bootrom' <- fmap eitherError <$> mapM readBootRom fpBoot
-  makeCartridge bootrom' rom
+  return $ makeCartridge bootrom' rom
 
 keymap :: SDL.Keycode -> Maybe Joypad
 keymap SDL.KeycodeUp    = Just JoypadUp

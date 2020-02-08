@@ -41,7 +41,6 @@ data BankState = BankState
 
 makeLenses ''BankState
 
--- makeBanks :: V.Vector Bank -> BankState s
 makeBanks :: Int -> V.Vector Bank -> BankState
 makeBanks i xs = BankState
   { _banks = xs

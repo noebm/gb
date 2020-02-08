@@ -44,7 +44,7 @@ data GBState s = GBState
   , gbGPU       :: STRef s GPUState
   , gbJoypad    :: STRef s JoypadState
 
-  , gbCartridge   :: CartridgeState s
+  , gbCartridge   :: STRef s CartridgeState
   }
 
 newtype GBT s m a = GBT (ReaderT (GBState s) m a)
@@ -55,7 +55,7 @@ instance MonadIO m => MonadIO (GBT s m) where
 
 type GB = GBT RealWorld
 
-makeGBState :: CartridgeState s -> ST s (GBState s)
+makeGBState :: CartridgeState -> ST s (GBState s)
 makeGBState cart = do
   memory <- V.replicate (0x10000 + 0x8) 0x00
   GBState
@@ -68,9 +68,9 @@ makeGBState cart = do
     <*> newSTRef defaultInterruptState
     <*> newSTRef defaultGPUState
     <*> newSTRef defaultJoypadState
-    <*> pure cart
+    <*> newSTRef cart
 
-runGB :: MonadIO m => CartridgeState RealWorld -> GB m a -> m a
+runGB :: MonadIO m => CartridgeState -> GB m a -> m a
 runGB cart (GBT x) = do
   gbState <- liftIO $ stToIO $ makeGBState cart
   runReaderT x gbState
@@ -125,9 +125,9 @@ loadAddr' idx
   | inTimerRange (fromIntegral idx) = do
       ts <- getTimerState
       return $ loadTimer ts (fromIntegral idx)
-  | inCartridgeRange idx = GBT $ do
-      cart <- asks gbCartridge
-      liftIO $ loadCartridge cart (fromIntegral idx)
+  | inCartridgeRange idx = do
+      cart <- readState gbCartridge
+      return $ loadCartridge cart (fromIntegral idx)
   | idx < 0xffff && inJoypadRange (fromIntegral idx) = do
       s <- readState gbJoypad
       return $ loadJoypad s (fromIntegral idx)
@@ -155,9 +155,9 @@ storeAddr' idx b
       ts <- getTimerState
       let ts' = storeTimer (fromIntegral idx) b ts
       putTimerState ts'
-  | inCartridgeRange idx = GBT $ do
-      cart <- asks gbCartridge
-      liftIO $ storeCartridge (fromIntegral idx) b cart
+  | inCartridgeRange idx = do
+      cart <- readState gbCartridge
+      writeState gbCartridge $ storeCartridge (fromIntegral idx) b cart
   | idx < 0xffff && inJoypadRange (fromIntegral idx) = do
       s <- readState gbJoypad
       writeState gbJoypad $ storeJoypad (fromIntegral idx) b s
