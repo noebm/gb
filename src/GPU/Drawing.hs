@@ -37,7 +37,7 @@ windowLine g vram =
   let y' = g ^. gpuLine + g ^. gpuWindow._y
       windowX = view (gpuWindow._x) g - 7
   in (,) windowX $ V.generate (160 - fromIntegral windowX) $ \i ->
-    let x' = fromIntegral i + (g ^. gpuScroll._x) + windowX
+    let x' = fromIntegral i + windowX
         x = if x' >= windowX then fromIntegral i else x'
     in paletteValue (_gpuBGPalette g) $
        pixel vram (g ^. gpuTileDataSelect) (g ^. gpuWindowTileMapSelect) (V2 x y')
@@ -49,24 +49,21 @@ spriteLine gctrl mem oam pixels = do
     let (idx , y) =
           let y0 = (if obj ^. spriteFlippedY then \a -> objsize - 1 - a else id)
                 $ gctrl ^. gpuLine - obj ^. spritePositionY
-          in if y0 >= 8
-             then (obj ^. spriteTile + 1 , y0 - 8)
-             else (obj ^. spriteTile     , y0)
+              (idxOffset, y) = y0 `divMod` 8
+          in (obj ^. spriteTile + idxOffset, y)
     let t = getTile mem $ spriteTileAddr idx
-    let spriteXCoords = uncurry zip
-          $ (if obj ^. spriteFlippedX then (\x -> (x, reverse x)) else (\x -> (x, x)))
-          $ [0..7]
-    forM_ spriteXCoords $ \(x, px) ->
-      when (obj ^. spritePositionX + px < 160) $
+    let adjustTileCoord = if obj ^. spriteFlippedX then \x -> 7 - x else id
+    forM_ [0..7] $ \x ->
+      when (obj ^. spritePositionX + x < 160) $
         if obj ^. spriteBGPriority
         then do
-          c <- VM.read pixels (fromIntegral $ obj ^. spritePositionX + px)
+          c <- VM.read pixels (fromIntegral $ obj ^. spritePositionX + x)
           when (c == 0x00) $ do
-            let objc = objPaletteValue pal $ getTileColor t x y
-            forM_ objc $ VM.write pixels (fromIntegral $ obj ^. spritePositionX + px)
+            let objc = objPaletteValue pal $ getTileColor t (adjustTileCoord x) y
+            forM_ objc $ VM.write pixels (fromIntegral $ obj ^. spritePositionX + x)
         else do
-          let objc = objPaletteValue pal $ getTileColor t x y
-          forM_ objc $ VM.write pixels (fromIntegral $ obj ^. spritePositionX + px)
+          let objc = objPaletteValue pal $ getTileColor t (adjustTileCoord x) y
+          forM_ objc $ VM.write pixels (fromIntegral $ obj ^. spritePositionX + x)
 
 generateLine :: PrimMonad m => GPUControl -> VideoRAM -> OAM -> m (V.Vector Word8)
 generateLine gctrl mem oam = do

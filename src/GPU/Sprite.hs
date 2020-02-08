@@ -151,7 +151,7 @@ getLineSprites line size (OAM oam)
   where
     collectedSprites
       = G.take 10
-      $ G.filter (\obj -> obj ^. spritePositionY <= line && line < (obj ^. spritePositionY + size))
+      $ G.filter (\obj -> obj ^. spritePositionY' <= line + 16 && line + 16 < (obj ^. spritePositionY' + size))
       $ oam
 
     spriteOrder
