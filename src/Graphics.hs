@@ -65,7 +65,7 @@ paletteColorToGrayscale w = V4 c c c 0xff
 genPixelRow :: (MonadIO m) => Texture -> GPUState -> m ()
 genPixelRow im g = do
   let y = _gpuLine $ gpuConfig g
-  v <- liftIO $ generateLine (gpuConfig g) (gpuVideoRAM g) (gpuOAM g)
+  let v = generateLine (gpuConfig g) (gpuVideoRAM g) (gpuOAM g)
   updateTextureLine im (fromIntegral y)
     $ VS.map paletteColorToGrayscale
     $ VS.convert

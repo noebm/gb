@@ -65,8 +65,8 @@ spriteLine gctrl mem oam pixels = do
           let objc = objPaletteValue pal $ getTileColor t (adjustTileCoord x) y
           forM_ objc $ VM.write pixels (fromIntegral $ obj ^. spritePositionX + x)
 
-generateLine :: PrimMonad m => GPUControl -> VideoRAM -> OAM -> m (V.Vector Word8)
-generateLine gctrl mem oam = do
+generateLine :: GPUControl -> VideoRAM -> OAM -> V.Vector Word8
+generateLine gctrl mem oam = V.create $ do
   pixels <- VM.new 160
   when (gctrl ^. displayBG) $ do
     let bgrd = backgroundLine gctrl mem
@@ -76,4 +76,4 @@ generateLine gctrl mem oam = do
     V.copy (VM.drop (fromIntegral offset) pixels) disp
   when (gctrl ^. displayOBJ) $ do
     spriteLine gctrl mem oam pixels
-  V.freeze pixels
+  return pixels
