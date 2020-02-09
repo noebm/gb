@@ -2,7 +2,8 @@ module Cartridge.Cartridge where
 
 import qualified Cartridge.Header as Header
 import Cartridge.Header ( MBCType(..) )
-import Cartridge.Controller
+import Cartridge.Bank.RomBank
+import Cartridge.Bank.RamBank
 import Cartridge.BootRom
 
 import qualified Data.ByteString as B
@@ -18,15 +19,20 @@ import Control.Monad
 
 import Utilities.Vector
 
+data MBC1Mode = MBC1_RomMode | MBC1_RamMode
 
 data CartridgeState = CartridgeState
   { header :: Header.Header
   , bootrom :: Maybe BootRom
   , bootromEnable :: Bool
   , romBanks :: RomBank
-  , romBankIndex :: Int
+
+  , mbc1mode :: MBC1Mode
+  , highBits :: Word8 -- 2 bit containing bit 5,6 of rom index or 0,1 of ram index
+  , lowerRomBankBits :: Word8
+
   , ramBanksEnable :: Bool
-  , ramBanks :: RamBank
+  , ramBanks :: Maybe RamBank
   }
 
 defaultCartridge :: CartridgeState
@@ -36,9 +42,13 @@ defaultCartridge =
   , bootrom = Nothing
   , bootromEnable = False
   , romBanks = defaultRomBank
-  , romBankIndex = 1
+
+  , mbc1mode = MBC1_RomMode
+  , highBits = 0x00
+  , lowerRomBankBits = 0x00
+
   , ramBanksEnable = False
-  , ramBanks = emptyRamBank
+  , ramBanks = Nothing
   }
 
 makeCartridge :: Maybe BootRom -> Rom -> CartridgeState
@@ -48,9 +58,13 @@ makeCartridge boot (Rom h xs) =
     , bootrom = boot
     , bootromEnable = isJust boot
     , romBanks = makeRomBanks xs
-    , romBankIndex = 1
+
+    , mbc1mode = MBC1_RomMode
+    , highBits = 0x00
+    , lowerRomBankBits = 0x00
+
     , ramBanksEnable = False
-    , ramBanks = newRamBanks 0
+    , ramBanks = newRamBanks (fromIntegral $ Header.headerRamBanks h)
     }
 
 loadCartridge :: Word16 -> CartridgeState -> Word8
@@ -64,7 +78,10 @@ loadCartridge addr s
   | otherwise = error "loadCartridge: address not in cartridge range"
 
 loadCartridgeRAM :: Word16 -> CartridgeState -> Word8
-loadCartridgeRAM addr s = if ramBanksEnable s then (`loadRam` addr) (ramBanks s) else 0xff
+loadCartridgeRAM addr s = maybe 0xff id $ do
+  guard (ramBanksEnable s)
+  banks <- ramBanks s
+  return $ loadRam banks addr
 
 loadCartridgeBootRomRegister :: CartridgeState -> Word8
 loadCartridgeBootRomRegister s = fromIntegral . fromEnum . not $ (bootromEnable s)
@@ -73,7 +90,7 @@ storeCartridge :: Word16 -> Word8 -> CartridgeState -> CartridgeState
 storeCartridge addr b c = storeMBC (view Header.mbcType $ Header.headerType (header c)) addr b c
 
 storeCartridgeRAM :: Word16 -> Word8 -> CartridgeState -> CartridgeState
-storeCartridgeRAM addr b c = c { ramBanks = storeRam addr b (ramBanks c) }
+storeCartridgeRAM addr b c = c { ramBanks = storeRam addr b <$> ramBanks c }
 
 storeCartridgeBootRomRegister :: Word8 -> CartridgeState -> CartridgeState
 storeCartridgeBootRomRegister b c = c { bootromEnable = b == 0 }
@@ -90,6 +107,28 @@ readRom fp = do
     h <- maybe (Left "readRom: reader parsing failed") Right $ Header.header bytes
     return (Rom h vs)
 
+romHighBits :: CartridgeState -> Word8
+romHighBits s = case mbc1mode s of
+  MBC1_RamMode -> 0x00
+  MBC1_RomMode -> (highBits s .&. 0x03) `shiftL` 5
+
+romBankIndex :: CartridgeState -> Word8
+romBankIndex s =
+  let lo = lowerRomBankBits s .&. 0x1f
+      hi = romHighBits s
+  in hi .|. lo
+
+ramBankIndex :: CartridgeState -> Word8
+ramBankIndex s = case mbc1mode s of
+  MBC1_RamMode -> highBits s .&. 0x03
+  MBC1_RomMode -> 0x00
+
+updateBanks :: CartridgeState -> CartridgeState
+updateBanks s = s
+  { romBanks = selectRomBank (fromIntegral $ romBankIndex s) (romBanks s)
+  , ramBanks = selectRamBank (fromIntegral $ ramBankIndex s) <$> ramBanks s
+  }
+
 storeMBC :: MBCType -> Word16 -> Word8 -> CartridgeState -> CartridgeState
 storeMBC OnlyROM addr _ s
   | addr < 0x8000 = s
@@ -97,11 +136,12 @@ storeMBC OnlyROM addr _ s
 storeMBC MBC1 addr b s
   | addr < 0x2000 = s { ramBanksEnable = b .&. 0xF == 0xA }
   | addr < 0x4000 =
-      let b' = let x = b .&. 0x1f in if x == 0 then 1 else x
-          idx' = (\idx -> (idx .&. 0xe0) .|. fromIntegral b') (romBankIndex s)
-      in s { romBankIndex = idx'
-           , romBanks = selectRomBank idx' (romBanks s)
-           }
-  | addr < 0x6000 = error "storeMBC: MBC1 higher rom/ram bits"
-  | addr < 0x8000 = error "storeMBC: MBC1 rom/ram mode select"
+    let s' = s { lowerRomBankBits = let x = b .&. 0x1f in if x == 0 then 1 else x }
+    in updateBanks s'
+  | addr < 0x6000 =
+    let s' = s { highBits = b .&. 0x03 }
+    in updateBanks s'
+  | addr < 0x8000 =
+    let s' = s { mbc1mode = if b `testBit` 0 then MBC1_RomMode else MBC1_RamMode }
+    in updateBanks s'
   | otherwise = error "storeMBC: out of range"

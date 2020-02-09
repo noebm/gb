@@ -29,7 +29,7 @@ makePrisms ''CartridgeOptions
 data MBCType
   = OnlyROM
   | MBC1
-  | MBC2
+--   | MBC2
   deriving Show
 
 data CartridgeType = CartridgeType
@@ -83,8 +83,8 @@ cartridgeType 1 = Right $ CartridgeType MBC1 []
 cartridgeType 2 = Right $ CartridgeType MBC1 [ HasRAM ]
 cartridgeType 3 = Right $ CartridgeType MBC1 [ HasRAM, IsPersistent ]
 
-cartridgeType 5 = Right $ CartridgeType MBC2 []
-cartridgeType 6 = Right $ CartridgeType MBC2 [ IsPersistent ]
+-- cartridgeType 5 = Right $ CartridgeType MBC2 []
+-- cartridgeType 6 = Right $ CartridgeType MBC2 [ IsPersistent ]
 cartridgeType x = Left $ "cartridgetype invalid / not supported " ++ show x
 
 romBanks :: ByteString -> Word
