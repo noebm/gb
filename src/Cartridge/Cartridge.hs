@@ -53,36 +53,30 @@ makeCartridge boot (Rom h xs) =
     , ramBanks = newRamBanks 0
     }
 
-{-# INLINE inCartridgeRange #-}
-inCartridgeRange :: (Num a, Ord a, Eq a) => a -> Bool
-inCartridgeRange addr
-  = addr < 0x8000    -- cartridge
-  || inRamRange addr -- ram banks
-  || addr == 0xff50  -- boot rom disable
-
-loadCartridge :: CartridgeState -> Word16 -> Word8
-loadCartridge s addr
+loadCartridge :: Word16 -> CartridgeState -> Word8
+loadCartridge addr s
   | addr <= 0xff  =
       let aux = (`loadRom` addr) (romBanks s)
       in maybe aux id $ do
         guard (bootromEnable s)
         loadBootRom addr <$> (bootrom s)
-  | 0xff < addr && addr < 0x8000 = loadRom (romBanks s) addr
-  | inRamRange addr =
-      if ramBanksEnable s
-        then
-        (`loadRam` addr) (ramBanks s)
-        else 0xff
-  | addr == 0xff50 =
-      fromIntegral . fromEnum . not $ (bootromEnable s)
-  | otherwise = error "loadCartridge: out of range"
+  | addr < 0x8000 = loadRom (romBanks s) addr
+  | otherwise = error "loadCartridge: address not in cartridge range"
+
+loadCartridgeRAM :: Word16 -> CartridgeState -> Word8
+loadCartridgeRAM addr s = if ramBanksEnable s then (`loadRam` addr) (ramBanks s) else 0xff
+
+loadCartridgeBootRomRegister :: CartridgeState -> Word8
+loadCartridgeBootRomRegister s = fromIntegral . fromEnum . not $ (bootromEnable s)
 
 storeCartridge :: Word16 -> Word8 -> CartridgeState -> CartridgeState
-storeCartridge addr b c
-  | addr < 0x8000 = storeMBC (view Header.mbcType $ Header.headerType (header c)) addr b c
-  | inRamRange addr = c { ramBanks = storeRam addr b (ramBanks c) }
-  | addr == 0xff50 = c { bootromEnable = b == 0 }
-  | otherwise = error "storeCartridge: out of range"
+storeCartridge addr b c = storeMBC (view Header.mbcType $ Header.headerType (header c)) addr b c
+
+storeCartridgeRAM :: Word16 -> Word8 -> CartridgeState -> CartridgeState
+storeCartridgeRAM addr b c = c { ramBanks = storeRam addr b (ramBanks c) }
+
+storeCartridgeBootRomRegister :: Word8 -> CartridgeState -> CartridgeState
+storeCartridgeBootRomRegister b c = c { bootromEnable = b == 0 }
 
 data Rom = Rom Header.Header (VU.Vector Word8)
 

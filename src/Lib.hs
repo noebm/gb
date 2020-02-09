@@ -5,6 +5,7 @@ import Control.Monad
 
 import Graphics
 import MonadEmulator
+import HardwareMonad
 import GB
 
 import Instruction.Interpret
@@ -17,14 +18,14 @@ import Cartridge.Cartridge
 import Cartridge.BootRom
 import GPU.GPUState
 import Timer
-import Joypad
+import Joypad (Joypad(..))
 
 import qualified SDL
 import Utilities.SDL (_KeyboardEvent, _QuitEvent)
 
 import Control.Lens
 
-updateCPU :: MonadEmulator m => m (Maybe Instruction, Word)
+updateCPU :: (HardwareMonad m, MonadEmulator m) => m (Maybe Instruction, Word)
 updateCPU = do
   halted <- halt
   if not halted then do
@@ -42,7 +43,7 @@ updateCPU = do
       then clearHalt >> return (Nothing, 20)
       else return (Nothing, 4)
 
-updateGraphics :: (MonadIO m , MonadEmulator m) => GraphicsContext -> Word -> m ()
+updateGraphics :: (MonadIO m , HardwareMonad m) => GraphicsContext -> Word -> m ()
 updateGraphics gfx cyc = updateGPU cyc $ \gpu req -> case req of
     Draw    -> renderGraphics gfx
     NewLine -> genPixelRow (image gfx) gpu
@@ -73,9 +74,7 @@ pressRelease _ _ = Nothing
 
 updateKeys :: SDL.KeyboardEventData -> GB IO ()
 updateKeys (SDL.KeyboardEventData _ press repeat keysym) =
-  forM_ ((,) <$> (keymap $ SDL.keysymKeycode keysym) <*> pressRelease press repeat) $ \joykey -> do
-    f <- updateJoypadGB joykey
-    when f $ modifyInterrupt $ interruptJoypad.interruptFlag .~ True
+  forM_ ((,) <$> (keymap $ SDL.keysymKeycode keysym) <*> pressRelease press repeat) updateJoypad
 
 mainloop :: FilePath -> IO ()
 mainloop fp' = do

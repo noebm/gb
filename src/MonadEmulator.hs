@@ -1,7 +1,9 @@
+{-# LANGUAGE DefaultSignatures #-}
 module MonadEmulator
   ( Reg8 (..)
   , Reg16 (..)
   , MonadEmulator (..)
+  , HardwareMonad (..)
   , storeReg16
   , storeAddr16
   , loadReg16
@@ -10,7 +12,6 @@ module MonadEmulator
   , updateGPU
   , updateTimer
   , processInterrupts
-  , getIEM , setIEM
   , showRegisters
 
   , word16
@@ -41,10 +42,10 @@ import Data.Int
 import Data.Maybe
 
 import CPU.Registers
-import GPU.GPUState
 import Interrupt.Interrupt
-import Timer
 import Interrupt.InterruptType
+
+import HardwareMonad
 
 showRegisters :: MonadEmulator m => m String
 showRegisters = do
@@ -75,11 +76,18 @@ store16LE b0 b1 w = let (h , l) = w ^. from word16 in b0 l >> b1 h
 class Monad m => MonadEmulator m where
   storeReg :: Reg8 -> Word8 -> m ()
   storeAddr   :: Word16 -> Word8 -> m ()
+  default storeAddr   :: HardwareMonad m => Word16 -> Word8 -> m ()
+  storeAddr = storeMem
+
   storePC :: Word16 -> m ()
   storeSP :: Word16 -> m ()
 
   loadReg :: Reg8 -> m Word8
+
   loadAddr :: Word16 -> m Word8
+  default loadAddr :: HardwareMonad m => Word16 -> m Word8
+  loadAddr = loadMem
+
   loadPC :: m Word16
   loadSP :: m Word16
 
@@ -90,14 +98,8 @@ class Monad m => MonadEmulator m where
   clearHalt :: m ()
   halt :: m Bool
 
-  getGPU :: m GPUState
-  putGPU :: GPUState -> m ()
-
-  getInterrupt :: m InterruptState
-  putInterrupt :: InterruptState -> m ()
-
-  getTimerState :: m TimerState
-  putTimerState :: TimerState -> m ()
+  getIEM :: m Bool
+  setIEM :: Bool -> m ()
 
 storeAddr16 :: MonadEmulator m => Word16 -> Word16 -> m ()
 storeAddr16 addr = store16LE (storeAddr addr) (storeAddr $ addr + 1)
@@ -115,40 +117,6 @@ loadReg16 r =
   let (r0, r1) = regPair r
   in load16LE (loadReg r1) (loadReg r0)
 
-modifyInterrupt f = putInterrupt . f =<< getInterrupt
-
-getIEM :: MonadEmulator m => m Bool
-getIEM = view interruptMasterEnableFlag <$> getInterrupt
-
-setIEM :: MonadEmulator m => Bool -> m ()
-setIEM b = modifyInterrupt $ interruptMasterEnableFlag .~ b
-
-updateGPU :: MonadEmulator m => Word -> (GPUState -> GPURequest -> m ()) -> m ()
-updateGPU cyc f = do
-  (flag, req,  gpu') <- updateGPUState cyc <$> getGPU
-  putGPU gpu'
-  forM_ req $ \req -> do
-    when (req == Draw) $ modifyInterrupt $ interruptVBlank.interruptFlag .~ True
-    f gpu' req
-  when flag $ modifyInterrupt $ interruptLCD.interruptFlag .~ True
-
-updateTimer :: MonadEmulator m => Word -> m ()
-updateTimer cycles = do
-  ts <- getTimerState
-  let (overflow, ts') = updateTimerState cycles ts
-  putTimerState ts'
-  when overflow $
-    modifyInterrupt $ interruptTimer.interruptFlag .~ True
-
-gpuInterrupts :: MonadEmulator m => GPUState -> m ()
-gpuInterrupts gpu = do
-  let conf = gpuConfig gpu
-  let lcdInterrupts = [ _gpuOAMInterrupt, _gpuHblankInterrupt, _gpuLineCompareInterrupt ]
-  when (any ($ conf) lcdInterrupts) $
-    modifyInterrupt $ interruptLCD.interruptFlag .~ True
-  when (_gpuVblankInterrupt conf) $
-    modifyInterrupt $ interruptVBlank.interruptFlag .~ True
-
 {-# INLINE aux0 #-}
 {-# INLINE aux1 #-}
 {-# INLINE aux2 #-}
@@ -158,6 +126,28 @@ aux1 :: Functor m => (a -> m b) -> (a -> StateT s m b)
 aux1 f  = aux0 . f
 aux2 :: Functor m => (a -> b -> m c) -> (a -> b -> StateT s m c)
 aux2 f = aux1 . f
+
+instance HardwareMonad m => HardwareMonad (StateT s m) where
+  getGPU = aux0 getGPU
+  putGPU = aux1 putGPU
+
+  getInterrupt = aux0 getInterrupt
+  putInterrupt = aux1 putInterrupt
+
+  getTimerState = aux0 getTimerState
+  putTimerState = aux1 putTimerState
+
+  getJoypad = aux0 getJoypad
+  putJoypad = aux1 putJoypad
+
+  getCartridge = aux0 getCartridge
+  putCartridge = aux1 putCartridge
+
+  readRAM = aux1 readRAM
+  writeRAM = aux2 writeRAM
+
+  readHRAM = aux1 readHRAM
+  writeHRAM = aux2 writeHRAM
 
 instance MonadEmulator m => MonadEmulator (StateT s m) where
   storeReg = aux2 storeReg
@@ -170,15 +160,6 @@ instance MonadEmulator m => MonadEmulator (StateT s m) where
   loadPC = aux0 loadPC
   loadSP = aux0 loadSP
 
-  getGPU = aux0 getGPU
-  putGPU = aux1 putGPU
-
-  getInterrupt = aux0 getInterrupt
-  putInterrupt = aux1 putInterrupt
-
-  getTimerState = aux0 getTimerState
-  putTimerState = aux1 putTimerState
-
   setStop = aux0 setStop
   stop    = aux0 stop
 
@@ -186,22 +167,18 @@ instance MonadEmulator m => MonadEmulator (StateT s m) where
   clearHalt = aux0 clearHalt
   halt = aux0 halt
 
-processInterrupts :: MonadEmulator m => m Bool
+  getIEM = aux0 getIEM
+  setIEM = aux1 setIEM
+
+processInterrupts :: (HardwareMonad m, MonadEmulator m) => m Bool
 processInterrupts = do
   int <- checkForInterrupts <$> getInterrupt
   forM_ int $ \i -> do
-    s <- getInterrupt
     h <- halt
-    when (not h) $ putInterrupt (s & interrupt i . interruptFlag .~ False)
+    unless h $ modifyInterrupt (interrupt i . interruptFlag .~ False)
     setIEM False
     call (interruptAddress i)
   return $ isJust int
-
-{-# INLINE word16 #-}
-word16 :: Iso' (Word8, Word8) Word16
-word16 = iso
-  (\(h,l) -> shift (fromIntegral h) 8 .|. fromIntegral l)
-  (\w -> (fromIntegral $ shift (w .&. 0xff00) (negate 8), fromIntegral $ w .&. 0x00ff))
 
 {-# INLINE flagZ #-}
 {-# INLINE flagN #-}

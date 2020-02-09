@@ -6,7 +6,6 @@ module Interrupt.Interrupt
   , interruptTimer
   , interruptSerial
   , interruptJoypad
-  , interruptMasterEnableFlag
 
   , defaultInterruptState
 
@@ -36,13 +35,12 @@ data InterruptState = InterruptState
   , _interruptTimer  :: InterruptType
   , _interruptSerial :: InterruptType
   , _interruptJoypad :: InterruptType
-  , _interruptMasterEnableFlag :: Bool
   } deriving (Show)
 
 makeLenses ''InterruptState
 
 defaultInterruptState :: InterruptState
-defaultInterruptState = InterruptState d d d d d False
+defaultInterruptState = InterruptState d d d d d
   where d = defaultInterruptType
 
 data Interrupt = INTVBLANK | INTLCD | INTTIMER | INTSERIAL | INTJOYPAD
@@ -72,7 +70,6 @@ interrupts f s
     <*> aux INTTIMER
     <*> aux INTSERIAL
     <*> aux INTJOYPAD
-    <*> pure (s ^. interruptMasterEnableFlag)
   where aux i = indexed f i (s ^. interrupt i)
 
 -- find first set interrupt ordered by priority

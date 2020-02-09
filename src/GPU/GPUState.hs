@@ -5,11 +5,11 @@ module GPU.GPUState
   , defaultGPUState
   , updateGPUState
   , dmaTransfer
-  , loadGPU
-  , storeGPU
-  , inGPURange
   , VideoRAM
   , OAM
+
+  , loadGPURAM, loadGPUOAM, loadGPURegisters
+  , storeGPURAM, storeGPUOAM, storeGPURegisters
   )
 where
 
@@ -46,26 +46,16 @@ updateGPUState cycles s = do
     in (f , req, s { gpuConfig = c })
     else (False, Nothing, s)
 
-inVideoRAM, inOAM, inGPUMMIO, inGPURange :: (Num a, Ord a) => a -> Bool
-inVideoRAM addr = 0x8000 <= addr && addr < 0xA000
-inOAM      addr = 0xFE00 <= addr && addr < 0xFF00
-inGPUMMIO  addr = 0xFF40 <= addr && addr < 0xFF50
-inGPURange addr = inVideoRAM addr || inOAM addr || inGPUMMIO addr
-{-# INLINE inVideoRAM #-}
-{-# INLINE inOAM #-}
-{-# INLINE inGPUMMIO #-}
-{-# INLINE inGPURange #-}
+loadGPURAM :: Word16 -> GPUState -> Word8
+loadGPURAM addr g = maybe 0xff id $ do
+  guard (_gpuMode (gpuConfig g) /= ModeVRAM)
+  return $ loadVideoRAM (gpuVideoRAM g) addr
 
-loadGPU :: GPUState -> Word16 -> Word8
-loadGPU g addr
-  | inVideoRAM addr = maybe 0xff id $ do
-      guard (_gpuMode (gpuConfig g) /= ModeVRAM)
-      return $ loadVideoRAM (gpuVideoRAM g) addr
-  | inOAM addr      = maybe 0xff id $ do
-      loadOAM (gpuConfig g) (gpuOAM g) addr
-  | inGPUMMIO addr  = loadGPUControl conf addr
-  | otherwise = error "loadGPU: not in range"
-  where conf = gpuConfig g
+loadGPUOAM :: Word16 -> GPUState -> Word8
+loadGPUOAM addr g = maybe 0xff id $ loadOAM (gpuConfig g) (gpuOAM g) addr
+
+loadGPURegisters :: Word16 -> GPUState -> Word8
+loadGPURegisters addr g = loadGPUControl (gpuConfig g) addr
 
 -- since we dont have access to MonadEmulator yet
 -- this seems the best way
@@ -74,12 +64,14 @@ dmaTransfer access baseaddr g = do
   vec <- VU.generateM 0xa0 $ access . fromIntegral . (fromIntegral baseaddr +)
   return $ g { gpuOAM = directMemoryAccessOAM vec }
 
-storeGPU :: GPUState -> Word16 -> Word8 -> GPUState
-storeGPU g@GPUState { gpuConfig = conf } addr b
-  | inVideoRAM addr = maybe g (\x -> g { gpuVideoRAM = x }) $ do
-      guard (_gpuMode (gpuConfig g) /= ModeVRAM)
-      return $ storeVideoRAM (gpuVideoRAM g) addr b
-  | inOAM addr && addr /= 0xff46 = maybe g (\oam -> g { gpuOAM = oam }) $
-      storeOAM (gpuConfig g) addr b (gpuOAM g)
-  | inGPUMMIO addr = g { gpuConfig = storeGPUControl conf addr b }
-  | otherwise = error "storeGPU: not in range"
+storeGPURAM :: Word16 -> Word8 -> GPUState -> GPUState
+storeGPURAM addr b g@GPUState { gpuConfig = conf } = maybe g (\x -> g { gpuVideoRAM = x }) $ do
+  guard (_gpuMode (gpuConfig g) /= ModeVRAM)
+  return $ storeVideoRAM (gpuVideoRAM g) addr b
+
+storeGPUOAM :: Word16 -> Word8 -> GPUState -> GPUState
+storeGPUOAM addr b g@GPUState { gpuConfig = conf }
+  = maybe g (\oam -> g { gpuOAM = oam }) $ storeOAM (gpuConfig g) addr b (gpuOAM g)
+
+storeGPURegisters :: Word16 -> Word8 -> GPUState -> GPUState
+storeGPURegisters addr b g = g { gpuConfig = storeGPUControl (gpuConfig g) addr b }
