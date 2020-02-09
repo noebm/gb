@@ -1,7 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Timer
   ( ClockSpeed(..)
-  , Timer
   , TimerState
   , defaultTimerState
   , updateTimerState
@@ -17,7 +16,7 @@ import Data.Bits.Lens
 import Data.Bits
 import Data.Word
 
-import Control.Monad.State
+import Control.Monad.State.Strict
 
 -- | Possible timer speeds relative to cpu frequency.
 -- For example Clock16 means that the timer is running at 1 / 16 the speed of the cpu.
@@ -25,37 +24,24 @@ data ClockSpeed = Clock16 | Clock64 | Clock256 | Clock1024
   deriving (Show)
 
 data TimerState = TimerState
-  { _divider :: !Divider
-  , _timer   :: !Timer
-  , _clockSpeed :: !ClockSpeed
+  { _divider    :: !Word16
+  , _counter    :: Word8
+  , _overflow   :: Bool
+  , _modulo     :: Word8
+  , _enabled    :: Bool
+  , _clockSpeed :: ClockSpeed
   }
   deriving (Show)
 
-type Divider = Word16
-
-data Timer = Timer
-  { _counter :: Word8
-  , _overflow :: Bool
-  , _modulo  :: Word8
-  , _enabled :: Bool
-  }
-  deriving (Show)
-
-makeLenses ''Timer
 makeLenses ''TimerState
-
-defaultTimer :: Timer
-defaultTimer = Timer
-  { _counter = 0
-  , _modulo = 0
-  , _overflow = False
-  , _enabled = False
-  }
 
 defaultTimerState :: TimerState
 defaultTimerState = TimerState
   { _divider = 0
-  , _timer = defaultTimer
+  , _counter = 0
+  , _modulo = 0
+  , _overflow = False
+  , _enabled = False
   , _clockSpeed = Clock1024
   }
 
@@ -88,12 +74,9 @@ clockspeedBit Clock256  = 7
 clockspeedBit Clock1024 = 9
 
 shouldIncreaseCounter :: State TimerState Bool
-shouldIncreaseCounter = do
-  d <- use divider
-  bit <- uses clockSpeed clockspeedBit
-  return $ d ^. bitAt bit
+shouldIncreaseCounter = testBit <$> use divider <*> uses clockSpeed clockspeedBit
 
-increaseCounter :: State Timer ()
+increaseCounter :: State TimerState ()
 increaseCounter = do
   c <- counter <<+= 1
   c' <- use counter
@@ -101,43 +84,44 @@ increaseCounter = do
 
 tick :: State TimerState Bool
 tick = do
-  didOverflow <- use (timer.overflow)
-  oldTIMABit  <- shouldIncreaseCounter
-  isEnabled   <- use (timer.enabled)
-  divider += 1
+  didOverflow <- use overflow
   -- delayed overflow
-  when didOverflow $ do
-    zoom timer $ do
-      assign counter =<< use modulo
-      overflow .= False
-  unless didOverflow $ when (isEnabled && oldTIMABit) $ do
-    newTIMABit <- shouldIncreaseCounter
-    when (not newTIMABit) $ zoom timer $ increaseCounter
+  if didOverflow then do
+    divider += 1
+    counter <~ use modulo
+    overflow .= False
+    else do
+    oldTIMABit  <- shouldIncreaseCounter
+    isEnabled   <- use enabled
+    divider += 1
+    when (isEnabled && oldTIMABit) $ do
+      newTIMABit <- shouldIncreaseCounter
+      unless newTIMABit increaseCounter
   return didOverflow
 
 updateTimerState :: Word -> TimerState -> (Bool, TimerState)
 updateTimerState bus_cycles = runState $
-  any id <$> replicateM (fromIntegral bus_cycles) tick
+  or <$> replicateM (fromIntegral bus_cycles) tick
 
 inTimerRange :: Word16 -> Bool
 inTimerRange addr = 0xff04 <= addr && addr < 0xff08
 
 loadTimer :: TimerState -> Word16 -> Word8
 loadTimer t 0xff04 = views divider (fromIntegral . (`shiftR` 6)) t
-loadTimer t 0xff05 = view (timer.counter) t
-loadTimer t 0xff06 = view (timer.modulo) t
+loadTimer t 0xff05 = view counter t
+loadTimer t 0xff06 = view modulo t
 loadTimer t 0xff07 = views clockSpeed loadClockSpeed t
-                   & bitAt 2 .~ view (timer.enabled) t
+                   & bitAt 2 .~ view enabled t
 loadTimer _ _ = error "loadTimer: not in range"
 
 storeTimer :: Word16 -> Word8 -> TimerState -> TimerState
 storeTimer 0xff04 _ = execState $ do
   oldTIMABit  <- shouldIncreaseCounter
-  zoom timer increaseCounter
+  increaseCounter
   divider .= 0x0000
-storeTimer 0xff05 b = timer.counter .~ b
-storeTimer 0xff06 b = timer.modulo .~ b
+storeTimer 0xff05 b = counter .~ b
+storeTimer 0xff06 b = modulo .~ b
 storeTimer 0xff07 b = \ t -> t
-                    & timer.enabled .~ (b `testBit` 2)
+                    & enabled .~ (b `testBit` 2)
                     & clockSpeed .~ storeClockspeed b
 storeTimer _ _ = error "storeTimer: not in range"
