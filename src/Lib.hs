@@ -81,6 +81,7 @@ mainloop fp' = do
 
   let bootStrapName = "DMG_ROM.bin"
   cart <- setupCartridge (Just $ "./" ++ bootStrapName) fp'
+  gfx <- initializeGraphics
 
   runGB cart $ do
     let
@@ -89,20 +90,16 @@ mainloop fp' = do
       -- logger = Just $ \addr i -> do
       --   when (addr > 0xFF) $ putStrLn $ printf "0x%04x: %s" addr (show i)
 
-    let update fx = do
+    let update = do
           replicateM 100 $ do
             pc <- loadPC
             (i, dt) <- updateCPU
             forM_ logger $ \f -> liftIO $ f pc i
-            updateGraphics fx dt
+            updateGraphics gfx dt
             updateTimer dt
 
           events <- fmap SDL.eventPayload <$> SDL.pollEvents
-          let kbevent = events ^.. folded . _KeyboardEvent
-          forM_ kbevent $ \key -> do
-            updateKeys key
-          unless (isn't _Empty $ events ^.. folded . _QuitEvent) $
-            update fx
+          mapMOf_ (folded . _KeyboardEvent) updateKeys events
+          unless (has (folded . _QuitEvent) events) update
 
-    gfx <- initializeGraphics
-    update gfx
+    update
