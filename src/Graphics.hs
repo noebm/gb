@@ -2,13 +2,17 @@
 module Graphics where
 
 import Control.Monad.IO.Class
+import Control.Lens
+
 import SDL.Video
 import SDL.Vect
 import Data.Word
 import Data.Text (Text)
+import Data.Foldable
 
 import GPU.GPUState
 import GPU.Drawing
+import GPU.Palette
 
 import qualified Data.Vector.Storable as VS
 
@@ -70,3 +74,17 @@ genPixelRow im g = do
     $ VS.map paletteColorToGrayscale
     $ VS.convert
     $ v
+
+drawTileMap :: MonadIO m => Bool -> Bool -> GPUState -> GraphicsContext -> m ()
+drawTileMap tiledata tilemap gpu dbg = do
+  let pixelsPerLine = 256
+  let pixelsPerCol  = 256
+  let pixels = VS.generate (pixelsPerLine * pixelsPerCol) $ \idx ->
+        let (y , x) = idx `divMod` pixelsPerLine & each %~ fromIntegral
+            (Color p) = pixel (gpuVideoRAM gpu) tiledata tilemap (V2 x y)
+                        --- (gpuConfig gpu ^. gpuTileDataSelect)
+                        --- (gpuConfig gpu ^. gpuBGTileMapSelect)
+        in paletteColorToGrayscale p
+  forM_ [0..pixelsPerCol-1] $ \y -> do
+    updateTextureLine (image dbg) y (VS.slice (y * pixelsPerLine) pixelsPerLine pixels)
+  renderGraphics dbg

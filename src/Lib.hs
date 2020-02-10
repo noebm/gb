@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Lib where
 
 import Control.Monad.IO.Class
@@ -21,7 +22,7 @@ import Timer
 import Joypad (Joypad(..))
 
 import qualified SDL
-import Utilities.SDL (_KeyboardEvent, _QuitEvent)
+import Utilities.SDL (_KeyboardEvent, _QuitEvent, _WindowClosedEvent)
 
 import Control.Lens
 
@@ -42,11 +43,6 @@ updateCPU = do
     if f
       then clearHalt >> return (Nothing, 20)
       else return (Nothing, 4)
-
-updateGraphics :: (MonadIO m , HardwareMonad m) => GraphicsContext -> Word -> m ()
-updateGraphics gfx cyc = updateGPU cyc $ \gpu req -> case req of
-    Draw    -> renderGraphics gfx
-    NewLine -> genPixelRow (image gfx) gpu
 
 -- setupCartridge :: Maybe FilePath -> Maybe FilePath -> IO (CartridgeState )
 setupCartridge fpBoot fpRom = do
@@ -76,12 +72,21 @@ updateKeys :: SDL.KeyboardEventData -> GB IO ()
 updateKeys (SDL.KeyboardEventData _ press repeat keysym) =
   forM_ ((,) <$> (keymap $ SDL.keysymKeycode keysym) <*> pressRelease press repeat) updateJoypad
 
-mainloop :: FilePath -> IO ()
-mainloop fp' = do
+mainloop :: FilePath -> Bool -> Bool -> IO ()
+mainloop fp' bgrd wnd = do
 
   let bootStrapName = "DMG_ROM.bin"
   cart <- setupCartridge (Just $ "./" ++ bootStrapName) fp'
   gfx <- initializeGraphics
+
+  bgrdTilemapWindow <-
+    if bgrd
+    then Just <$> newWindow "background tilemap" (pure 256) (Just 1)
+    else return Nothing
+  wndTilemapWindow <-
+    if wnd
+    then Just <$> newWindow "window tilemap"     (pure 256) (Just 1)
+    else return Nothing
 
   runGB cart $ do
     let
@@ -95,11 +100,19 @@ mainloop fp' = do
             pc <- loadPC
             (i, dt) <- updateCPU
             forM_ logger $ \f -> liftIO $ f pc i
-            updateGraphics gfx dt
+
+            updateGPU dt $ \gpu req -> case req of
+              Draw    -> do
+                renderGraphics gfx
+                let conf = gpuConfig gpu
+                mapM_ (drawTileMap (conf ^. gpuTileDataSelect) (conf ^. gpuBGTileMapSelect) gpu) bgrdTilemapWindow
+                mapM_ (drawTileMap (conf ^. gpuTileDataSelect) (conf ^. gpuWindowTileMapSelect) gpu) wndTilemapWindow
+
+              NewLine -> genPixelRow (image gfx) gpu
             updateTimer dt
 
           events <- fmap SDL.eventPayload <$> SDL.pollEvents
           mapMOf_ (folded . _KeyboardEvent) updateKeys events
-          unless (has (folded . _QuitEvent) events) update
+          unless (has (folded . _QuitEvent) events || has (folded . _WindowClosedEvent) events) update
 
     update

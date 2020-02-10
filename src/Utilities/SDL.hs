@@ -16,6 +16,12 @@ _KeyboardEvent = prism SDL.KeyboardEvent $ \x -> case x of
 _QuitEvent :: Prism' SDL.EventPayload ()
 _QuitEvent = only SDL.QuitEvent
 
+{-# INLINE _WindowClosedEvent #-}
+_WindowClosedEvent :: Prism' SDL.EventPayload SDL.WindowClosedEventData
+_WindowClosedEvent = prism SDL.WindowClosedEvent $ \x -> case x of
+  SDL.WindowClosedEvent e -> Right e
+  _ -> Left x
+
 {- SDL.KeyboardEventData -}
 keyMotion :: Lens' SDL.KeyboardEventData SDL.InputMotion
 keyMotion = lens SDL.keyboardEventKeyMotion (\s x -> s { SDL.keyboardEventKeyMotion = x })
