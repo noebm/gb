@@ -2,6 +2,8 @@
 module Cartridge.Bank.Bank
   ( Bank, Banks
   , BankState
+  , isBankIndex
+
   , activeBank
 
   , makeBanks
@@ -39,6 +41,4 @@ makeBanks i xs
   | otherwise = error "makeBanks: active index out of range"
 
 swapBank :: Int -> BankState -> BankState
-swapBank i s
-  | isBankIndex i (s ^. banks) = s & activeBankIndex .~ i
-  | otherwise = error "swapBank: active index out of range"
+swapBank i s = s & activeBankIndex .~ (i `mod` V.length (s ^. banks))

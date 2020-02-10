@@ -15,6 +15,7 @@ where
 import qualified Data.ByteString as B
 import Data.ByteString (ByteString)
 import Data.Word
+import Data.Bits
 
 import Control.Lens
 import Control.Monad
@@ -88,7 +89,8 @@ cartridgeType 3 = Right $ CartridgeType MBC1 [ HasRAM, IsPersistent ]
 cartridgeType x = Left $ "cartridgetype invalid / not supported " ++ show x
 
 romBanks :: ByteString -> Word
-romBanks bs = 4 * fromIntegral (bs `B.index` 0x148)
+romBanks bs = case bs `B.index` 0x148 of
+  x -> 2 `shiftL` fromIntegral x
 
 locale :: ByteString -> Either String Word8
 locale bs = Right $ bs `B.index` 0x14A

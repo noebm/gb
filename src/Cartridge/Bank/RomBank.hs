@@ -4,7 +4,8 @@ module Cartridge.Bank.RomBank
   ( RomBank
   , defaultRomBank
   , makeRomBanks
-  , selectRomBank
+  , selectRomBank1
+  , selectRomBank2
   , loadRom
   )
 where
@@ -21,10 +22,10 @@ import Text.Printf
 
 import Cartridge.Bank.Bank
 
-data RomBank = RomBank Bank BankState
+data RomBank = RomBank Int Int Banks
 
 defaultRomBank :: RomBank
-defaultRomBank = makeRomBanks (VU.replicate 0x8000 0x00)
+defaultRomBank = makeRomBanks 2 (VU.replicate 0x8000 0x00)
 
 splitRomBanks :: VU.Vector Word8 -> Maybe (VU.Vector Word8, VU.Vector Word8)
 splitRomBanks xs = do
@@ -33,16 +34,22 @@ splitRomBanks xs = do
   when (VU.length ys /= 0x4000) $ error $ printf "splitRomBanks: invalid length %x" (VU.length ys)
   return (ys , zs)
 
-makeRomBanks :: VU.Vector Word8 -> RomBank
-makeRomBanks xs = do
+makeRomBanks :: Word -> VU.Vector Word8 -> RomBank
+makeRomBanks romBankCount xs =
   let vs = V.unfoldr splitRomBanks xs
-  RomBank (vs V.! 0) (makeBanks 1 vs)
+  in
+    if V.length vs /= fromIntegral romBankCount
+    then error $ "makeRomBanks: should have " ++ show romBankCount ++ " banks, but got " ++ show (V.length vs)
+    else RomBank 0 1 vs
 
-selectRomBank :: Int -> RomBank -> RomBank
-selectRomBank i (RomBank s0 s) = RomBank s0 (swapBank i s)
+selectRomBank1 :: Int -> RomBank -> RomBank
+selectRomBank1 i0 (RomBank _ i1 s) = RomBank (i0 `mod` V.length s) i1 s
+
+selectRomBank2 :: Int -> RomBank -> RomBank
+selectRomBank2 i1 (RomBank i0 _ s) = RomBank i0 (i1 `mod` V.length s) s
 
 loadRom :: RomBank -> Word16 -> Word8
-loadRom (RomBank s0 s) addr
-  | addr < 0x4000 = s0 VU.! fromIntegral addr
-  | addr < 0x8000 = s ^?! activeBank . ix (fromIntegral addr .&. 0x3fff)
+loadRom (RomBank i0 i1 s) addr
+  | addr < 0x4000 = s ^?! ix i0 . ix (fromIntegral addr)
+  | addr < 0x8000 = s ^?! ix i1 . ix (fromIntegral addr .&. 0x3fff)
   | otherwise = error "loadRom: index out of range"

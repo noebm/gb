@@ -11,7 +11,6 @@ where
 
 import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as VU
-import qualified Data.Vector.Unboxed.Mutable as VUM
 
 import Control.Lens
 import Control.Monad
@@ -44,6 +43,6 @@ loadRam (RamBank s) addr
 storeRam :: Word16 -> Word8 -> RamBank -> RamBank
 storeRam addr b (RamBank s)
   | inRamRange addr = s
-    & activeBank %~ VU.modify (\v -> VUM.write v (fromIntegral addr .&. 0x1fff) b)
+    & activeBank . ix (fromIntegral addr .&. 0x1fff) .~ b
     & RamBank
   | otherwise = error "storeRam: index out of range"
