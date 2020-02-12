@@ -1,13 +1,12 @@
 module Instruction.Instruction where
 
-import CPU.Registers
 import Instruction.Time
-
-import Data.Traversable
 
 import Text.Printf
 import Data.Word
 import Data.Bits
+
+import MonadEmulator
 
 -- | decompose byte to xxyyyzzz
 byteCodeDecompose :: Word8 -> (Word8, Word8, Word8)
@@ -143,12 +142,9 @@ flag w = case w of
   _ -> error "flag: invalid argument"
 
 
-parseInstructionM :: Monad m => m Word8 -> m Instruction
-parseInstructionM get = do
-  b <- get
-  if b == 0xCB
-    then parseExtendedInstruction <$> get
-    else return $ parseInstruction b
+parseInstructionM :: MonadEmulator m => Word8 -> m Instruction
+parseInstructionM 0xCB = parseExtendedInstruction <$> byte
+parseInstructionM b = return $ parseInstruction b
 
 parseExtendedInstruction :: Word8 -> Instruction
 parseExtendedInstruction b =

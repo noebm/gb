@@ -33,7 +33,7 @@ data GBState s = GBState
   , cpu :: MVector s Word8
   , stackpointer   :: STRef s Word16
   , programCounter :: STRef s Word16
-  , iem :: STRef s Bool
+  , ime :: STRef s Bool
 
   , shouldStop   :: STRef s Bool
   , isHalted     :: STRef s Bool
@@ -145,10 +145,6 @@ instance MonadIO m => MonadEmulator (GB m) where
   loadSP = readState stackpointer
   loadPC = readState programCounter
 
-  setHalt = writeState isHalted True
-  clearHalt = writeState isHalted False
-  halt = readState isHalted
-
   setStop = GBT $ do
     s <- asks shouldStop
     liftIO $ stToIO $ writeSTRef s True
@@ -157,5 +153,5 @@ instance MonadIO m => MonadEmulator (GB m) where
     s <- asks shouldStop
     liftIO $ stToIO $ readSTRef s
 
-  getIEM = readState iem
-  setIEM = writeState iem
+  getIME = readState ime
+  setIME = writeState ime

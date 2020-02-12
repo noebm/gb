@@ -11,7 +11,10 @@ module MonadEmulator
 
   , updateGPU
   , updateTimer
-  , processInterrupts
+
+  , StepInfo (..)
+  , prefetch
+  , anyInterrupts, serviceInterrupt
   , showRegisters
 
   , word16
@@ -21,6 +24,7 @@ module MonadEmulator
   , byte, word, sbyte
 
   , modifyInterrupt
+
   , addRelative
   , jump, jumpRelative
   , push, pop
@@ -30,16 +34,13 @@ module MonadEmulator
 where
 
 import Control.Lens
-import Control.Monad
 import Control.Monad.State
 
 import Text.Printf
 
 import Data.Bits.Lens
-import Data.Bits
 import Data.Word
 import Data.Int
-import Data.Maybe
 
 import CPU.Registers
 import Interrupt.Interrupt
@@ -94,12 +95,8 @@ class Monad m => MonadEmulator m where
   setStop :: m ()
   stop :: m Bool
 
-  setHalt :: m ()
-  clearHalt :: m ()
-  halt :: m Bool
-
-  getIEM :: m Bool
-  setIEM :: Bool -> m ()
+  getIME :: m Bool
+  setIME :: Bool -> m ()
 
 storeAddr16 :: MonadEmulator m => Word16 -> Word16 -> m ()
 storeAddr16 addr = store16LE (storeAddr addr) (storeAddr $ addr + 1)
@@ -163,22 +160,26 @@ instance MonadEmulator m => MonadEmulator (StateT s m) where
   setStop = aux0 setStop
   stop    = aux0 stop
 
-  setHalt = aux0 setHalt
-  clearHalt = aux0 clearHalt
-  halt = aux0 halt
+  getIME = aux0 getIME
+  setIME = aux1 setIME
 
-  getIEM = aux0 getIEM
-  setIEM = aux1 setIEM
+data StepInfo = PendingInterrupt !Interrupt | Halt | Running {-# UNPACK #-} !Word8
+  deriving Eq
 
-processInterrupts :: (HardwareMonad m, MonadEmulator m) => m Bool
-processInterrupts = do
-  int <- checkForInterrupts <$> getInterrupt
-  forM_ int $ \i -> do
-    h <- halt
-    unless h $ modifyInterrupt (interrupt i . interruptFlag .~ False)
-    setIEM False
-    call (interruptAddress i)
-  return $ isJust int
+prefetch :: (HardwareMonad m, MonadEmulator m) => m StepInfo
+prefetch = do
+  i <- anyInterrupts
+  ime <- getIME
+  maybe (Running <$> byte) (return . PendingInterrupt) (guard ime >> i)
+
+anyInterrupts :: (HardwareMonad m, MonadEmulator m) => m (Maybe Interrupt)
+anyInterrupts = checkForInterrupts <$> getInterrupt
+
+serviceInterrupt :: (HardwareMonad m, MonadEmulator m) => Interrupt -> m ()
+serviceInterrupt i = do
+  modifyInterrupt (interrupt i . interruptFlag .~ False)
+  setIME False
+  call (interruptAddress i)
 
 {-# INLINE flagZ #-}
 {-# INLINE flagN #-}

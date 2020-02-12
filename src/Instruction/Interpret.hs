@@ -1,7 +1,6 @@
 module Instruction.Interpret where
 
 import Data.Word
-import Data.Int
 import Data.Bits
 import Data.Bits.Lens (bitAt)
 
@@ -167,18 +166,18 @@ shiftRightArithmetic v =
       c' = v `testBit` 0
   in (v' & bitAt 7 .~ (v `testBit` 7), c')
 
-{-# SPECIALISE interpretM :: Instruction -> GB IO Word #-}
-interpretM :: MonadEmulator m => Instruction -> m Word
+{-# SPECIALISE interpretM :: Instruction -> GB IO (Word , StepInfo) #-}
+interpretM :: (HardwareMonad m, MonadEmulator m) => Instruction -> m (Word , StepInfo)
 interpretM instr@(Instruction _ t op) = case op of
-  NOP -> return $ getTime True t
+  NOP -> (,) (getTime True t) <$> prefetch
 
   LD from to -> do
     setOut8 to =<< getIn8 from
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   LD16 from to -> do
     setOut16 to =<< getIn16 from
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   LD16_SP_HL -> do
     sp <- loadSP
@@ -188,7 +187,7 @@ interpretM instr@(Instruction _ t op) = case op of
     storeReg F $ 0x00
       & flagC .~ ((v .&. 0xFF) < (sp .&. 0xFF))
       & flagH .~ ((v .&. 0x0F) < (sp .&. 0x0F))
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   AND arg -> do
     v <- getIn8 arg
@@ -197,7 +196,7 @@ interpretM instr@(Instruction _ t op) = case op of
     storeReg A a'
     modifyFlags $ \_ -> 0x20
       & flagZ .~ (a' == 0)
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   OR arg -> do
     v <- getIn8 arg
@@ -206,7 +205,7 @@ interpretM instr@(Instruction _ t op) = case op of
     storeReg A a'
     modifyFlags $ \_ -> 0x00
       & flagZ .~ (a' == 0)
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   XOR arg -> do
     v <- getIn8 arg
@@ -215,7 +214,7 @@ interpretM instr@(Instruction _ t op) = case op of
     storeReg A (a `xor` v)
     modifyFlags $ \_ -> 0x00
       & flagZ .~ (a' == 0)
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   {- 0xCB instructions and specialization for A -}
   BIT y arg -> do
@@ -224,22 +223,22 @@ interpretM instr@(Instruction _ t op) = case op of
       & flagZ .~ not (v `testBit` fromIntegral y)
       & flagN .~ False
       & flagH .~ True
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   SWAP arg -> do
     x <- getIn8 (outToIn arg)
     let x' = ((x `shiftL` 4) .&. 0xF0) .|. ((x `shiftR` 4) .&. 0x0F)
     setOut8 arg x'
     modifyFlags $ \_ -> 0x00 & flagZ .~ (x' == 0)
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   RES bidx arg -> do
     setOut8 arg . (`clearBit` fromIntegral bidx) =<< getIn8 (outToIn arg)
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   SET bidx arg -> do
     setOut8 arg . (`setBit` fromIntegral bidx) =<< getIn8 (outToIn arg)
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   RL arg -> do
     v <- getIn8 (outToIn arg)
@@ -247,7 +246,7 @@ interpretM instr@(Instruction _ t op) = case op of
     let (v' , c') = rotateLeft v c
     setOut8 arg v'
     storeReg F (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   RLA -> do
     v <- loadReg A
@@ -255,7 +254,7 @@ interpretM instr@(Instruction _ t op) = case op of
     let (v' , c') = rotateLeft v c
     storeReg A v'
     storeReg F (0x00 & flagC .~ c')
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   RR arg -> do
     v <- getIn8 (outToIn arg)
@@ -263,7 +262,7 @@ interpretM instr@(Instruction _ t op) = case op of
     let (v' , c') = rotateRight v c
     setOut8 arg v'
     storeReg F (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   RRA -> do
     v <- loadReg A
@@ -271,35 +270,35 @@ interpretM instr@(Instruction _ t op) = case op of
     let (v' , c') = rotateRight v c
     storeReg A v'
     storeReg F (0x00 & flagC .~ c')
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   RLCA -> do
     v <- loadReg A
     let (v' , c') = rotateLeftCarry v
     storeReg A v'
     storeReg F (0x00 & flagC .~ c')
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   RRCA -> do
     v <- loadReg A
     let (v' , c') = rotateRightCarry v
     storeReg A v'
     storeReg F (0x00 & flagC .~ c')
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   RLC arg -> do
     v <- getIn8 (outToIn arg)
     let (v' , c') = rotateLeftCarry v
     setOut8 arg v'
     storeReg F (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   RRC arg -> do
     v <- getIn8 (outToIn arg)
     let (v' , c') = rotateRightCarry v
     setOut8 arg v'
     storeReg F (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   SRL arg -> do
     v <- getIn8 (outToIn arg)
@@ -308,64 +307,64 @@ interpretM instr@(Instruction _ t op) = case op of
     modifyFlags $ \_ -> 0x00
       & flagC .~ (v `testBit` 0)
       & flagZ .~ (v' == 0)
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   SLA arg -> do
     v <- getIn8 (outToIn arg)
     let (v' , c') = shiftLeftArithmetic v
     setOut8 arg v'
     storeReg F (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   SRA arg -> do
     v <- getIn8 (outToIn arg)
     let (v' , c') = shiftRightArithmetic v
     setOut8 arg v'
     storeReg F (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   JR f -> do
     t' <- getFlag f
     r <- sbyte
     when t' $ jumpRelative r
-    return $ getTime t' t
+    (,) (getTime t' t) <$> prefetch
 
   JP f addr -> do
     t' <- getFlag f
     addr <- getAddress addr
     when t' $ storePC addr
-    return $ getTime t' t
+    (,) (getTime t' t) <$> prefetch
 
   CALL f -> do
     t' <- getFlag f
     when t' . call =<< word
-    return $ getTime t' t
+    (,) (getTime t' t) <$> prefetch
 
   RET f -> do
     t' <- getFlag f
     when t' ret
-    return $ getTime t'  t
+    (,) (getTime t' t) <$> prefetch
 
   RETI -> do
-    setIEM True
+    setIME True
     ret
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   RST g -> do
     restart $ (* 8) g
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   PUSH reg -> do
     push =<< loadReg16 reg
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
   POP reg -> do
     pop >>= storeReg16 reg
     when (reg == AF) (modifyFlags (.&. 0xF0))
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   ADD arg -> do
     arith add (getIn8 arg) False
-    return (getTime True t)
+    (,) (getTime True t) <$> prefetch
 
   ADD16_HL from -> do
     v <- loadReg16 HL
@@ -376,7 +375,7 @@ interpretM instr@(Instruction _ t op) = case op of
       & flagN .~ False
       & flagC .~ (v' < v)
       & flagH .~ ((v' .&. 0x0FFF) < (v .&. 0x0FFF))
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   ADD16_SP -> do
     v <- loadSP
@@ -386,26 +385,26 @@ interpretM instr@(Instruction _ t op) = case op of
     modifyFlags $ \f -> 0x00
       & flagC .~ ((v' .&. 0xFF) < (v .&. 0xFF))
       & flagH .~ ((v' .&. 0x0F) < (v .&. 0x0F))
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   SUB arg -> do
     arith sub (getIn8 arg) False
-    return (getTime True t)
+    (,) (getTime True t) <$> prefetch
 
   ADC arg -> do
     arith add (getIn8 arg) True
-    return (getTime True t)
+    (,) (getTime True t) <$> prefetch
 
   SBC arg -> do
     arith sub (getIn8 arg) True
-    return (getTime True t)
+    (,) (getTime True t) <$> prefetch
 
   CP arg -> do
     k <- getIn8 arg
     a <- loadReg A
     let (_, f) = sub a k False
     storeReg F f
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   INC arg -> do
     v <- getIn8 (outToIn arg)
@@ -415,15 +414,15 @@ interpretM instr@(Instruction _ t op) = case op of
       & flagZ .~ (v == 0xFF)
       & flagN .~ False
       & flagH .~ (v .&. 0x0F == 0x0F)
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   INC16 arg -> do
     setOut16 arg . (+1) =<< getIn16 (out16ToIn16 arg)
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   DEC16 arg -> do
     setOut16 arg . subtract 1 =<< getIn16 (out16ToIn16 arg)
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   DEC arg -> do
     v <- getIn8 (outToIn arg)
@@ -433,43 +432,45 @@ interpretM instr@(Instruction _ t op) = case op of
       & flagZ .~ (v == 0x01)
       & flagN .~ True
       & flagH .~ (v .&. 0x0F == 0x00)
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   DI -> do
-    setIEM False
-    return (getTime True t)
+    setIME False
+    (,) (getTime True t) <$> prefetch
 
   EI -> do
-    setIEM True
-    return (getTime True t)
+    setIME True
+    (,) (getTime True t) <$> prefetch
 
   DAA -> do
     daa
-    return (getTime True t)
+    (,) (getTime True t) <$> prefetch
 
   CPL -> do
     storeReg A . complement =<< loadReg A
     modifyFlags $ \f -> f
       & flagH .~ True
       & flagN .~ True
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   CCF -> do
     modifyFlags $ \f -> f
       & flagH .~ False
       & flagN .~ False
       & flagC %~ not
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   SCF -> do
     modifyFlags $ \f -> f
       & flagH .~ False
       & flagN .~ False
       & flagC .~ True
-    return $ getTime True t
+    (,) (getTime True t) <$> prefetch
 
   HALT -> do
-    setHalt
-    return $ getTime True t
+    i <- anyInterrupts
+    ime <- getIME
+    out <- if not ime && has _Just i then loadPC >>= fmap Running . loadAddr else return Halt
+    return (getTime True t, out)
 
   _ -> error $ "failed at " ++ show instr

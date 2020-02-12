@@ -44,7 +44,7 @@ defaultInterruptState = InterruptState d d d d d
   where d = defaultInterruptType
 
 data Interrupt = INTVBLANK | INTLCD | INTTIMER | INTSERIAL | INTJOYPAD
-  deriving (Enum, Show)
+  deriving (Eq, Enum, Show)
 
 {-# INLINE interruptAddress #-}
 interruptAddress :: Interrupt -> Word16

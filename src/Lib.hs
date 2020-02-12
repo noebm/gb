@@ -1,48 +1,28 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Lib where
 
-import Control.Monad.IO.Class
 import Control.Monad
+import Control.Lens
 
 import Graphics
-import MonadEmulator
 import HardwareMonad
 import GB
-
-import Instruction.Interpret
-import Instruction.Instruction
-
-import Interrupt.Interrupt
-import Interrupt.InterruptType
+import CPU
 
 import Cartridge.Cartridge
 import Cartridge.BootRom
 import GPU.GPUState
-import Timer
 import Joypad (Joypad(..))
 
 import qualified SDL
 import Utilities.SDL (_KeyboardEvent, _QuitEvent, _WindowClosedEvent)
 
-import Control.Lens
-
-updateCPU :: (HardwareMonad m, MonadEmulator m) => m (Maybe Instruction, Word)
-updateCPU = do
-  halted <- halt
-  if not halted then do
-    ime <- getIEM
-    int <- if ime
-      then processInterrupts
-      else return False
-    i <- parseInstructionM byte
-    dt <- interpretM i
-    let dt' = if int then 20 + dt else dt
-    return (Just i , dt')
-  else do
-    f <- processInterrupts
-    if f
-      then clearHalt >> return (Nothing, 20)
-      else return (Nothing, 4)
+steps :: Monad m => Word -> Step m -> (Word -> m ()) -> m (Step m)
+steps 0 s _ = return s
+steps n s f = do
+  (dt, s') <- runStep s
+  f dt
+  steps (n - 1) s' f
 
 -- setupCartridge :: Maybe FilePath -> Maybe FilePath -> IO (CartridgeState )
 setupCartridge fpBoot fpRom = do
@@ -95,11 +75,8 @@ mainloop fp' bgrd wnd = do
       -- logger = Just $ \addr i -> do
       --   when (addr > 0xFF) $ putStrLn $ printf "0x%04x: %s" addr (show i)
 
-    let update = do
-          replicateM 100 $ do
-            pc <- loadPC
-            (i, dt) <- updateCPU
-            forM_ logger $ \f -> liftIO $ f pc i
+    let update s = do
+          s' <- steps 100 s $ \dt -> do
 
             updateGPU dt $ \gpu req -> case req of
               Draw    -> do
@@ -113,6 +90,6 @@ mainloop fp' bgrd wnd = do
 
           events <- fmap SDL.eventPayload <$> SDL.pollEvents
           mapMOf_ (folded . _KeyboardEvent) updateKeys events
-          unless (has (folded . _QuitEvent) events || has (folded . _WindowClosedEvent) events) update
+          unless (has (folded . _QuitEvent) events || has (folded . _WindowClosedEvent) events) $ update s'
 
-    update
+    update initCPUStep
