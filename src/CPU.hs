@@ -14,11 +14,11 @@ import Instruction.Interpret
 
 import GB
 
-data Step m = Step { runStep :: m (Word , Step m) }
+import Utilities.Step
 
-{-# SPECIALIZE initCPUStep :: Step (GB IO) #-}
-initCPUStep :: (HardwareMonad m, MonadEmulator m) => Step m
-initCPUStep = Step $ stepCPU (Running 0x00)
+{-# SPECIALIZE initCPUStep :: Step (GB IO) Word #-}
+initCPUStep :: (HardwareMonad m, MonadEmulator m) => Step m Word
+initCPUStep = stepsFromLoop run (Running <$> byte)
 
 run :: (HardwareMonad m, MonadEmulator m) => StepInfo -> m (Word, StepInfo)
 run info = case info of
@@ -35,7 +35,7 @@ run info = case info of
     return (4, out)
   Running op -> interpretM =<< parseInstructionM op
 
-stepCPU :: (HardwareMonad m, MonadEmulator m) => StepInfo -> m (Word, Step m)
+stepCPU :: (HardwareMonad m, MonadEmulator m) => StepInfo -> m (Word, Step m Word)
 stepCPU i = do
   (dt , i) <- run i
   return (dt, Step $ stepCPU i)

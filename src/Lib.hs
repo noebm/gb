@@ -17,7 +17,7 @@ import Joypad (Joypad(..))
 import qualified SDL
 import Utilities.SDL (_KeyboardEvent, _QuitEvent, _WindowClosedEvent)
 
-steps :: Monad m => Word -> Step m -> (Word -> m ()) -> m (Step m)
+steps :: Monad m => Word -> Step m Word -> (Word -> m ()) -> m (Step m Word)
 steps 0 s _ = return s
 steps n s f = do
   (dt, s') <- runStep s
