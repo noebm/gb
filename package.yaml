@@ -43,7 +43,7 @@ executables:
     - gb
 
 tests:
-  gb-rewrite-test:
+  gb-test:
     main:                Spec.hs
     source-dirs:         test
     ghc-options:
@@ -51,4 +51,5 @@ tests:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - gb-rewrite
+    - gb
+    - criterion
