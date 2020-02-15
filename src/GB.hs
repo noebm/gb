@@ -39,7 +39,7 @@ data GBState s = GBState
   , shouldStop   :: STRef s Bool
   , isHalted     :: STRef s Bool
 
-  , gbTimer     :: STRef s TimerState
+  , gbTimer     :: STRef s Timer
   , gbInterrupt :: STRef s InterruptState
   , gbGPU       :: STRef s GPUState
   , gbJoypad    :: STRef s JoypadState
@@ -69,7 +69,7 @@ makeGBState cart = do
     <*> newSTRef False
     <*> newSTRef False
     <*> newSTRef False
-    <*> newSTRef defaultTimerState
+    <*> newSTRef defaultTimer
     <*> newSTRef defaultInterruptState
     <*> newSTRef defaultGPUState
     <*> newSTRef defaultJoypadState
@@ -99,8 +99,8 @@ reg8index L = 7
 
 instance MonadIO m => HardwareMonad (GB m) where
 
-  getTimerState = readState  gbTimer
-  putTimerState = writeState gbTimer
+  getTimer = readState  gbTimer
+  putTimer = writeState gbTimer
 
   getGPU = readState  gbGPU
   putGPU = writeState gbGPU

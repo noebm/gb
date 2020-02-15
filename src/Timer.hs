@@ -1,9 +1,9 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Timer
   ( ClockSpeed(..)
-  , TimerState
-  , defaultTimerState
-  , updateTimerState
+  , Timer
+  , defaultTimer
+  , updateTimer
 
   , inTimerRange
   , loadTimer
@@ -23,7 +23,7 @@ import Control.Monad.State.Strict
 data ClockSpeed = Clock16 | Clock64 | Clock256 | Clock1024
   deriving (Show)
 
-data TimerState = TimerState
+data Timer = Timer
   { _divider    :: !Word16
   , _counter    :: Word8
   , _overflow   :: Bool
@@ -33,10 +33,10 @@ data TimerState = TimerState
   }
   deriving (Show)
 
-makeLenses ''TimerState
+makeLenses ''Timer
 
-defaultTimerState :: TimerState
-defaultTimerState = TimerState
+defaultTimer :: Timer
+defaultTimer = Timer
   { _divider = 0
   , _counter = 0
   , _modulo = 0
@@ -73,40 +73,67 @@ clockspeedBit Clock64   = 5
 clockspeedBit Clock256  = 7
 clockspeedBit Clock1024 = 9
 
-shouldIncreaseCounter :: State TimerState Bool
+shouldIncreaseCounter :: State Timer Bool
 shouldIncreaseCounter = testBit <$> use divider <*> uses clockSpeed clockspeedBit
 
-increaseCounter :: State TimerState ()
+increaseCounter :: State Timer ()
 increaseCounter = do
   c <- counter <<+= 1
   c' <- use counter
   overflow .= (c' < c)
 
-tick :: State TimerState Bool
+{-# INLINE divBit #-}
+divBit :: State Timer Bool
+divBit = do
+  d <- use divider
+  b <- uses clockSpeed clockspeedBit
+  e <- use enabled
+  return $ testBit d b && e
+
+{-# INLINE changeDIV #-}
+changeDIV :: (Word16 -> Word16) -> State Timer Bool
+changeDIV f = do
+  d0 <- divBit
+  divider %= f
+  d1 <- divBit
+  return $ d0 && not d1
+
+changeTAC :: Word8 -> State Timer Bool
+changeTAC b = do
+  d0 <- divBit
+  enabled .= (b `testBit` 2)
+  clockSpeed .= storeClockspeed b
+  d1 <- divBit
+  return $ d0 && not d1
+
+{-# INLINE tickdefault #-}
+tickdefault :: State Timer ()
+tickdefault = do
+  fallingEdge <- changeDIV (+1)
+  when fallingEdge increaseCounter
+
+{-# INLINE reset #-}
+reset :: State Timer ()
+reset = do
+  divider += 1
+  counter <~ use modulo
+  overflow .= False
+
+tick :: State Timer Bool
 tick = do
   didOverflow <- use overflow
-  -- delayed overflow
-  if didOverflow then do
-    divider += 1
-    counter <~ use modulo
-    overflow .= False
-    else do
-    oldTIMABit  <- shouldIncreaseCounter
-    isEnabled   <- use enabled
-    divider += 1
-    when (isEnabled && oldTIMABit) $ do
-      newTIMABit <- shouldIncreaseCounter
-      unless newTIMABit increaseCounter
+  if didOverflow then reset else tickdefault
   return didOverflow
 
-updateTimerState :: Word -> TimerState -> (Bool, TimerState)
-updateTimerState bus_cycles = runState $
+{-# INLINE updateTimer #-}
+updateTimer :: Word -> Timer -> (Bool, Timer)
+updateTimer bus_cycles = runState $
   or <$> replicateM (fromIntegral bus_cycles) tick
 
 inTimerRange :: Word16 -> Bool
 inTimerRange addr = 0xff04 <= addr && addr < 0xff08
 
-loadTimer :: TimerState -> Word16 -> Word8
+loadTimer :: Timer -> Word16 -> Word8
 loadTimer t 0xff04 = views divider (fromIntegral . (`shiftR` 6)) t
 loadTimer t 0xff05 = view counter t
 loadTimer t 0xff06 = view modulo t
@@ -114,14 +141,16 @@ loadTimer t 0xff07 = views clockSpeed loadClockSpeed t
                    & bitAt 2 .~ view enabled t
 loadTimer _ _ = error "loadTimer: not in range"
 
-storeTimer :: Word16 -> Word8 -> TimerState -> TimerState
+storeTimer :: Word16 -> Word8 -> Timer -> Timer
 storeTimer 0xff04 _ = execState $ do
-  oldTIMABit  <- shouldIncreaseCounter
-  increaseCounter
-  divider .= 0x0000
+  fallingEdge <- changeDIV (\_ -> 0)
+  when fallingEdge increaseCounter
 storeTimer 0xff05 b = counter .~ b
 storeTimer 0xff06 b = modulo .~ b
-storeTimer 0xff07 b = \ t -> t
-                    & enabled .~ (b `testBit` 2)
-                    & clockSpeed .~ storeClockspeed b
+storeTimer 0xff07 b = execState $ do
+  d0 <- divBit
+  enabled .= (b `testBit` 2)
+  clockSpeed .= storeClockspeed b
+  d1 <- divBit
+  when (d0 && not d1) increaseCounter
 storeTimer _ _ = error "storeTimer: not in range"

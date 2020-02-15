@@ -143,8 +143,8 @@ instance HardwareMonad m => HardwareMonad (StateT s m) where
   getInterrupt = aux0 getInterrupt
   putInterrupt = aux1 putInterrupt
 
-  getTimerState = aux0 getTimerState
-  putTimerState = aux1 putTimerState
+  getTimer = aux0 getTimer
+  putTimer = aux1 putTimer
 
   getJoypad = aux0 getJoypad
   putJoypad = aux1 putJoypad

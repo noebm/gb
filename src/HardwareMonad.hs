@@ -5,7 +5,8 @@ import Control.Monad
 
 import Data.Word
 
-import Timer
+import Timer (Timer)
+import qualified Timer
 import Interrupt.Interrupt
 import Interrupt.InterruptType
 import GPU.GPUState
@@ -24,8 +25,8 @@ class Monad m => HardwareMonad m where
   getInterrupt :: m InterruptState
   putInterrupt :: InterruptState -> m ()
 
-  getTimerState :: m TimerState
-  putTimerState :: TimerState -> m ()
+  getTimer :: m Timer
+  putTimer :: Timer -> m ()
 
   getJoypad :: m JoypadState
   putJoypad :: JoypadState -> m ()
@@ -54,9 +55,9 @@ updateGPU cyc f = do
 
 updateTimer :: HardwareMonad m => Word -> m ()
 updateTimer cycles = do
-  ts <- getTimerState
-  let (overflow, ts') = updateTimerState cycles ts
-  putTimerState ts'
+  ts <- getTimer
+  let (overflow, ts') = Timer.updateTimer cycles ts
+  putTimer ts'
   when overflow $
     modifyInterrupt $ interruptTimer.interruptFlag .~ True
 
@@ -98,10 +99,10 @@ storeMem idx b
   | inInterruptRange idx = do
       s <- getInterrupt
       putInterrupt $ storeInterrupt s idx b
-  | inTimerRange idx = do
-      ts <- getTimerState
-      let ts' = storeTimer idx b ts
-      putTimerState ts'
+  | Timer.inTimerRange idx = do
+      ts <- getTimer
+      let ts' = Timer.storeTimer idx b ts
+      putTimer ts'
   | idx == 0xff46 = do
       gpu <- getGPU
       gpu' <- dmaTransfer loadMem ((b , 0x00) ^. word16) gpu
@@ -133,9 +134,9 @@ loadMem idx
   | inInterruptRange idx = do
       s <- getInterrupt
       return $ loadInterrupt s idx
-  | inTimerRange idx = do
-      ts <- getTimerState
-      return $ loadTimer ts idx
+  | Timer.inTimerRange idx = do
+      ts <- getTimer
+      return $ Timer.loadTimer ts idx
   -- unimplemented IO port
   | 0xFF00 <= idx && idx < 0xFF80 = return 0x00
   | idx < 0xFFFF = readHRAM (idx - 0xFF80)
