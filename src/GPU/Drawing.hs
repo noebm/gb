@@ -34,7 +34,7 @@ backgroundLine g vram = V.generate 160 $ \i ->
 
 windowLine :: GPUControl -> VideoRAM -> (Word8, V.Vector Word8)
 windowLine g vram =
-  let y' = g ^. gpuLine + g ^. gpuWindow._y
+  let y' = g ^. gpuLine - g ^. gpuWindow._y
       windowX = view (gpuWindow._x) g - 7
   in (,) windowX $ V.generate (160 - fromIntegral windowX) $ \i ->
     let x' = fromIntegral i + windowX
