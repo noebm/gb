@@ -16,7 +16,7 @@ import GB
 import MonadEmulator
 
 {-# SPECIALISE interpretM :: Instruction -> GB IO (Word , StepInfo) #-}
-interpretM :: (HardwareMonad m, MonadEmulator m) => Instruction -> m (Word , StepInfo)
+interpretM :: (MonadEmulator m) => Instruction -> m (Word , StepInfo)
 interpretM instr@(Instruction _ t op) = case op of
   NOP -> (,) (getTime True t) <$> prefetch
 

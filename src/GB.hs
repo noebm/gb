@@ -18,6 +18,7 @@ import Control.Monad.ST
 import Control.Monad.Reader
 
 import MonadEmulator
+import HardwareMonad
 
 import CPU.Registers
 import GPU.GPUState

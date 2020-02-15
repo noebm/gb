@@ -3,7 +3,6 @@ module MonadEmulator
   ( Reg8 (..)
   , Reg16 (..)
   , MonadEmulator (..)
-  , HardwareMonad (..)
   , storeReg16
   , storeAddr16
   , loadReg16
@@ -14,7 +13,7 @@ module MonadEmulator
 
   , StepInfo (..)
   , prefetch
-  , anyInterrupts, serviceInterrupt
+  , serviceInterrupt
   , showRegisters
 
   , word16
@@ -98,6 +97,16 @@ class Monad m => MonadEmulator m where
   getIME :: m Bool
   setIME :: Bool -> m ()
 
+  anyInterrupts :: m (Maybe Interrupt)
+  {-# INLINE anyInterrupts #-}
+  default anyInterrupts :: (HardwareMonad m) => m (Maybe Interrupt)
+  anyInterrupts = checkForInterrupts <$> getInterrupt
+
+  clearInterrupt :: Interrupt -> m ()
+  {-# INLINE clearInterrupt #-}
+  default clearInterrupt :: (HardwareMonad m) => Interrupt -> m ()
+  clearInterrupt i = modifyInterrupt (interrupt i . interruptFlag .~ False)
+
 storeAddr16 :: MonadEmulator m => Word16 -> Word16 -> m ()
 storeAddr16 addr = store16LE (storeAddr addr) (storeAddr $ addr + 1)
 
@@ -163,21 +172,21 @@ instance MonadEmulator m => MonadEmulator (StateT s m) where
   getIME = aux0 getIME
   setIME = aux1 setIME
 
+  anyInterrupts = aux0 anyInterrupts
+  clearInterrupt = aux1 clearInterrupt
+
 data StepInfo = PendingInterrupt !Interrupt | Halt | Running {-# UNPACK #-} !Word8
   deriving Eq
 
-prefetch :: (HardwareMonad m, MonadEmulator m) => m StepInfo
+prefetch :: (MonadEmulator m) => m StepInfo
 prefetch = do
   i <- anyInterrupts
   ime <- getIME
   maybe (Running <$> byte) (return . PendingInterrupt) (guard ime >> i)
 
-anyInterrupts :: (HardwareMonad m, MonadEmulator m) => m (Maybe Interrupt)
-anyInterrupts = checkForInterrupts <$> getInterrupt
-
-serviceInterrupt :: (HardwareMonad m, MonadEmulator m) => Interrupt -> m ()
+serviceInterrupt :: (MonadEmulator m) => Interrupt -> m ()
 serviceInterrupt i = do
-  modifyInterrupt (interrupt i . interruptFlag .~ False)
+  clearInterrupt i
   setIME False
   call (interruptAddress i)
 
