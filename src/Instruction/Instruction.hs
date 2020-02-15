@@ -1,6 +1,8 @@
 module Instruction.Instruction where
 
 import Instruction.Time
+import Instruction.InOut
+import Instruction.Flag
 
 import Text.Printf
 import Data.Word
@@ -13,43 +15,6 @@ byteCodeDecompose :: Word8 -> (Word8, Word8, Word8)
 byteCodeDecompose b =
   ((b `shiftR` 6) .&. 0x3, (b `shiftR` 3) .&. 0x7, b .&. 0x7)
 {-# INLINE byteCodeDecompose #-}
-
-data In16 = InReg16 Reg16
-         | InSP
-         | InImm16
-         | InImmAddr16
-         deriving (Eq)
-
-data Out16 = OutReg16 Reg16
-           | OutSP
-           | OutImmAddr16
-
-out16ToIn16 :: Out16 -> In16
-out16ToIn16 (OutReg16 r) = InReg16 r
-out16ToIn16 OutSP = InSP
-out16ToIn16 OutImmAddr16 = InImmAddr16
-
-instance Show In16 where
-  show arg = case arg of
-    InReg16 r -> show r
-    InSP -> "SP"
-    InImm16 -> "d16"
-    InImmAddr16   -> "(a16)"
-
-instance Show Out16 where
-  show arg = case arg of
-    OutReg16 r -> show r
-    OutSP -> "SP"
-    OutImmAddr16 -> "(a16)"
-
-data Flag = FlagZ | FlagC | FlagNZ | FlagNC
-  deriving (Eq)
-
-instance Show Flag where
-  show FlagZ  = "Z"
-  show FlagNZ = "NZ"
-  show FlagC  = "C"
-  show FlagNC = "NC"
 
 data InstructionExpr
   = LD In8 Out8 -- from -> to
@@ -87,18 +52,6 @@ data Instruction
   = Instruction Word8 (Time Word) InstructionExpr
   deriving Show
 
-data In8 = InReg8 Reg8 | InImm8 | InAddr8 Addr
-  deriving Show
-data Out8 = OutReg8 Reg8 | OutAddr8 Addr
-  deriving Show
-data Addr = AddrBC | AddrDE | AddrHL | AddrHLi | AddrHLd | AddrDirect | ZeroPage | ZeroPageC
-  deriving Show
-
--- every output is also in input
-outToIn :: Out8 -> In8
-outToIn (OutReg8 r) = InReg8 r
-outToIn (OutAddr8 addr) = InAddr8 addr
-
 basicRegisterArg :: Word8 -> Out8
 basicRegisterArg w = case w of
   0 -> OutReg8 $ B
@@ -131,16 +84,6 @@ aluMnemonic w arg = case w of
   6 -> OR arg
   7 -> CP arg
   _ -> error "aluMnemonic: invalid argument"
-
-{-# INLINE flag #-}
-flag :: Word8 -> Flag
-flag w = case w of
-  0 -> FlagNZ
-  1 -> FlagZ
-  2 -> FlagNC
-  3 -> FlagC
-  _ -> error "flag: invalid argument"
-
 
 parseInstructionM :: MonadEmulator m => Word8 -> m Instruction
 parseInstructionM 0xCB = parseExtendedInstruction <$> byte

@@ -2,169 +2,18 @@ module Instruction.Interpret where
 
 import Data.Word
 import Data.Bits
-import Data.Bits.Lens (bitAt)
 
 import Control.Lens hiding (op, to, from)
 import Control.Monad
-import GB
-
-import Text.Printf
 
 import Instruction.Instruction
 import Instruction.Time
+import Instruction.InOut
+import Instruction.Ops
+import Instruction.Flag
+
+import GB
 import MonadEmulator
-
-{-# INLINE modifyFlags #-}
-modifyFlags :: MonadEmulator m => (Word8 -> Word8) -> m ()
-modifyFlags g = do
-  flags <- loadReg F
-  storeReg F $ g flags
-
-{-# INLINE getFlag #-}
-getFlag :: MonadEmulator m => Maybe Flag -> m Bool
-getFlag Nothing = return True
-getFlag (Just FlagC) = view flagC <$> loadReg F
-getFlag (Just FlagZ) = view flagZ <$> loadReg F
-getFlag (Just FlagNC) = views flagC not <$> loadReg F
-getFlag (Just FlagNZ) = views flagZ not <$> loadReg F
-
-{-# INLINE addrFF #-}
-addrFF :: Word8 -> Word16
-addrFF k = (0xFF , k) ^. word16
-
-{-# INLINE getIn16 #-}
-getIn16 :: MonadEmulator m => In16 -> m Word16
-getIn16 arg = case arg of
-  InSP        -> loadSP
-  InReg16 r   -> loadReg16 r
-  InImm16     -> word
-  InImmAddr16 -> loadAddr16 =<< word
-
-{-# INLINE setOut16 #-}
-setOut16 :: MonadEmulator m => Out16 -> Word16 -> m ()
-setOut16 arg = case arg of
-  OutReg16 r   -> storeReg16 r
-  OutSP        -> storeSP
-  OutImmAddr16 -> \w -> (`storeAddr16` w) =<< word
-
-getAddress :: MonadEmulator m => Addr -> m Word16
-getAddress AddrBC = loadReg16 BC
-getAddress AddrDE = loadReg16 DE
-getAddress AddrHL = loadReg16 HL
-getAddress AddrHLi = do
-  hl <- loadReg16 HL
-  storeReg16 HL (hl + 1)
-  return hl
-getAddress AddrHLd = do
-  hl <- loadReg16 HL
-  storeReg16 HL (hl - 1)
-  return hl
-getAddress AddrDirect = word
-getAddress ZeroPage   = addrFF <$> byte
-getAddress ZeroPageC  = addrFF <$> loadReg C
-
-getIn8 :: MonadEmulator m => In8 -> m Word8
-getIn8 (InReg8 r)     = loadReg r
-getIn8 (InAddr8 addr) = loadAddr =<< getAddress addr
-getIn8 InImm8         = byte
-
-setOut8 :: MonadEmulator m => Out8 -> Word8 -> m ()
-setOut8 (OutReg8 r)     = storeReg r
-setOut8 (OutAddr8 addr) = \b -> (`storeAddr` b) =<< getAddress addr
-
-daa :: MonadEmulator m => m ()
-daa = do
-  f <- loadReg F
-  v <- loadReg A
-  let vcorr'
-        | f ^. flagN
-        = (if f ^. flagC then 0x60 else 0x00)
-        + (if f ^. flagH then 0x06 else 0x00)
-        | otherwise
-        = (if f ^. flagC || v > 0x99              then 0x60 else 0x00)
-        + (if (f ^. flagH) || (v .&. 0x0f) > 0x09 then 0x06 else 0x00)
-  let v' = if f ^. flagN then v - vcorr' else v + vcorr'
-  storeReg A v'
-  storeReg F $ f
-    & flagH .~ False
-    & flagC .~ (f ^. flagC || (not (f ^. flagN) && v > 0x99))
-    & flagZ .~ (v' == 0)
-
-{-# INLINE add #-}
-add :: Word8 -> Word8 -> Bool -> (Word8 , Word8)
-add a v c =
-  (s , 0x00 & flagZ .~ (s == 0) & flagH .~ (carry_info `testBit` 4) & flagC .~ (carry_info `testBit` 8))
-  where
-    v' = fromIntegral v
-    a' = fromIntegral a
-    s' = a' + v' :: Int
-    s'' = s' + fromEnum c
-
-    carry_info = let f = xor (a' `xor` v') in (f s' .|. f s'')
-    s = fromIntegral s''
-
-{-# INLINE sub #-}
-sub :: Word8 -> Word8 -> Bool -> (Word8 , Word8)
-sub a v c =
-  (s , 0x40 & flagZ .~ (s == 0) & flagH .~ (carry_info `testBit` 4) & flagC .~ (carry_info `testBit` 8))
-  where
-    v' = fromIntegral v
-    a' = fromIntegral a
-    s' = a' - v' :: Int
-    s'' = s' - fromEnum c
-
-    carry_info = let f = xor (a' `xor` v') in (f s' .|. f s'')
-    s = fromIntegral s''
-
-{-# INLINE arith #-}
-arith :: MonadEmulator m
-      => (Word8 -> Word8 -> Bool -> (Word8 , Word8))
-      -> m Word8
-      -> Bool
-      -> m ()
-arith fun g useCarry = do
-  k <- g
-  a <- loadReg A
-  cf <- if useCarry then view flagC <$> loadReg F else return False
-  let (a' , f) = fun a k cf
-  storeReg A a'
-  storeReg F f
-
-{-# INLINE rotateLeft #-}
-rotateLeft :: Word8 -> Bool -> (Word8, Bool)
-rotateLeft v c =
-  let v' = v `rotateL` 1
-      c' = v' `testBit` 0
-  in (v' & bitAt 0 .~ c, c')
-
-{-# INLINE rotateRight #-}
-rotateRight :: Word8 -> Bool -> (Word8, Bool)
-rotateRight v c =
-  let v' = v `rotateR` 1
-      c' = v' `testBit` 7
-  in (v' & bitAt 7 .~ c, c')
-
-{-# INLINE rotateLeftCarry #-}
-rotateLeftCarry :: Word8 -> (Word8, Bool)
-rotateLeftCarry v = rotateLeft v (v `testBit` 7)
-
-{-# INLINE rotateRightCarry #-}
-rotateRightCarry :: Word8 -> (Word8, Bool)
-rotateRightCarry v = rotateRight v (v `testBit` 0)
-
-{-# INLINE shiftLeftArithmetic #-}
-shiftLeftArithmetic :: Word8 -> (Word8, Bool)
-shiftLeftArithmetic v =
-  let v' = v `shiftL` 1
-      c' = v `testBit` 7
-  in (v', c')
-
-{-# INLINE shiftRightArithmetic #-}
-shiftRightArithmetic :: Word8 -> (Word8, Bool)
-shiftRightArithmetic v =
-  let v' = v `shiftR` 1
-      c' = v `testBit` 0
-  in (v' & bitAt 7 .~ (v `testBit` 7), c')
 
 {-# SPECIALISE interpretM :: Instruction -> GB IO (Word , StepInfo) #-}
 interpretM :: (HardwareMonad m, MonadEmulator m) => Instruction -> m (Word , StepInfo)
@@ -190,30 +39,15 @@ interpretM instr@(Instruction _ t op) = case op of
     (,) (getTime True t) <$> prefetch
 
   AND arg -> do
-    v <- getIn8 arg
-    a <- loadReg A
-    let a' = a .&. v
-    storeReg A a'
-    modifyFlags $ \_ -> 0x20
-      & flagZ .~ (a' == 0)
+    logicOp (.&.) (\a' -> 0x20 & flagZ .~ (a' == 0)) arg
     (,) (getTime True t) <$> prefetch
 
   OR arg -> do
-    v <- getIn8 arg
-    a <- loadReg A
-    let a' = a .|. v
-    storeReg A a'
-    modifyFlags $ \_ -> 0x00
-      & flagZ .~ (a' == 0)
+    logicOp (.|.) (\a' -> 0x00 & flagZ .~ (a' == 0)) arg
     (,) (getTime True t) <$> prefetch
 
   XOR arg -> do
-    v <- getIn8 arg
-    a <- loadReg A
-    let a' = a `xor` v
-    storeReg A (a `xor` v)
-    modifyFlags $ \_ -> 0x00
-      & flagZ .~ (a' == 0)
+    logicOp xor (\a' -> 0x00 & flagZ .~ (a' == 0)) arg
     (,) (getTime True t) <$> prefetch
 
   {- 0xCB instructions and specialization for A -}
@@ -241,63 +75,35 @@ interpretM instr@(Instruction _ t op) = case op of
     (,) (getTime True t) <$> prefetch
 
   RL arg -> do
-    v <- getIn8 (outToIn arg)
-    c <- view flagC <$> loadReg F
-    let (v' , c') = rotateLeft v c
-    setOut8 arg v'
-    storeReg F (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
+    bitShiftCarryOp rotateLeft (\v' c' -> 0x00 & flagC .~ c' & flagZ .~ (v' == 0)) arg
     (,) (getTime True t) <$> prefetch
 
   RLA -> do
-    v <- loadReg A
-    c <- view flagC <$> loadReg F
-    let (v' , c') = rotateLeft v c
-    storeReg A v'
-    storeReg F (0x00 & flagC .~ c')
+    bitShiftCarryOp rotateLeft (\v' c' -> 0x00 & flagC .~ c') (OutReg8 A)
     (,) (getTime True t) <$> prefetch
 
   RR arg -> do
-    v <- getIn8 (outToIn arg)
-    c <- view flagC <$> loadReg F
-    let (v' , c') = rotateRight v c
-    setOut8 arg v'
-    storeReg F (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
+    bitShiftCarryOp rotateRight (\v' c' -> 0x00 & flagC .~ c' & flagZ .~ (v' == 0)) arg
     (,) (getTime True t) <$> prefetch
 
   RRA -> do
-    v <- loadReg A
-    c <- view flagC <$> loadReg F
-    let (v' , c') = rotateRight v c
-    storeReg A v'
-    storeReg F (0x00 & flagC .~ c')
+    bitShiftCarryOp rotateRight (\v' c' -> 0x00 & flagC .~ c') (OutReg8 A)
     (,) (getTime True t) <$> prefetch
 
   RLCA -> do
-    v <- loadReg A
-    let (v' , c') = rotateLeftCarry v
-    storeReg A v'
-    storeReg F (0x00 & flagC .~ c')
+    bitShiftOp rotateLeftCarry (\_ c' -> 0x00 & flagC .~ c') (OutReg8 A)
     (,) (getTime True t) <$> prefetch
 
   RRCA -> do
-    v <- loadReg A
-    let (v' , c') = rotateRightCarry v
-    storeReg A v'
-    storeReg F (0x00 & flagC .~ c')
+    bitShiftOp rotateRightCarry (\_ c' -> 0x00 & flagC .~ c') (OutReg8 A)
     (,) (getTime True t) <$> prefetch
 
   RLC arg -> do
-    v <- getIn8 (outToIn arg)
-    let (v' , c') = rotateLeftCarry v
-    setOut8 arg v'
-    storeReg F (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
+    bitShiftOp rotateLeftCarry (\v' c' -> 0x00 & flagC .~ c' & flagZ .~ (v' == 0)) arg
     (,) (getTime True t) <$> prefetch
 
   RRC arg -> do
-    v <- getIn8 (outToIn arg)
-    let (v' , c') = rotateRightCarry v
-    setOut8 arg v'
-    storeReg F (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
+    bitShiftOp rotateRightCarry (\v' c' -> 0x00 & flagC .~ c' & flagZ .~ (v' == 0)) arg
     (,) (getTime True t) <$> prefetch
 
   SRL arg -> do
@@ -310,17 +116,11 @@ interpretM instr@(Instruction _ t op) = case op of
     (,) (getTime True t) <$> prefetch
 
   SLA arg -> do
-    v <- getIn8 (outToIn arg)
-    let (v' , c') = shiftLeftArithmetic v
-    setOut8 arg v'
-    storeReg F (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
+    bitShiftOp shiftLeftArithmetic (\v' c' -> 0x00 & flagC .~ c' & flagZ .~ (v' == 0)) arg
     (,) (getTime True t) <$> prefetch
 
   SRA arg -> do
-    v <- getIn8 (outToIn arg)
-    let (v' , c') = shiftRightArithmetic v
-    setOut8 arg v'
-    storeReg F (0x00 & flagC .~ c' & flagZ .~ (v' == 0))
+    bitShiftOp shiftRightArithmetic (\v' c' -> 0x00 & flagC .~ c' & flagZ .~ (v' == 0)) arg
     (,) (getTime True t) <$> prefetch
 
   JR f -> do
@@ -363,7 +163,7 @@ interpretM instr@(Instruction _ t op) = case op of
     (,) (getTime True t) <$> prefetch
 
   ADD arg -> do
-    arith add (getIn8 arg) False
+    arith add arg False
     (,) (getTime True t) <$> prefetch
 
   ADD16_HL from -> do
@@ -388,15 +188,15 @@ interpretM instr@(Instruction _ t op) = case op of
     (,) (getTime True t) <$> prefetch
 
   SUB arg -> do
-    arith sub (getIn8 arg) False
+    arith sub arg False
     (,) (getTime True t) <$> prefetch
 
   ADC arg -> do
-    arith add (getIn8 arg) True
+    arith add arg True
     (,) (getTime True t) <$> prefetch
 
   SBC arg -> do
-    arith sub (getIn8 arg) True
+    arith sub arg True
     (,) (getTime True t) <$> prefetch
 
   CP arg -> do
