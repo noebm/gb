@@ -50,11 +50,11 @@ data Header = Header
   }
   deriving Show
 
-header :: ByteString -> Maybe Header
-header bs = either (const Nothing) Just $ do
-  unless (B.length bs >= 0x150) $ Left "file too short"
+header :: ByteString -> Either String Header
+header bs = do
+  unless (B.length bs >= 0x150) $ Left "header: file too short"
   let (crc, crc') = checksumHeader bs
-  unless (crc == crc') $ Left "invalid checksum"
+  unless (crc == crc') $ Left "header: invalid checksum"
   ram <- ramBanks bs
   loc <- locale bs
   cartTy <- cartridgeType (bs `B.index` 0x147)
