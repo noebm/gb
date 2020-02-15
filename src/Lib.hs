@@ -3,6 +3,9 @@ module Lib where
 
 import Control.Monad
 import Control.Lens
+import Control.Monad.IO.Class
+
+import Data.IORef
 
 import Graphics
 import HardwareMonad
@@ -58,8 +61,8 @@ updateKeys :: SDL.KeyboardEventData -> GB IO ()
 updateKeys (SDL.KeyboardEventData _ press repeat keysym) =
   forM_ ((,) <$> (keymap $ SDL.keysymKeycode keysym) <*> pressRelease press repeat) updateJoypad
 
-mainloop :: FilePath -> Bool -> Bool -> IO ()
-mainloop fp' bgrd wnd = do
+mainloop :: FilePath -> Bool -> Bool -> Bool -> IO ()
+mainloop fp' bgrd wnd nodelay = do
 
   let bootStrapName = "DMG_ROM.bin"
   cart <- setupCartridge (Just $ "./" ++ bootStrapName) fp'
@@ -74,6 +77,8 @@ mainloop fp' bgrd wnd = do
     then Just <$> newWindow "window tilemap"     (pure 256) (Just 1)
     else return Nothing
 
+  tickRef <- newIORef 0
+
   runGB cart $ do
     let
       -- logger :: Maybe (Word16 -> Instruction ArgWithData -> IO ())
@@ -86,6 +91,13 @@ mainloop fp' bgrd wnd = do
           updateGPU dt $ \gpu req -> case req of
             Draw    -> do
               renderGraphics gfx
+              unless nodelay $ liftIO $ do
+                told <- readIORef tickRef
+                tnew <- SDL.ticks
+                writeIORef tickRef tnew
+                let dt = tnew - told
+                when (tnew > told && dt < 16) $ SDL.delay (16 - dt)
+
               let conf = gpuConfig gpu
               mapM_ (drawTileMap (conf ^. gpuTileDataSelect) (conf ^. gpuBGTileMapSelect) gpu) bgrdTilemapWindow
               mapM_ (drawTileMap (conf ^. gpuTileDataSelect) (conf ^. gpuWindowTileMapSelect) gpu) wndTilemapWindow

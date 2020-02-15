@@ -8,7 +8,7 @@ import System.Console.GetOpt
 import Lib
 import Cartridge.Cartridge
 
-data Options = Help | Info | DebugWindow | DebugBackground
+data Options = Help | Info | DebugWindow | DebugBackground | NoDelay
   deriving Eq
 
 options =
@@ -16,6 +16,7 @@ options =
   , Option ['i'] ["info"] (NoArg Info) "Display rom information"
   , Option ['b'] ["background"] (NoArg DebugBackground) "Display window containing complete background map"
   , Option ['w'] ["window"]     (NoArg DebugWindow)     "Display window containing complete window map"
+  , Option []    ["no-delay"]   (NoArg NoDelay)         "Disable frame delay"
   ]
 
 parseCommandline argv = case getOpt Permute options argv of
@@ -28,7 +29,7 @@ parseCommandline argv = case getOpt Permute options argv of
         romOrError <- readRom file
         flip (either putStrLn) romOrError $ \(Rom h _) -> print h
         exitWith ExitSuccess
-    | [ file ] <- files -> return (file , DebugBackground `elem` opts , DebugWindow `elem` opts)
+    | [ file ] <- files -> return (file, DebugBackground `elem` opts, DebugWindow `elem` opts, NoDelay `elem` opts)
   (_,_, errs) -> do
     hPutStrLn stderr (concat errs ++ usageInfo header options)
     exitWith (ExitFailure 1)
@@ -37,5 +38,5 @@ parseCommandline argv = case getOpt Permute options argv of
 
 main :: IO ()
 main = do
-  (file, fbgrd, fwindow) <- parseCommandline =<< getArgs
-  mainloop file fbgrd fwindow
+  (file, fbgrd, fwindow, nodelay) <- parseCommandline =<< getArgs
+  mainloop file fbgrd fwindow nodelay
