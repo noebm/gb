@@ -6,6 +6,10 @@ import Data.Bits
 import Control.Lens hiding (op, to, from)
 import Control.Monad
 
+
+import Control.Applicative
+import Interrupt.Interrupt (Interrupt)
+
 import Instruction.Instruction
 import Instruction.Time
 import Instruction.InOut
@@ -15,8 +19,9 @@ import Instruction.Flag
 import GB
 import MonadEmulator
 
-{-# SPECIALISE interpretM :: Instruction -> GB IO (Word , StepInfo) #-}
-interpretM :: (MonadEmulator m) => Instruction -> m (Word , StepInfo)
+import Utilities.Step
+
+interpretM :: (MonadEmulator m) => Instruction -> m (Word , Step m Word)
 interpretM instr@(Instruction _ t op) = case op of
   NOP -> (,) (getTime True t) <$> prefetch
 
@@ -270,7 +275,35 @@ interpretM instr@(Instruction _ t op) = case op of
   HALT -> do
     i <- anyInterrupts
     ime <- getIME
-    out <- if not ime && has _Just i then loadPC >>= fmap Running . loadAddr else return Halt
+    let out = delay $ if not ime && has _Just i then loadPC >>= loadAddr >>= execute else halt
     return (getTime True t, out)
 
   _ -> error $ "failed at " ++ show instr
+
+execute :: (MonadEmulator m) => Word8 -> m (Word , Step m Word)
+execute = interpretM <=< parseInstructionM
+
+interrupt :: (MonadEmulator m) => Interrupt -> m (Word , Step m Word)
+interrupt i = do
+  serviceInterrupt i
+  let op = delay $ execute =<< byte
+  return (20, op)
+
+halt :: (MonadEmulator m) => m (Word, Step m Word)
+halt = do
+  i <- anyInterrupts
+  ime <- getIME
+  let out = delay $ maybe halt id
+        $   (interrupt <$> (guard ime *> i))
+        <|> ((execute =<< byte) <$ i)
+  return (4, out)
+
+prefetch :: (MonadEmulator m) => m (Step m Word)
+prefetch = do
+  i <- anyInterrupts
+  ime <- getIME
+  return $ delay $ maybe (execute =<< byte) interrupt (guard ime *> i)
+
+{-# SPECIALIZE startExecution :: Step (GB IO) Word #-}
+startExecution :: (MonadEmulator m) => Step m Word
+startExecution = delay $ execute =<< byte

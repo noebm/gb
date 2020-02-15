@@ -11,8 +11,6 @@ module MonadEmulator
   , updateGPU
   , updateTimer
 
-  , StepInfo (..)
-  , prefetch
   , serviceInterrupt
   , showRegisters
 
@@ -34,6 +32,7 @@ where
 
 import Control.Lens
 import Control.Monad.State
+import Control.Applicative
 
 import Text.Printf
 
@@ -46,6 +45,8 @@ import Interrupt.Interrupt
 import Interrupt.InterruptType
 
 import HardwareMonad
+
+import Utilities.Step
 
 showRegisters :: MonadEmulator m => m String
 showRegisters = do
@@ -74,21 +75,23 @@ store16LE b0 b1 w = let (h , l) = w ^. from word16 in b0 l >> b1 h
 -- load-store should be the identity for registers.
 -- store-load should be equal to store.
 class Monad m => MonadEmulator m where
-  storeReg :: Reg8 -> Word8 -> m ()
-  storeAddr   :: Word16 -> Word8 -> m ()
+
+  storeAddr :: Word16 -> Word8 -> m ()
+  loadAddr  :: Word16 -> m Word8
+
   default storeAddr   :: HardwareMonad m => Word16 -> Word8 -> m ()
   storeAddr = storeMem
 
-  storePC :: Word16 -> m ()
-  storeSP :: Word16 -> m ()
-
-  loadReg :: Reg8 -> m Word8
-
-  loadAddr :: Word16 -> m Word8
   default loadAddr :: HardwareMonad m => Word16 -> m Word8
   loadAddr = loadMem
 
+  storeReg :: Reg8 -> Word8 -> m ()
+  loadReg :: Reg8 -> m Word8
+
+  storePC :: Word16 -> m ()
   loadPC :: m Word16
+
+  storeSP :: Word16 -> m ()
   loadSP :: m Word16
 
   setStop :: m ()
@@ -174,15 +177,6 @@ instance MonadEmulator m => MonadEmulator (StateT s m) where
 
   anyInterrupts = aux0 anyInterrupts
   clearInterrupt = aux1 clearInterrupt
-
-data StepInfo = PendingInterrupt !Interrupt | Halt | Running {-# UNPACK #-} !Word8
-  deriving Eq
-
-prefetch :: (MonadEmulator m) => m StepInfo
-prefetch = do
-  i <- anyInterrupts
-  ime <- getIME
-  maybe (Running <$> byte) (return . PendingInterrupt) (guard ime >> i)
 
 serviceInterrupt :: (MonadEmulator m) => Interrupt -> m ()
 serviceInterrupt i = do

@@ -7,7 +7,6 @@ import Control.Lens
 import Graphics
 import HardwareMonad
 import GB
-import CPU
 
 import Cartridge.Cartridge
 import Cartridge.BootRom
@@ -17,7 +16,14 @@ import Joypad (Joypad(..))
 import qualified SDL
 import Utilities.SDL (_KeyboardEvent, _QuitEvent, _WindowClosedEvent)
 
-steps :: Monad m => Word -> Step m Word -> (Word -> m ()) -> m (Step m Word)
+import Instruction.Interpret
+
+import MonadEmulator
+
+import Utilities.Step
+
+-- faster than using Utilities.Step functions
+steps :: Monad m => Word -> Step m a -> (a -> m b) -> m (Step m a)
 steps 0 s _ = return s
 steps n s f = do
   (dt, s') <- runStep s
@@ -75,21 +81,21 @@ mainloop fp' bgrd wnd = do
       -- logger = Just $ \addr i -> do
       --   when (addr > 0xFF) $ putStrLn $ printf "0x%04x: %s" addr (show i)
 
+    let syncTimedHardware dt = do
+          updateTimer dt
+          updateGPU dt $ \gpu req -> case req of
+            Draw    -> do
+              renderGraphics gfx
+              let conf = gpuConfig gpu
+              mapM_ (drawTileMap (conf ^. gpuTileDataSelect) (conf ^. gpuBGTileMapSelect) gpu) bgrdTilemapWindow
+              mapM_ (drawTileMap (conf ^. gpuTileDataSelect) (conf ^. gpuWindowTileMapSelect) gpu) wndTilemapWindow
+            NewLine -> genPixelRow (image gfx) gpu
+
     let update s = do
-          s' <- steps 100 s $ \dt -> do
-
-            updateGPU dt $ \gpu req -> case req of
-              Draw    -> do
-                renderGraphics gfx
-                let conf = gpuConfig gpu
-                mapM_ (drawTileMap (conf ^. gpuTileDataSelect) (conf ^. gpuBGTileMapSelect) gpu) bgrdTilemapWindow
-                mapM_ (drawTileMap (conf ^. gpuTileDataSelect) (conf ^. gpuWindowTileMapSelect) gpu) wndTilemapWindow
-
-              NewLine -> genPixelRow (image gfx) gpu
-            updateTimer dt
+          s' <- steps 100 s $ syncTimedHardware
 
           events <- fmap SDL.eventPayload <$> SDL.pollEvents
           mapMOf_ (folded . _KeyboardEvent) updateKeys events
           unless (has (folded . _QuitEvent) events || has (folded . _WindowClosedEvent) events) $ update s'
 
-    update initCPUStep
+    update startExecution
