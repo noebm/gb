@@ -104,7 +104,7 @@ defaultGPUControl = GPUControl
   , _gpuOAMInterrupt      = False
   , _gpuVblankInterrupt   = False
   , _gpuHblankInterrupt   = False
-  , _gpuMode              = ModeHBlank
+  , _gpuMode              = ModeOAM
 
   , _gpuLineCompare       = 0
   , _gpuLine              = 0
