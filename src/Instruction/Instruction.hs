@@ -1,4 +1,9 @@
-module Instruction.Instruction where
+module Instruction.Instruction
+  ( InstructionExpr (..)
+  , Instruction (..)
+  , parseInstructionM
+  )
+where
 
 import Instruction.Time
 import Instruction.InOut
@@ -10,11 +15,12 @@ import Data.Bits
 
 import MonadEmulator
 
+import GB
+
 -- | decompose byte to xxyyyzzz
 byteCodeDecompose :: Word8 -> (Word8, Word8, Word8)
 byteCodeDecompose b =
   ((b `shiftR` 6) .&. 0x3, (b `shiftR` 3) .&. 0x7, b .&. 0x7)
-{-# INLINE byteCodeDecompose #-}
 
 data InstructionExpr
   = LD In8 Out8 -- from -> to
@@ -49,7 +55,7 @@ data InstructionExpr
   deriving Show
 
 data Instruction
-  = Instruction Word8 (Time Word) InstructionExpr
+  = Instruction (Time Word) InstructionExpr
   deriving Show
 
 basicRegisterArg :: Word8 -> Out8
@@ -85,6 +91,7 @@ aluMnemonic w arg = case w of
   7 -> CP arg
   _ -> error "aluMnemonic: invalid argument"
 
+{-# SPECIALIZE parseInstructionM :: Word8 -> GB IO Instruction #-}
 parseInstructionM :: MonadEmulator m => Word8 -> m Instruction
 parseInstructionM 0xCB = parseExtendedInstruction <$> byte
 parseInstructionM b = return $ parseInstruction b
@@ -92,7 +99,7 @@ parseInstructionM b = return $ parseInstruction b
 parseExtendedInstruction :: Word8 -> Instruction
 parseExtendedInstruction b =
   let {-# INLINE o #-}
-      o = Instruction b
+      o = Instruction
   in
     case byteCodeDecompose b of
       (0,y,z) ->
@@ -108,7 +115,7 @@ parseInstruction :: Word8 -> Instruction
 parseInstruction b =
 
   let {-# INLINE o #-}
-      o = Instruction b
+      o = Instruction
   in
     case byteCodeDecompose b of
 

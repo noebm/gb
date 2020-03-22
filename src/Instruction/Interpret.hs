@@ -1,4 +1,7 @@
-module Instruction.Interpret where
+module Instruction.Interpret
+  ( startExecution
+  )
+where
 
 import Data.Word
 import Data.Bits
@@ -8,7 +11,6 @@ import Control.Monad
 
 
 import Control.Applicative
--- import Interrupt.Interrupt (Interrupt)
 
 import Instruction.Instruction
 import Instruction.Time
@@ -22,7 +24,7 @@ import MonadEmulator
 import Utilities.Step
 
 interpretM :: (MonadEmulator m) => Instruction -> m (Word , Step m Word)
-interpretM instr@(Instruction _ t op) = case op of
+interpretM instr@(Instruction t op) = case op of
   NOP -> (,) (getTime True t) <$> prefetch
 
   LD from to -> do
@@ -298,6 +300,7 @@ halt = do
         <|> ((execute =<< byte) <$ i)
   return (4, out)
 
+{-# INLINE prefetch #-}
 prefetch :: (MonadEmulator m) => m (Step m Word)
 prefetch = do
   i <- anyInterrupts
