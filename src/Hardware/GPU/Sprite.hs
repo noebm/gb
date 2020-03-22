@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-module GPU.Sprite
+module Hardware.GPU.Sprite
   ( Sprite
   -- | Accessors for Sprite
   , spriteTile
@@ -34,7 +34,7 @@ import SDL.Vect
 
 import Data.Bits
 
-import GPU.GPUControl
+import Hardware.GPU.GPUControl
 
 data Sprite = Sprite
   { _spritePositionY' :: {-# UNPACK #-} !Word8

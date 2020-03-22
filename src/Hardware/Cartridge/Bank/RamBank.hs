@@ -1,4 +1,4 @@
-module Cartridge.Bank.RamBank
+module Hardware.Cartridge.Bank.RamBank
   -- | General ram banks.
   -- | Supports swapping and initialization with zeros.
   ( RamBank
@@ -18,7 +18,7 @@ import Data.Bits
 import Data.Word
 import Text.Printf
 
-import Cartridge.Bank.Bank
+import Hardware.Cartridge.Bank.Bank
 
 newtype RamBank = RamBank BankState
 

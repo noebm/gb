@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell, FlexibleContexts, RankNTypes #-}
-module Interrupt.Interrupt
+module Hardware.Interrupt.Interrupt
   ( InterruptState (..)
   , interruptVBlank
   , interruptLCD
@@ -20,7 +20,7 @@ module Interrupt.Interrupt
   )
 where
 
-import Interrupt.InterruptType
+import Hardware.Interrupt.InterruptType
 
 import Control.Monad
 import Data.Foldable

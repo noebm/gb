@@ -6,7 +6,7 @@ import System.IO
 import System.Console.GetOpt
 
 import Lib
-import Cartridge.Cartridge
+import Hardware.Cartridge
 
 data Options = Help | Info | DebugWindow | DebugBackground | NoDelay
   deriving Eq

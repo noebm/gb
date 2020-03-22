@@ -1,4 +1,4 @@
-module GPU.Palette where
+module Hardware.GPU.Palette where
 
 import Data.Word
 import Data.Bits

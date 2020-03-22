@@ -1,12 +1,12 @@
-module Cartridge.MemoryBankController where
+module Hardware.Cartridge.MemoryBankController where
 
 import Data.Bits
 import Data.Word
 
-import Cartridge.Bank.RamBank
-import Cartridge.Bank.RomBank
+import Hardware.Cartridge.Bank.RamBank
+import Hardware.Cartridge.Bank.RomBank
 
-import qualified Cartridge.Header as H
+import qualified Hardware.Cartridge.Header as H
 
 data MemoryBankController
   = NoMemoryBankController

@@ -1,4 +1,4 @@
-module GPU.GPUState
+module Hardware.GPU.GPUState
   ( module X
   , GPUState (..)
   , GPURequest(..)
@@ -14,9 +14,9 @@ module GPU.GPUState
 where
 
 import Control.Lens
-import GPU.Memory
-import GPU.GPUControl as X
-import GPU.Sprite
+import Hardware.GPU.Memory
+import Hardware.GPU.GPUControl as X
+import Hardware.GPU.Sprite
 
 import Control.Monad
 import Data.Word

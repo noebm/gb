@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
-module Timer
+module Hardware.Timer
   ( ClockSpeed(..)
   , Timer
   , defaultTimer

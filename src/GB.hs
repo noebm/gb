@@ -11,21 +11,12 @@ import qualified Data.Vector.Unboxed.Mutable as V
 import Data.Vector.Unboxed.Mutable (MVector)
 import Data.STRef
 import Data.Word
-import Text.Printf
 
-import Control.Lens
 import Control.Monad.ST
 import Control.Monad.Reader
 
 import MonadEmulator
-import HardwareMonad
-
-import CPU.Registers
-import GPU.GPUState
-import Interrupt.Interrupt
-import Timer
-import Cartridge.Cartridge
-import Joypad
+import Hardware.HardwareMonad
 
 data GBState s = GBState
   { hiram :: MVector s Word8

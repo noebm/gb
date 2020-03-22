@@ -1,8 +1,8 @@
-module GPU.Debug where
+module Hardware.GPU.Debug where
 
-import GPU.Memory
-import GPU.Palette
-import GPU.VideoAddr
+import Hardware.GPU.Memory
+import Hardware.GPU.Palette
+import Hardware.GPU.VideoAddr
 
 import Data.Word
 

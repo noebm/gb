@@ -1,4 +1,4 @@
-module Cartridge.Bank.RomBank
+module Hardware.Cartridge.Bank.RomBank
   -- | General rom banks.
   -- | Supports swapping and generation from cartridge data.
   ( RomBank
@@ -20,7 +20,7 @@ import Data.Word
 
 import Text.Printf
 
-import Cartridge.Bank.Bank
+import Hardware.Cartridge.Bank.Bank
 
 data RomBank = RomBank Int Int Banks
 

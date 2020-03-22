@@ -1,4 +1,4 @@
-module GPU.Memory
+module Hardware.GPU.Memory
   ( tileTableIndex
 
   , Tile
@@ -25,9 +25,9 @@ import Data.Word
 import Data.Bits
 import Data.Bits.Lens
 
-import GPU.GPUControl
-import GPU.Palette (Color(..))
-import GPU.VideoAddr
+import Hardware.GPU.GPUControl
+import Hardware.GPU.Palette (Color(..))
+import Hardware.GPU.VideoAddr
 
 newtype OAM = OAM (Vector Word8)
 

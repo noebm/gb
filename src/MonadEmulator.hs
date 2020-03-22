@@ -11,6 +11,7 @@ module MonadEmulator
   , updateGPU
   , updateTimer
 
+  , Interrupt
   , serviceInterrupt
   , showRegisters
 
@@ -32,7 +33,6 @@ where
 
 import Control.Lens
 import Control.Monad.State
-import Control.Applicative
 
 import Text.Printf
 
@@ -41,12 +41,8 @@ import Data.Word
 import Data.Int
 
 import CPU.Registers
-import Interrupt.Interrupt
-import Interrupt.InterruptType
 
-import HardwareMonad
-
-import Utilities.Step
+import Hardware.HardwareMonad
 
 showRegisters :: MonadEmulator m => m String
 showRegisters = do

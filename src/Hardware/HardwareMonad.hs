@@ -1,22 +1,48 @@
-module HardwareMonad where
+module Hardware.HardwareMonad
+  ( module Hardware.Timer
+  , Timer.defaultTimer
+
+  , module Hardware.GPU.GPUState
+  , Joypad.Joypad (..)
+  , Joypad.JoypadState
+  , Joypad.defaultJoypadState
+
+  , module Hardware.Cartridge
+  , module Hardware.BootRom
+
+  , module Hardware.Interrupt.Interrupt
+  , module Hardware.Interrupt.InterruptType
+
+  , HardwareMonad (..)
+
+  , loadMem, storeMem
+
+  , modifyInterrupt
+
+  , updateTimer
+  , updateGPU
+  , updateJoypad
+
+  , word16
+  )
+where
 
 import Control.Lens
 import Control.Monad
 
 import Data.Word
 
-import Timer (Timer)
-import qualified Timer
-import Interrupt.Interrupt
-import Interrupt.InterruptType
-import GPU.GPUState
-import Joypad as Joypad
-import Cartridge.Cartridge
+import Hardware.Interrupt.Interrupt
+import Hardware.Interrupt.InterruptType
 
-import Control.Lens
+import qualified Hardware.Timer as Timer
+import Hardware.Timer (Timer)
+import qualified Hardware.Joypad as Joypad
+import Hardware.GPU.GPUState
+import Hardware.Cartridge
+import Hardware.BootRom
+
 import Data.Bits
-
-import Debug.Trace
 
 class Monad m => HardwareMonad m where
   getGPU :: m GPUState
@@ -28,8 +54,8 @@ class Monad m => HardwareMonad m where
   getTimer :: m Timer
   putTimer :: Timer -> m ()
 
-  getJoypad :: m JoypadState
-  putJoypad :: JoypadState -> m ()
+  getJoypad :: m Joypad.JoypadState
+  putJoypad :: Joypad.JoypadState -> m ()
 
   getCartridge :: m CartridgeState
   putCartridge :: CartridgeState -> m ()
@@ -42,6 +68,7 @@ class Monad m => HardwareMonad m where
   readHRAM :: Word16 -> m Word8
   writeHRAM :: Word16 -> Word8 -> m ()
 
+modifyInterrupt :: HardwareMonad m => (InterruptState -> InterruptState) -> m ()
 modifyInterrupt f = putInterrupt . f =<< getInterrupt
 
 updateGPU :: HardwareMonad m => Word -> (GPUState -> GPURequest -> m ()) -> m ()
@@ -61,7 +88,7 @@ updateTimer cycles = do
   when overflow $
     modifyInterrupt $ interruptTimer.interruptFlag .~ True
 
-updateJoypad :: HardwareMonad m => (Joypad , Bool) -> m ()
+updateJoypad :: HardwareMonad m => (Joypad.Joypad , Bool) -> m ()
 updateJoypad f = do
   s0 <- getJoypad
   let s1 = Joypad.updateJoypad f s0
@@ -93,9 +120,9 @@ storeMem idx b
   | idx < 0xFEA0 = putGPU . storeGPUOAM idx b =<< getGPU
   | idx < 0xFF00 = return ()
 
-  | inJoypadRange idx = do
+  | idx == 0xff00 = do
       s <- getJoypad
-      putJoypad $ storeJoypad idx b s
+      putJoypad $ Joypad.store b s
   | inInterruptRange idx = do
       s <- getInterrupt
       putInterrupt $ storeInterrupt s idx b
@@ -125,9 +152,9 @@ loadMem idx
   | idx < 0xFEA0 = loadGPUOAM idx <$> getGPU
   | idx < 0xFF00 = return 0x00
 
-  | inJoypadRange idx = do
+  | idx == 0xff00 = do
       s <- getJoypad
-      return $ loadJoypad s idx
+      return $ Joypad.load s
   | 0xFF40 <= idx && idx < 0xFF50 = loadGPURegisters idx <$> getGPU
   | idx == 0xff50 = loadCartridgeBootRomRegister <$> getCartridge
 

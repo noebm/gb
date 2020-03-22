@@ -10,9 +10,9 @@ import Data.Word
 import Data.Text (Text)
 import Data.Foldable
 
-import GPU.GPUState
-import GPU.Drawing
-import GPU.Palette
+import Hardware.GPU.GPUState
+import Hardware.GPU.Drawing
+import Hardware.GPU.Palette
 
 import qualified Data.Vector.Storable as VS
 

@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
-module Cartridge.Bank.Bank
+module Hardware.Cartridge.Bank.Bank
   ( Bank, Banks
   , BankState
   , isBankIndex

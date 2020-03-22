@@ -8,7 +8,7 @@ import Control.Monad
 
 
 import Control.Applicative
-import Interrupt.Interrupt (Interrupt)
+-- import Interrupt.Interrupt (Interrupt)
 
 import Instruction.Instruction
 import Instruction.Time

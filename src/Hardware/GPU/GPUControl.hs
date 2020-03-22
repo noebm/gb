@@ -1,6 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
-module GPU.GPUControl
+module Hardware.GPU.GPUControl
   ( GPUMode (..)
   , GPUControl (..)
   , GPURequest (..)
@@ -30,7 +30,7 @@ import Data.Bits
 import Control.Monad
 import Text.Printf
 
-import GPU.Palette
+import Hardware.GPU.Palette
 import SDL.Vect
 
 import Control.Lens

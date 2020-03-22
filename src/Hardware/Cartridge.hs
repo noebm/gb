@@ -1,10 +1,11 @@
-module Cartridge.Cartridge where
+module Hardware.Cartridge where
 
-import qualified Cartridge.Header as Header
-import Cartridge.Bank.RomBank
-import Cartridge.Bank.RamBank
-import Cartridge.BootRom
-import Cartridge.MemoryBankController
+import Hardware.BootRom
+
+import qualified Hardware.Cartridge.Header as Header
+import Hardware.Cartridge.Bank.RomBank
+import Hardware.Cartridge.Bank.RamBank
+import Hardware.Cartridge.MemoryBankController
 
 import qualified Data.ByteString as B
 import qualified Data.Vector.Unboxed as VU
@@ -20,7 +21,6 @@ import Utilities.Vector
 data CartridgeState = CartridgeState
   { header :: Header.Header
   , bootrom :: Maybe BootRom
-  , bootromEnable :: Bool
   , romBanks :: RomBank
   , ramBanks :: Maybe RamBank
   , mbc :: MemoryBankController
@@ -31,7 +31,6 @@ defaultCartridge =
   CartridgeState
   { header = error "no default header implementation"
   , bootrom = Nothing
-  , bootromEnable = False
   , romBanks = defaultRomBank
 
   , mbc = defaultMBC
@@ -44,7 +43,6 @@ makeCartridge boot (Rom h xs) =
   CartridgeState
     { header = h
     , bootrom = boot
-    , bootromEnable = isJust boot
     , romBanks = makeRomBanks (Header.headerRomBanks h) xs
 
     , mbc = memoryBankController (view Header.mbcType $ Header.headerType h)
@@ -54,7 +52,7 @@ makeCartridge boot (Rom h xs) =
 
 loadCartridge :: Word16 -> CartridgeState -> Word8
 loadCartridge addr s
-  | bootromEnable s && addr <= 0xff = maybe 0xff (loadBootRom addr) $ bootrom s
+  | Just b <- bootrom s , addr <= 0xff = loadBootRom addr b
   | addr < 0x8000 = loadRom (romBanks s) addr
   | otherwise = error "loadCartridge: address not in cartridge range"
 
@@ -65,7 +63,7 @@ loadCartridgeRAM addr s = maybe 0xff id $ do
   return $ loadRam banks addr
 
 loadCartridgeBootRomRegister :: CartridgeState -> Word8
-loadCartridgeBootRomRegister s = fromIntegral . fromEnum . not $ (bootromEnable s)
+loadCartridgeBootRomRegister s = fromIntegral . fromEnum . not $ (isJust $ bootrom s)
 
 storeCartridge :: Word16 -> Word8 -> CartridgeState -> CartridgeState
 storeCartridge addr b c =
@@ -78,7 +76,7 @@ storeCartridgeRAM addr b c = maybe c (\ram -> c { ramBanks = Just ram }) $ do
   storeRam addr b <$> ramBanks c
 
 storeCartridgeBootRomRegister :: Word8 -> CartridgeState -> CartridgeState
-storeCartridgeBootRomRegister b c = c { bootromEnable = b == 0 }
+storeCartridgeBootRomRegister b c = c { bootrom = guard (b == 0) *> bootrom c }
 
 data Rom = Rom Header.Header (VU.Vector Word8)
 

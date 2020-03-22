@@ -1,14 +1,13 @@
 {-# LANGUAGE TemplateHaskell #-}
-module Joypad
+module Hardware.Joypad
   ( JoypadState
   , defaultJoypadState
 
   , Joypad (..)
   , updateJoypad
 
-  , inJoypadRange
-  , loadJoypad
-  , storeJoypad
+  , load
+  , store
   )
 where
 
@@ -29,10 +28,6 @@ data Joypad
   | JoypadA
   | JoypadB
   deriving (Enum, Ord, Eq, Show)
-
-{-# INLINE joypadAll #-}
-joypadAll :: Set.Set Joypad
-joypadAll = Set.fromList $ enumFrom (toEnum 0)
 
 {-# INLINE direction #-}
 {-# INLINE button #-}
@@ -62,9 +57,6 @@ joypadIndex b = case b of
 data JoypadSelect = SelectDirection | SelectButton
   deriving (Show)
 
-selected SelectButton = filtered button
-selected SelectDirection = filtered direction
-
 data JoypadState = JoypadState
   { _select :: Maybe JoypadSelect
   , _pressed :: Set.Set Joypad
@@ -79,20 +71,14 @@ updateJoypad :: (Joypad , Bool) -> JoypadState -> JoypadState
 updateJoypad (joykey, True ) = pressed %~ Set.insert joykey
 updateJoypad (joykey, False) = pressed %~ Set.delete joykey
 
-inJoypadRange :: Word16 -> Bool
-inJoypadRange addr = addr == 0xff00
-
-storeJoypad :: Word16 -> Word8 -> JoypadState -> JoypadState
-storeJoypad 0xff00 b
+store :: Word8 -> JoypadState -> JoypadState
+store b
   | not (b `testBit` 5) = select ?~ SelectButton
   | not (b `testBit` 4) = select ?~ SelectDirection
   | otherwise = id
 
-storeJoypad _ _ = error "storeJoypad: not in range"
-
-loadJoypad :: JoypadState -> Word16 -> Word8
-loadJoypad s 0xff00 = case s ^. select of
+load :: JoypadState -> Word8
+load s = case s ^. select of
     Just SelectButton    -> foldl xor 0x2f . fmap (bit . joypadIndex) $ filter button    $ toList (s ^. pressed)
     Just SelectDirection -> foldl xor 0x1f . fmap (bit . joypadIndex) $ filter direction $ toList (s ^. pressed)
     _ -> 0x00
-loadJoypad _ _ = error "loadJoypad: not in range"

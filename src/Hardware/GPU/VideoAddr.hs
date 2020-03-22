@@ -1,4 +1,4 @@
-module GPU.VideoAddr where
+module Hardware.GPU.VideoAddr where
 
 import Data.Word
 import Data.Bits

@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, TemplateHaskell #-}
-module Cartridge.Header
+module Hardware.Cartridge.Header
   ( Header(..)
   , header
 

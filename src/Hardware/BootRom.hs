@@ -1,4 +1,4 @@
-module Cartridge.BootRom
+module Hardware.BootRom
   ( BootRom
   , loadBootRom
   , readBootRom

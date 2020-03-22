@@ -1,15 +1,15 @@
-module GPU.Drawing where
+module Hardware.GPU.Drawing where
 
 import Data.Word
 
 import qualified Data.Vector.Unboxed as V
 import qualified Data.Vector.Unboxed.Mutable as VM
 
-import GPU.Memory
-import GPU.Palette
-import GPU.GPUControl
-import GPU.Sprite
-import GPU.VideoAddr
+import Hardware.GPU.Memory
+import Hardware.GPU.Palette
+import Hardware.GPU.GPUControl
+import Hardware.GPU.Sprite
+import Hardware.GPU.VideoAddr
 
 import SDL.Vect
 

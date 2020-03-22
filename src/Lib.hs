@@ -8,20 +8,13 @@ import Control.Monad.IO.Class
 import Data.IORef
 
 import Graphics
-import HardwareMonad
+import Hardware.HardwareMonad
 import GB
-
-import Cartridge.Cartridge
-import Cartridge.BootRom
-import GPU.GPUState
-import Joypad (Joypad(..))
 
 import qualified SDL
 import Utilities.SDL (_KeyboardEvent, _QuitEvent, _WindowClosedEvent)
 
 import Instruction.Interpret
-
-import MonadEmulator
 
 import Utilities.Step
 

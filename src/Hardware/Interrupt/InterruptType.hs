@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
-module Interrupt.InterruptType where
+module Hardware.Interrupt.InterruptType where
 
 import Control.Lens
 
