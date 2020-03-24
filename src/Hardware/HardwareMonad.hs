@@ -21,6 +21,7 @@ module Hardware.HardwareMonad
 
   , updateTimer
   , updateGPU
+  , updateGPU'
   , updateJoypad
 
   , word16
@@ -79,6 +80,14 @@ updateGPU cyc f = do
     when (req == Draw) $ modifyInterrupt $ interruptVBlank.interruptFlag .~ True
     f gpu' req
   when flag $ modifyInterrupt $ interruptLCD.interruptFlag .~ True
+
+updateGPU' :: HardwareMonad m => Word -> m (Maybe Frame)
+updateGPU' cyc = do
+  (flag, im, gpu') <- updateGPUState' cyc <$> getGPU
+  putGPU gpu'
+  forM_ im $ \_ -> modifyInterrupt $ interruptVBlank.interruptFlag .~ True
+  when flag $      modifyInterrupt $ interruptLCD   .interruptFlag .~ True
+  return im
 
 updateTimer :: HardwareMonad m => Word -> m ()
 updateTimer cycles = do

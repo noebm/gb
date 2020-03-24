@@ -25,22 +25,13 @@ import Data.Word
 import Data.Bits
 import Data.Bits.Lens
 
-import Hardware.GPU.GPUControl
 import Hardware.GPU.Palette (Color(..))
 import Hardware.GPU.VideoAddr
-
-newtype OAM = OAM (Vector Word8)
 
 newtype VideoRAM = VideoRAM (Vector Word8)
 
 defaultVideoRAM :: VideoRAM
 defaultVideoRAM = VideoRAM $ VU.replicate 0x2000 0x00
-
-defaultOAM :: OAM
-defaultOAM = OAM $ VU.replicate 0xa0 0x00
-
-dumpOAM :: OAM -> [ Word8 ]
-dumpOAM (OAM m) = VU.toList m
 
 dumpVideoRAM :: VideoRAM -> [ Word8 ]
 dumpVideoRAM (VideoRAM m) = VU.toList m

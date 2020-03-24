@@ -43,6 +43,7 @@ data Sprite = Sprite
   , _spriteAttributes :: {-# UNPACK #-} !Word8
   }
 
+defaultSprite :: Sprite
 defaultSprite = Sprite 0x00 0x00 0x00 0x00
 
 data instance U.Vector    Sprite =  V_Sprite {-# UNPACK #-} !Int !(U.Vector Word8)
@@ -54,7 +55,7 @@ instance M.MVector U.MVector Sprite where
   basicLength (MV_Sprite n _) = n
   basicUnsafeSlice m n (MV_Sprite _ v) = MV_Sprite n (M.basicUnsafeSlice (4*m) (4*n) v)
   basicOverlaps (MV_Sprite _ v) (MV_Sprite _ u) = M.basicOverlaps v u
-  basicUnsafeNew n = liftM (MV_Sprite n) (M.basicUnsafeNew (4*n))
+  basicUnsafeNew n = fmap (MV_Sprite n) (M.basicUnsafeNew (4*n))
   basicUnsafeRead (MV_Sprite _ v) i = do
     let o = 4 * i
     a <- M.basicUnsafeRead v o
@@ -71,8 +72,8 @@ instance M.MVector U.MVector Sprite where
   basicInitialize (MV_Sprite _ v) = M.basicInitialize v
 
 instance G.Vector U.Vector Sprite where
-  basicUnsafeFreeze (MV_Sprite n v) = liftM (V_Sprite n) (G.basicUnsafeFreeze v)
-  basicUnsafeThaw (V_Sprite n v) = liftM (MV_Sprite n) (G.basicUnsafeThaw v)
+  basicUnsafeFreeze (MV_Sprite n v) = fmap (V_Sprite n) (G.basicUnsafeFreeze v)
+  basicUnsafeThaw (V_Sprite n v) = fmap (MV_Sprite n) (G.basicUnsafeThaw v)
   basicLength (V_Sprite n _) = n
   basicUnsafeSlice m n (V_Sprite _ v) = V_Sprite n (G.basicUnsafeSlice (4*m) (4*n) v)
   basicUnsafeIndexM (V_Sprite _ v) i = do
@@ -152,14 +153,14 @@ getLineSprites line size (OAM oam)
     collectedSprites
       = G.take 10
       $ G.filter (\obj -> obj ^. spritePositionY' <= line + 16 && line + 16 < (obj ^. spritePositionY' + size))
-      $ oam
+      oam
 
     spriteOrder
       = G.fromList
       $ sortBy (\j i
                 -> ((collectedSprites ^?! ix i.spritePositionX) `compare` (collectedSprites ^?! ix j.spritePositionX))
                  <> (i `compare` j))
-      $ [0..G.length collectedSprites - 1]
+      [0..G.length collectedSprites - 1]
 
 directMemoryAccessOAM :: U.Vector Word8 -> OAM
 directMemoryAccessOAM v

@@ -4,9 +4,11 @@ module Hardware.GPU.GPUState
   , GPURequest(..)
   , defaultGPUState
   , updateGPUState
+  , updateGPUState'
   , dmaTransfer
   , VideoRAM
   , OAM
+  , Frame
 
   , loadGPURAM, loadGPUOAM, loadGPURegisters
   , storeGPURAM, storeGPUOAM, storeGPURegisters
@@ -17,19 +19,19 @@ import Control.Lens
 import Hardware.GPU.Memory
 import Hardware.GPU.GPUControl as X
 import Hardware.GPU.Sprite
+import Hardware.GPU.Frame
 
 import Control.Monad
 import Data.Word
-import Data.Bits
 
 -- only used for dmaTransfer
 import qualified Data.Vector.Unboxed as VU
-import Data.Vector.Unboxed (Vector)
 
 data GPUState = GPUState
   { gpuVideoRAM        :: !VideoRAM
   , gpuOAM             :: !OAM
   , gpuConfig          :: GPUControl
+  , frameBuffer        :: Frame
   }
 
 defaultGPUState :: GPUState
@@ -37,13 +39,26 @@ defaultGPUState = GPUState
   { gpuVideoRAM        = defaultVideoRAM
   , gpuOAM             = defaultOAM
   , gpuConfig          = defaultGPUControl
+  , frameBuffer        = newFrame
   }
 
 updateGPUState :: Word -> GPUState -> (Bool, Maybe GPURequest, GPUState)
-updateGPUState cycles s = do
+updateGPUState cycles s =
   if view gpuEnabled (gpuConfig s) then
     let (f, req, c) = updateGPUControl cycles (gpuConfig s)
     in (f , req, s { gpuConfig = c })
+    else (False, Nothing, s)
+
+updateGPUState' :: Word -> GPUState -> (Bool, Maybe Frame, GPUState)
+updateGPUState' cycles s =
+  if view gpuEnabled (gpuConfig s) then
+    let (f , req, c) = updateGPUControl cycles (gpuConfig s)
+        s' = s { gpuConfig = c }
+    in case req of
+      Just Draw -> (f , guard (frameDone (frameBuffer s)) *> Just (frameBuffer s) , s' { frameBuffer = newFrame })
+      Just NewLine ->
+        (f , Nothing, s' { frameBuffer = updateFrame c (gpuVideoRAM s) (gpuOAM s) (frameBuffer s) })
+      Nothing -> (f , Nothing, s')
     else (False, Nothing, s)
 
 loadGPURAM :: Word16 -> GPUState -> Word8
@@ -65,12 +80,12 @@ dmaTransfer access baseaddr g = do
   return $ g { gpuOAM = directMemoryAccessOAM vec }
 
 storeGPURAM :: Word16 -> Word8 -> GPUState -> GPUState
-storeGPURAM addr b g@GPUState { gpuConfig = conf } = maybe g (\x -> g { gpuVideoRAM = x }) $ do
+storeGPURAM addr b g = maybe g (\x -> g { gpuVideoRAM = x }) $ do
   guard (_gpuMode (gpuConfig g) /= ModeVRAM)
   return $ storeVideoRAM (gpuVideoRAM g) addr b
 
 storeGPUOAM :: Word16 -> Word8 -> GPUState -> GPUState
-storeGPUOAM addr b g@GPUState { gpuConfig = conf }
+storeGPUOAM addr b g
   = maybe g (\oam -> g { gpuOAM = oam }) $ storeOAM (gpuConfig g) addr b (gpuOAM g)
 
 storeGPURegisters :: Word16 -> Word8 -> GPUState -> GPUState

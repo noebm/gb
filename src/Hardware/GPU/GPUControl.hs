@@ -27,7 +27,6 @@ where
 
 import Data.Word
 import Data.Bits
-import Control.Monad
 import Text.Printf
 
 import Hardware.GPU.Palette
@@ -120,7 +119,7 @@ defaultGPUControl = GPUControl
 data GPURequest = Draw | NewLine
   deriving (Eq)
 
-lineInterrupt gpu = (gpu ^. gpuLineCompareInterrupt && gpuYAtCompare gpu)
+lineInterrupt gpu = gpu ^. gpuLineCompareInterrupt && gpuYAtCompare gpu
 
 -- returns stat interrupt, renderer requests and new state
 updateGPUControl :: Word -> GPUControl -> (Bool, Maybe GPURequest, GPUControl)

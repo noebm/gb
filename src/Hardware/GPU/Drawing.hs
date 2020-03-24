@@ -74,6 +74,6 @@ generateLine gctrl mem oam = V.create $ do
   when (gctrl ^. displayWindow) $ when (gctrl ^. gpuWindow._y <= gctrl ^. gpuLine) $ do
     let (offset, disp) = windowLine gctrl mem
     V.copy (VM.drop (fromIntegral offset) pixels) disp
-  when (gctrl ^. displayOBJ) $ do
+  when (gctrl ^. displayOBJ) $
     spriteLine gctrl mem oam pixels
   return pixels

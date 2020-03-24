@@ -2,17 +2,14 @@
 module Graphics where
 
 import Control.Monad.IO.Class
-import Control.Lens
+import Control.Monad
 
 import SDL.Video
 import SDL.Vect
 import Data.Word
 import Data.Text (Text)
-import Data.Foldable
 
-import Hardware.GPU.GPUState
-import Hardware.GPU.Drawing
-import Hardware.GPU.Palette
+import Hardware.GPU.Frame
 
 import qualified Data.Vector.Storable as VS
 
@@ -66,25 +63,16 @@ paletteColorToGrayscale w = V4 c c c 0xff
       0x02 -> 96
       _    -> 0
 
-genPixelRow :: (MonadIO m) => Texture -> GPUState -> m ()
-genPixelRow im g = do
-  let y = _gpuLine $ gpuConfig g
-  let v = generateLine (gpuConfig g) (gpuVideoRAM g) (gpuOAM g)
-  updateTextureLine im (fromIntegral y)
-    $ VS.map paletteColorToGrayscale
-    $ VS.convert
-    $ v
+generateImage :: MonadIO m => Texture -> Frame -> m ()
+generateImage texture (Frame frame) = updateImage texture $ VS.convert frame
 
-drawTileMap :: MonadIO m => Bool -> Bool -> GPUState -> GraphicsContext -> m ()
-drawTileMap tiledata tilemap gpu dbg = do
-  let pixelsPerLine = 256
-  let pixelsPerCol  = 256
-  let pixels = VS.generate (pixelsPerLine * pixelsPerCol) $ \idx ->
-        let (y , x) = idx `divMod` pixelsPerLine & each %~ fromIntegral
-            (Color p) = pixel (gpuVideoRAM gpu) tiledata tilemap (V2 x y)
-                        --- (gpuConfig gpu ^. gpuTileDataSelect)
-                        --- (gpuConfig gpu ^. gpuBGTileMapSelect)
-        in paletteColorToGrayscale p
-  forM_ [0..pixelsPerCol-1] $ \y -> do
-    updateTextureLine (image dbg) y (VS.slice (y * pixelsPerLine) pixelsPerLine pixels)
-  renderGraphics dbg
+updateImage :: MonadIO m => Texture -> VS.Vector Word8 -> m ()
+updateImage texture im = do
+  when (VS.length im /= 160 * 144) $ error $
+    "updateImage: input image not 160 * 144 bytes long - " ++ show (VS.length im)
+  let vs' = VS.unsafeCast $ VS.map paletteColorToGrayscale im
+  _ <- updateTexture texture
+    Nothing
+    (vectorToByteString vs')
+    (4 * 160)
+  return ()

@@ -2,7 +2,6 @@ module Hardware.GPU.VideoAddr where
 
 import Data.Word
 import Data.Bits
-import Control.Lens
 
 newtype TileMapAddr = TileMapAddr Word16
   deriving (Show)

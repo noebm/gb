@@ -54,47 +54,30 @@ updateKeys :: SDL.KeyboardEventData -> GB IO ()
 updateKeys (SDL.KeyboardEventData _ press repeat keysym) =
   forM_ ((,) <$> (keymap $ SDL.keysymKeycode keysym) <*> pressRelease press repeat) updateJoypad
 
-mainloop :: FilePath -> Bool -> Bool -> Bool -> IO ()
-mainloop fp' bgrd wnd nodelay = do
+mainloop :: FilePath -> Bool -> IO ()
+mainloop fp' nodelay = do
 
   let bootStrapName = "DMG_ROM.bin"
   cart <- setupCartridge (Just $ "./" ++ bootStrapName) fp'
   gfx <- initializeGraphics
 
-  bgrdTilemapWindow <-
-    if bgrd
-    then Just <$> newWindow "background tilemap" (pure 256) (Just 1)
-    else return Nothing
-  wndTilemapWindow <-
-    if wnd
-    then Just <$> newWindow "window tilemap"     (pure 256) (Just 1)
-    else return Nothing
-
   tickRef <- newIORef 0
 
   runGB cart $ do
-    let
-      -- logger :: Maybe (Word16 -> Instruction ArgWithData -> IO ())
-      logger = Nothing
-      -- logger = Just $ \addr i -> do
-      --   when (addr > 0xFF) $ putStrLn $ printf "0x%04x: %s" addr (show i)
 
     let syncTimedHardware dt = do
           updateTimer dt
-          updateGPU dt $ \gpu req -> case req of
-            Draw    -> do
-              renderGraphics gfx
-              unless nodelay $ liftIO $ do
-                told <- readIORef tickRef
-                tnew <- SDL.ticks
-                writeIORef tickRef tnew
-                let dt = tnew - told
-                when (tnew > told && dt < 16) $ SDL.delay (16 - dt)
+          frame <- updateGPU' dt
 
-              let conf = gpuConfig gpu
-              mapM_ (drawTileMap (conf ^. gpuTileDataSelect) (conf ^. gpuBGTileMapSelect) gpu) bgrdTilemapWindow
-              mapM_ (drawTileMap (conf ^. gpuTileDataSelect) (conf ^. gpuWindowTileMapSelect) gpu) wndTilemapWindow
-            NewLine -> genPixelRow (image gfx) gpu
+          forM_ frame $ \frame -> do
+            generateImage (image gfx) frame
+            renderGraphics gfx
+            unless nodelay $ liftIO $ do
+              told <- readIORef tickRef
+              tnew <- SDL.ticks
+              writeIORef tickRef tnew
+              let dtime = tnew - told
+              when (tnew > told && dtime < 16) $ SDL.delay (16 - dtime)
 
     let update s = do
           s' <- steps 100 s $ syncTimedHardware
