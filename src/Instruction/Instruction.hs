@@ -78,6 +78,14 @@ registerPointerArg y = case y .&. 0x6 of
   6 -> AddrHLd
   _ -> error "registerPointer: invalid argument"
 
+argOut16 :: Word8 -> Out16
+argOut16 w = case w .&. 0x6 of
+  0 -> OutReg16 BC
+  2 -> OutReg16 DE
+  4 -> OutReg16 HL
+  6 -> OutSP
+  _ -> error "impossible"
+
 {-# INLINE aluMnemonic #-}
 aluMnemonic :: Word8 -> In8 -> InstructionExpr
 aluMnemonic w arg = case w of
@@ -125,35 +133,14 @@ parseInstruction b =
     (0,3,0) -> o (ConstantTime 12) (JR Nothing)
     (0,y,0) -> o (VariableTime 8 12) (JR (Just $ flag (y .&. 0x3)))
 
-    (0,0,1) -> o (ConstantTime 12) $ LD16 InImm16 (OutReg16 BC)
-    (0,2,1) -> o (ConstantTime 12) $ LD16 InImm16 (OutReg16 DE)
-    (0,4,1) -> o (ConstantTime 12) $ LD16 InImm16 (OutReg16 HL)
-    (0,6,1) -> o (ConstantTime 12) $ LD16 InImm16 OutSP
+    (0,y,1) | y `testBit` 0 -> o (ConstantTime 8) $ ADD16_HL $ out16ToIn16 (argOut16 y)
+            | otherwise     -> o (ConstantTime 12) $ LD16 InImm16 (argOut16 y)
 
-    (0,1,1) -> o (ConstantTime 8) $ ADD16_HL $ InReg16 BC
-    (0,3,1) -> o (ConstantTime 8) $ ADD16_HL $ InReg16 DE
-    (0,5,1) -> o (ConstantTime 8) $ ADD16_HL $ InReg16 HL
-    (0,7,1) -> o (ConstantTime 8) $ ADD16_HL $ InSP
+    (0,y,2) | y `testBit` 0 -> o (ConstantTime 8) $ LD (InAddr8 $ registerPointerArg y) (OutReg8 A)
+            | otherwise     -> o (ConstantTime 8) $ LD (InReg8 A) (OutAddr8 $ registerPointerArg y)
 
-    (0,y@1,2) -> o (ConstantTime 8) $ LD (InAddr8 $ registerPointerArg y) (OutReg8 A)
-    (0,y@3,2) -> o (ConstantTime 8) $ LD (InAddr8 $ registerPointerArg y) (OutReg8 A)
-    (0,y@5,2) -> o (ConstantTime 8) $ LD (InAddr8 $ registerPointerArg y) (OutReg8 A)
-    (0,y@7,2) -> o (ConstantTime 8) $ LD (InAddr8 $ registerPointerArg y) (OutReg8 A)
-
-    (0,y@0,2) -> o (ConstantTime 8) $ LD (InReg8 A) (OutAddr8 $ registerPointerArg y)
-    (0,y@2,2) -> o (ConstantTime 8) $ LD (InReg8 A) (OutAddr8 $ registerPointerArg y)
-    (0,y@4,2) -> o (ConstantTime 8) $ LD (InReg8 A) (OutAddr8 $ registerPointerArg y)
-    (0,y@6,2) -> o (ConstantTime 8) $ LD (InReg8 A) (OutAddr8 $ registerPointerArg y)
-
-    (0,0,3) -> o (ConstantTime 8) $ INC16 $ OutReg16 BC
-    (0,2,3) -> o (ConstantTime 8) $ INC16 $ OutReg16 DE
-    (0,4,3) -> o (ConstantTime 8) $ INC16 $ OutReg16 HL
-    (0,6,3) -> o (ConstantTime 8) $ INC16 $ OutSP
-
-    (0,1,3) -> o (ConstantTime 8) $ DEC16 $ OutReg16 BC
-    (0,3,3) -> o (ConstantTime 8) $ DEC16 $ OutReg16 DE
-    (0,5,3) -> o (ConstantTime 8) $ DEC16 $ OutReg16 HL
-    (0,7,3) -> o (ConstantTime 8) $ DEC16 $ OutSP
+    (0,y,3) | y `testBit` 0 -> o (ConstantTime 8) $ DEC16 $ argOut16 y
+            | otherwise     -> o (ConstantTime 8) $ INC16 $ argOut16 y
 
     (0,y,4) -> o (ConstantTime $ if y == 6 then 12 else 4) $ INC (basicRegisterArg y)
     (0,y,5) -> o (ConstantTime $ if y == 6 then 12 else 4) $ DEC (basicRegisterArg y)
@@ -203,10 +190,7 @@ parseInstruction b =
     (3,6,3) -> o (ConstantTime 4) DI
     (3,7,3) -> o (ConstantTime 4) EI
 
-    (3,f@0,4) -> o (VariableTime 12 24) $ CALL (Just $ flag f)
-    (3,f@1,4) -> o (VariableTime 12 24) $ CALL (Just $ flag f)
-    (3,f@2,4) -> o (VariableTime 12 24) $ CALL (Just $ flag f)
-    (3,f@3,4) -> o (VariableTime 12 24) $ CALL (Just $ flag f)
+    (3,f,4) | f < 4 -> o (VariableTime 12 24) $ CALL (Just $ flag f)
 
     (3,0,5) -> o (ConstantTime 16) $ PUSH BC
     (3,2,5) -> o (ConstantTime 16) $ PUSH DE
