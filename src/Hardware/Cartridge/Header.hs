@@ -20,6 +20,8 @@ import Data.Bits
 import Control.Lens
 import Control.Monad
 
+import Data.Serialize.Get
+
 data CartridgeOptions
   = HasRAM
   | IsPersistent
@@ -51,29 +53,40 @@ data Header = Header
   deriving Show
 
 header :: ByteString -> Either String Header
-header bs = do
-  unless (B.length bs >= 0x150) $ Left "header: file too short"
-  let (crc, crc') = checksumHeader bs
-  unless (crc == crc') $ Left "header: invalid checksum"
-  ram <- ramBanks bs
-  loc <- locale bs
-  cartTy <- cartridgeType (bs `B.index` 0x147)
-  return $ Header
-    { headerTitle = title bs
-    , headerType = cartTy
-    , headerRomBanks = romBanks bs
-    , headerRamBanks = ram
-    , headerLocale = loc
-    }
+header = runGet $ do
+  skip 0x100
+  isolate 0x50 $ do
+    label "program entry point" $ skip 4
+    label "nintendo logo" $ skip 0x30
 
-checksumHeader :: ByteString -> (Word8 , Word8)
-checksumHeader bs = (foldl (\x y -> x - y - 1) 0 checksumData, headerChecksum)
-  where
-    headerChecksum = bs `B.index` 0x14D
-    checksumData = B.unpack $ B.take (0x14D - 0x134) $ B.drop 0x134 bs
+    header' <- lookAhead $ do
+      -- either 16 byte title or title + manufacturer code + cgb flag
+      title <- label "title" $ B.takeWhile (/= 0x00) <$> getBytes 0x10
+      -- label "manufacturer code" $ skip 4
+      -- _cbg <- label "cgb flag" $ getWord8
+      _code <- label "new licensee code" $ getBytes 2
+      _sgb <- label "sgb flag" getWord8
+      cartTy <- either fail return . cartridgeType =<< label "cartridge type" getWord8
+      rom <- shiftL 2 . fromIntegral <$> label "ROM size" getWord8
+      ram <- either fail return . ramBanks =<< label "RAM size" getWord8
+      loc <- label "locale" getWord8
+      label "old licensee code" $ skip 1
+      label "game version number" $ skip 1
+      return $ Header
+        { headerTitle = title
+        , headerType  = cartTy
+        , headerRomBanks = rom
+        , headerRamBanks = ram
+        , headerLocale   = loc
+        }
 
-title :: ByteString -> ByteString
-title = B.take 16 . B.takeWhile (/= 0) . B.drop 0x134
+    headerchksm' <- B.foldl (\x y -> x - y - 1) 0x00 <$> getBytes 0x19
+    headerchksm <- label "header checksum" getWord8
+    -- checksum over whole ROM (excluding both checksum bytes)
+    _globalchksm <- label "global checksum" getWord16be
+
+    unless (headerchksm == headerchksm') $ fail "checksum failed"
+    return header'
 
 cartridgeType :: Word8 -> Either String CartridgeType
 cartridgeType 0 = Right $ CartridgeType OnlyROM []
@@ -88,15 +101,8 @@ cartridgeType 3 = Right $ CartridgeType MBC1 [ HasRAM, IsPersistent ]
 -- cartridgeType 6 = Right $ CartridgeType MBC2 [ IsPersistent ]
 cartridgeType x = Left $ "cartridgetype invalid / not supported " ++ show x
 
-romBanks :: ByteString -> Word
-romBanks bs = case bs `B.index` 0x148 of
-  x -> 2 `shiftL` fromIntegral x
-
-locale :: ByteString -> Either String Word8
-locale bs = Right $ bs `B.index` 0x14A
-
-ramBanks :: ByteString -> Either String Word
-ramBanks bs = case bs `B.index` 0x149 of
+ramBanks :: Word8 -> Either String Word
+ramBanks x = case x of
   0x00 -> Right 0
   0x01 -> Right 2
   0x02 -> Right 8

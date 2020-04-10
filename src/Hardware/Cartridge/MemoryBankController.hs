@@ -1,5 +1,6 @@
 module Hardware.Cartridge.MemoryBankController where
 
+import Control.Monad
 import Data.Bits
 import Data.Word
 
@@ -10,28 +11,38 @@ import qualified Hardware.Cartridge.Header as H
 
 data MemoryBankController
   = NoMemoryBankController
-  | MemoryBankController1 MBC1
+  | MemoryBankController1
+    { mbcConfig :: MBC1
+    , mbcRomSelector :: RomBankSelector
+    , mbcRamBank :: Maybe RamBank
+    }
 
-defaultMBC :: MemoryBankController
-defaultMBC = NoMemoryBankController
-
-memoryBankController :: H.MBCType -> MemoryBankController
-memoryBankController H.OnlyROM = NoMemoryBankController
-memoryBankController H.MBC1    = MemoryBankController1 defaultMBC1
+newMemoryBankController :: H.Header -> MemoryBankController
+newMemoryBankController h = case H._mbcType $ H.headerType h of
+  H.OnlyROM -> NoMemoryBankController
+  H.MBC1    -> MemoryBankController1 defaultMBC1 defaultRomBankSelector
+               (newRamBanks $ fromIntegral $ H.headerRamBanks h)
 
 storeMBC :: Word16 -> Word8
-         -> (MemoryBankController, RomBank, Maybe RamBank)
-         -> (MemoryBankController, RomBank, Maybe RamBank)
-storeMBC addr b (mbc, rom, ram) = case mbc of
-  NoMemoryBankController -> (mbc, rom, ram)
-  MemoryBankController1 mbc1 ->
+         -> MemoryBankController
+         -> RomBanks
+         -> MemoryBankController
+storeMBC addr b mbc banks = case mbc of
+  NoMemoryBankController -> NoMemoryBankController
+  MemoryBankController1 mbc1 _ ram ->
     let mbc1' = storeMBC1 addr b mbc1
-        (rom', ram') = updateBanks mbc1' (rom, ram)
-    in (MemoryBankController1 mbc1', rom', ram')
+        (rom', ram') = updateBanks mbc1' ram banks
+    in MemoryBankController1 mbc1' rom' ram'
 
-ramAccessible :: MemoryBankController -> Bool
-ramAccessible NoMemoryBankController = False
-ramAccessible (MemoryBankController1 mbc1) = ramg mbc1
+romBankSel :: MemoryBankController -> RomBankSelector
+romBankSel NoMemoryBankController = RomBankSelector 0 1
+romBankSel (MemoryBankController1 _ sel _) = sel
+
+ramBank :: MemoryBankController -> Maybe RamBank
+ramBank NoMemoryBankController = Nothing
+ramBank (MemoryBankController1 mbc1 _ ramb) = do
+  guard (ramg mbc1)
+  ramb
 
 data MBC1Mode = MBC1_RomMode | MBC1_RamMode
   deriving Eq
@@ -62,12 +73,16 @@ ramBankIndex s = case mode s of
   MBC1_RamMode -> bank2 s .&. 0x03
   MBC1_RomMode -> 0x00
 
-updateBanks :: MBC1 -> (RomBank, Maybe RamBank) -> (RomBank, Maybe RamBank) -- CartridgeState -> CartridgeState
-updateBanks mbc1 (romBanks , ramBanks) =
-  ( selectRomBank1 (fromIntegral $ romBank1Index $ mbc1) $
-    selectRomBank2 (fromIntegral $ romBank2Index $ mbc1) $
-    romBanks
-  , selectRamBank (fromIntegral $ ramBankIndex $ mbc1) <$> ramBanks
+generateRomBankSelector :: MBC1 -> (RomBanks -> RomBankSelector)
+generateRomBankSelector mbc1 banks = RomBankSelector
+  (selectRomBank1 (fromIntegral $ romBank1Index mbc1) banks)
+  (selectRomBank2 (fromIntegral $ romBank2Index mbc1) banks)
+
+updateBanks :: MBC1 -> Maybe RamBank
+            -> (RomBanks -> (RomBankSelector, Maybe RamBank))
+updateBanks mbc1 ramBanks banks =
+  ( generateRomBankSelector mbc1 banks
+  , selectRamBank (fromIntegral $ ramBankIndex mbc1) <$> ramBanks
   )
 
 storeMBC1 :: Word16 -> Word8 -> MBC1 -> MBC1

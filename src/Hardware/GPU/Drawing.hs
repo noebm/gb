@@ -1,15 +1,18 @@
-module Hardware.GPU.Drawing where
+module Hardware.GPU.Drawing
+  ( generateLine
+  , GPUControl, OAM, VideoRAM
+  )
+where
 
 import Data.Word
 
 import qualified Data.Vector.Unboxed as V
 import qualified Data.Vector.Unboxed.Mutable as VM
 
-import Hardware.GPU.Memory
-import Hardware.GPU.Palette
 import Hardware.GPU.GPUControl
-import Hardware.GPU.Sprite
-import Hardware.GPU.VideoAddr
+import Hardware.GPU.VideoRAM
+import Hardware.GPU.OAM
+import Hardware.GPU.Palette
 
 import SDL.Vect
 
@@ -17,14 +20,9 @@ import Control.Lens
 import Control.Monad.Primitive
 import Control.Monad
 
-getTile' :: VideoRAM -> Bool -> Bool -> Word8 -> Word8 -> Tile
-getTile' mem tileDataSelect tileMapSelect x y = getTile mem
-  $ getTileAddr tileDataSelect mem
-  $ tileTableIndex tileMapSelect x y
-
 pixel :: VideoRAM -> Bool -> Bool -> V2 Word8 -> Color
 pixel mem tileSelect mapSelect (V2 x y) = getTileColor t x y
-  where t = getTile' mem tileSelect mapSelect (x `div` 8) (y `div` 8)
+  where t = getTile mapSelect tileSelect (x `div` 8) (y `div` 8) mem
 
 backgroundLine :: GPUControl -> VideoRAM -> V.Vector Word8
 backgroundLine g vram = V.generate 160 $ \i ->
@@ -42,6 +40,7 @@ windowLine g vram =
     in paletteValue (_gpuBGPalette g) $
        pixel vram (g ^. gpuTileDataSelect) (g ^. gpuWindowTileMapSelect) (V2 x y')
 
+spriteLine :: PrimMonad m => GPUControl -> VideoRAM -> OAM -> VM.MVector (PrimState m) Word8 -> m ()
 spriteLine gctrl mem oam pixels = do
   let objsize = if gctrl ^. gpuOBJSizeLarge then 16 else 8
   V.forM_ (getLineSprites (gctrl ^. gpuLine) objsize oam) $ \obj -> do
@@ -49,9 +48,9 @@ spriteLine gctrl mem oam pixels = do
     let (idx , y) =
           let y0 = (if obj ^. spriteFlippedY then \a -> objsize - 1 - a else id)
                 $ gctrl ^. gpuLine - obj ^. spritePositionY
-              (idxOffset, y) = y0 `divMod` 8
-          in (obj ^. spriteTile + idxOffset, y)
-    let t = getTile mem $ spriteTileAddr idx
+              (idxOffset, y') = y0 `divMod` 8
+          in (obj ^. spriteTile + idxOffset, y')
+    let t = getSpriteTile idx (tiles mem)
     let adjustTileCoord = if obj ^. spriteFlippedX then \x -> 7 - x else id
     forM_ [0..7] $ \x ->
       when (obj ^. spritePositionX + x < 160) $

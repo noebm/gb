@@ -4,6 +4,7 @@ module Lib where
 import Control.Monad
 import Control.Lens
 import Control.Monad.IO.Class
+import Control.Monad.ST
 
 import Data.IORef
 
@@ -30,12 +31,12 @@ steps n s f = do
   f dt
   steps (n - 1) s' f
 
--- setupCartridge :: Maybe FilePath -> Maybe FilePath -> IO (CartridgeState )
+setupCartridge :: Maybe FilePath -> FilePath -> IO (CartridgeState RealWorld)
 setupCartridge fpBoot fpRom = do
   let eitherError = either error id
   rom      <- eitherError <$> readRom fpRom
   bootrom' <- fmap eitherError <$> mapM readBootRom fpBoot
-  return $ makeCartridge bootrom' rom
+  stToIO $ makeCartridge bootrom' rom
 
 keymap :: SDL.Keycode -> Maybe Joypad
 keymap SDL.KeycodeUp    = Just JoypadUp
@@ -56,7 +57,7 @@ pressRelease _ _ = Nothing
 
 updateKeys :: SDL.KeyboardEventData -> GB IO ()
 updateKeys (SDL.KeyboardEventData _ press repeat keysym) =
-  forM_ ((,) <$> (keymap $ SDL.keysymKeycode keysym) <*> pressRelease press repeat) updateJoypad
+  forM_ ((,) <$> (keymap $ SDL.keysymKeycode keysym) <*> pressRelease press repeat) setJoypad
 
 mainloop :: FilePath -> Bool -> IO ()
 mainloop fp' nodelay = do
@@ -77,8 +78,7 @@ mainloop fp' nodelay = do
   runGB cart $ do
 
     let syncTimedHardware dt = do
-          updateTimer dt
-          frame <- updateGPU' dt
+          frame <- tickHardware dt
 
           forM_ frame $ \frame -> do
             generateImage (image gfx) frame

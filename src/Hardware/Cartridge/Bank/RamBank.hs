@@ -16,7 +16,6 @@ import Control.Lens
 import Control.Monad
 import Data.Bits
 import Data.Word
-import Text.Printf
 
 import Hardware.Cartridge.Bank.Bank
 
@@ -24,7 +23,7 @@ newtype RamBank = RamBank BankState
 
 newRamBanks :: Int -> Maybe RamBank
 newRamBanks n = do
-  guard (0 < n)
+  guard (0 <= n)
   let vs = V.replicate n (VU.replicate 0x2000 0x00)
   return $ RamBank $ makeBanks 0 vs
 

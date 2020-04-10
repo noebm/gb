@@ -25,7 +25,7 @@ parseCommandline argv = case getOpt Permute options argv of
     | Info `elem` opts
     , [ file ] <- files -> do
         romOrError <- readRom file
-        flip (either putStrLn) romOrError $ \(Rom h _) -> print h
+        flip (either putStrLn) romOrError $ print . getRomHeader
         exitWith ExitSuccess
     | [ file ] <- files -> return (file, NoDelay `elem` opts)
   (_,_, errs) -> do

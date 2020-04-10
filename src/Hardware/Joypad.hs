@@ -6,8 +6,8 @@ module Hardware.Joypad
   , Joypad (..)
   , updateJoypad
 
-  , load
-  , store
+  , loadJoypad
+  , storeJoypad
   )
 where
 
@@ -71,14 +71,14 @@ updateJoypad :: (Joypad , Bool) -> JoypadState -> JoypadState
 updateJoypad (joykey, True ) = pressed %~ Set.insert joykey
 updateJoypad (joykey, False) = pressed %~ Set.delete joykey
 
-store :: Word8 -> JoypadState -> JoypadState
-store b
+storeJoypad :: Word8 -> JoypadState -> JoypadState
+storeJoypad b
   | not (b `testBit` 5) = select ?~ SelectButton
   | not (b `testBit` 4) = select ?~ SelectDirection
   | otherwise = id
 
-load :: JoypadState -> Word8
-load s = case s ^. select of
+loadJoypad :: JoypadState -> Word8
+loadJoypad s = case s ^. select of
     Just SelectButton    -> foldl xor 0x2f . fmap (bit . joypadIndex) $ filter button    $ toList (s ^. pressed)
     Just SelectDirection -> foldl xor 0x1f . fmap (bit . joypadIndex) $ filter direction $ toList (s ^. pressed)
     _ -> 0x00

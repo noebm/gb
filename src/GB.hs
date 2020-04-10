@@ -18,24 +18,34 @@ import Control.Monad.Reader
 import MonadEmulator
 import Hardware.HardwareMonad
 
+data CPU s = CPU
+  { registers      :: MVector s Word8
+  , stackPointer   :: STRef s Word16
+  , programCounter :: STRef s Word16
+  , ime :: STRef s Bool
+  }
+
+newCPU :: ST s (CPU s)
+newCPU = CPU
+    <$> V.replicate 0x8 0x00
+    <*> newSTRef 0x0000
+    <*> newSTRef 0x0000
+    <*> newSTRef False
+
 data GBState s = GBState
   { hiram :: MVector s Word8
   , ram   :: MVector s Word8
 
-  , cpu :: MVector s Word8
-  , stackpointer   :: STRef s Word16
-  , programCounter :: STRef s Word16
-  , ime :: STRef s Bool
+  , cpu :: CPU s
 
   , shouldStop   :: STRef s Bool
-  , isHalted     :: STRef s Bool
 
   , gbTimer     :: STRef s Timer
   , gbInterrupt :: STRef s InterruptState
-  , gbGPU       :: STRef s GPUState
+  , gbGPU       :: GPUState s
   , gbJoypad    :: STRef s JoypadState
 
-  , gbCartridge   :: STRef s CartridgeState
+  , gbCartridge   :: CartridgeState s
   }
 
 newtype GBT s m a = GBT (ReaderT (GBState s) m a)
@@ -46,36 +56,42 @@ instance MonadIO m => MonadIO (GBT s m) where
 
 type GB = GBT RealWorld
 
-makeGBState :: CartridgeState -> ST s (GBState s)
+makeGBState :: CartridgeState s -> ST s (GBState s)
 makeGBState cart = do
   hiram <- V.replicate 0x7f 0x00
   ram <- V.replicate 0x2000 0x00
-  cpu <- V.replicate 0x8 0x00
   GBState
     <$> pure hiram
     <*> pure ram
-    <*> pure cpu
-    <*> newSTRef 0x0000
-    <*> newSTRef 0x0000
-    <*> newSTRef False
-    <*> newSTRef False
+    <*> newCPU
     <*> newSTRef False
     <*> newSTRef defaultTimer
     <*> newSTRef defaultInterruptState
-    <*> newSTRef defaultGPUState
+    <*> defaultGPUState
     <*> newSTRef defaultJoypadState
-    <*> newSTRef cart
+    <*> pure cart
 
-runGB :: MonadIO m => CartridgeState -> GB m a -> m a
+runGB :: MonadIO m => CartridgeState RealWorld -> GB m a -> m a
 runGB cart (GBT x) = do
   gbState <- liftIO $ stToIO $ makeGBState cart
   runReaderT x gbState
+
+runGBnoBoot cart f = runGB cart $ do
+  storeAddr 0xff50 0x01 -- disable boot rom
+  storePC 0x100
+  f
 
 readState :: MonadIO m => (GBState s -> STRef RealWorld a) -> GBT s m a
 readState  f   = GBT $ liftIO . stToIO . readSTRef =<< asks f
 
 writeState :: MonadIO m => (GBState s -> STRef RealWorld a) -> a -> GBT s m ()
 writeState f b = GBT $ liftIO . stToIO . (`writeSTRef` b) =<< asks f
+
+modifyState :: MonadIO m
+            => (GBState s -> STRef RealWorld a)
+            -> (a -> a)
+            -> GBT s m ()
+modifyState accessor f = writeState accessor . f =<< readState accessor
 
 {-# INLINE reg8index #-}
 reg8index :: Reg8 -> Int
@@ -93,8 +109,18 @@ instance MonadIO m => HardwareMonad (GB m) where
   getTimer = readState  gbTimer
   putTimer = writeState gbTimer
 
-  getGPU = readState  gbGPU
-  putGPU = writeState gbGPU
+  readGPURAM addr = GBT $ liftIO . stToIO . loadGPURAM addr =<< asks gbGPU
+  writeGPURAM addr byte' = GBT $ liftIO . stToIO . storeGPURAM addr byte' =<< asks gbGPU
+
+  readOAM addr = GBT $ liftIO . stToIO . loadGPUOAM addr =<< asks gbGPU
+  writeOAM addr byte' = GBT $ liftIO . stToIO . storeGPUOAM addr byte' =<< asks gbGPU
+
+  getGPUControl = readState (gpuConfig . gbGPU)
+  putGPUControl = writeState (gpuConfig . gbGPU)
+
+  fillOAMUnsafe v = GBT $ liftIO . stToIO . fillGPUOAMUnsafe v =<< asks gbGPU
+
+  updateGPUInternal cycles = GBT $ liftIO . stToIO . updateGPUState cycles =<< asks gbGPU
 
   getInterrupt = readState  gbInterrupt
   putInterrupt = writeState gbInterrupt
@@ -102,8 +128,17 @@ instance MonadIO m => HardwareMonad (GB m) where
   getJoypad = readState gbJoypad
   putJoypad = writeState gbJoypad
 
-  getCartridge = readState gbCartridge
-  putCartridge = writeState gbCartridge
+  readCartridge addr = GBT $ liftIO . stToIO . loadCartridge addr =<< asks gbCartridge
+
+  writeCartridge addr byte' = GBT $ liftIO . stToIO . storeCartridge addr byte' =<< asks gbCartridge
+
+  readCartridgeRAM addr = GBT $ liftIO . stToIO . loadCartridgeRAM addr =<< asks gbCartridge
+
+  writeCartridgeRAM addr byte' = GBT $ liftIO . stToIO . storeCartridgeRAM addr byte' =<< asks gbCartridge
+
+  disableBootRom = GBT $ liftIO . stToIO . storeCartridgeBootRomRegister =<< asks gbCartridge
+
+  bootRomDisabled = GBT $ liftIO . stToIO . loadCartridgeBootRomRegister =<< asks gbCartridge
 
   readRAM idx = GBT $ do
     ram <- asks ram
@@ -124,18 +159,18 @@ instance MonadIO m => HardwareMonad (GB m) where
 instance MonadIO m => MonadEmulator (GB m) where
 
   storeReg r b = GBT $ do
-    regs <- asks cpu
+    regs <- asks (registers . cpu)
     liftIO $ V.write regs (reg8index r) b
 
-  storeSP = writeState stackpointer
-  storePC = writeState programCounter
+  storeSP = writeState (stackPointer . cpu)
+  storePC = writeState (programCounter . cpu)
 
   loadReg r = GBT $ do
-    regs <- asks cpu
+    regs <- asks (registers . cpu)
     liftIO $ V.read regs (reg8index r)
 
-  loadSP = readState stackpointer
-  loadPC = readState programCounter
+  loadSP = readState (stackPointer . cpu)
+  loadPC = readState (programCounter . cpu)
 
   setStop = GBT $ do
     s <- asks shouldStop
@@ -145,5 +180,5 @@ instance MonadIO m => MonadEmulator (GB m) where
     s <- asks shouldStop
     liftIO $ stToIO $ readSTRef s
 
-  getIME = readState ime
-  setIME = writeState ime
+  getIME = readState  (ime . cpu)
+  setIME = writeState (ime . cpu)

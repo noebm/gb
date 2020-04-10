@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-module Hardware.GPU.Sprite
+module Hardware.GPU.OAM
   ( Sprite
   -- | Accessors for Sprite
   , spriteTile
@@ -23,7 +23,6 @@ import qualified Data.Vector.Unboxed.Base as U
 import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Generic.Mutable as M
 
-import Control.Monad
 import Control.Applicative
 import Data.List (sortBy)
 
@@ -33,8 +32,6 @@ import Data.Word
 import SDL.Vect
 
 import Data.Bits
-
-import Hardware.GPU.GPUControl
 
 data Sprite = Sprite
   { _spritePositionY' :: {-# UNPACK #-} !Word8
@@ -131,15 +128,11 @@ dumpOAM = G.toList . view oamBytesInternal
 oamBytesInternal :: Lens' OAM (U.Vector Word8)
 oamBytesInternal f (OAM (V_Sprite n v)) = OAM . V_Sprite n <$> f v
 
-loadOAM :: GPUControl -> OAM -> Word16 -> Maybe Word8
-loadOAM GPUControl { _gpuMode = mode } oam addr = do
-  guard (mode /= ModeVRAM || mode /= ModeOAM)
-  G.indexM (oam ^. oamBytesInternal) $ fromIntegral (addr .&. 0x9f)
+loadOAM :: Word16 -> OAM -> Word8
+loadOAM addr oam = oam ^?! oamBytesInternal.ix (fromIntegral (addr .&. 0x9f))
 
-storeOAM :: GPUControl -> Word16 -> Word8 -> OAM -> Maybe OAM
-storeOAM GPUControl { _gpuMode = mode } addr b oam = do
-  guard (mode /= ModeVRAM || mode /= ModeOAM)
-  return $ oam & oamBytesInternal.ix (fromIntegral (addr .&. 0x9f)) .~ b
+storeOAM :: Word16 -> Word8 -> OAM -> OAM
+storeOAM addr b = oamBytesInternal.ix (fromIntegral (addr .&. 0x9f)) .~ b
 
 {- |
   Returns all sprites for the current line.

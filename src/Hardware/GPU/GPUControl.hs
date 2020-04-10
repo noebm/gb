@@ -9,6 +9,8 @@ module Hardware.GPU.GPUControl
   , loadGPUControl
   , storeGPUControl
 
+  , canAccessGPURAM, canAccessOAM
+
   , gpuEnabled
   , gpuTileDataSelect
   , gpuWindowTileMapSelect, displayWindow
@@ -119,16 +121,27 @@ defaultGPUControl = GPUControl
 data GPURequest = Draw | NewLine
   deriving (Eq)
 
+lineInterrupt :: GPUControl -> Bool
 lineInterrupt gpu = gpu ^. gpuLineCompareInterrupt && gpuYAtCompare gpu
+
+{-# INLINE canAccessGPURAM #-}
+canAccessGPURAM :: GPUControl -> Bool
+canAccessGPURAM g = isn't _ModeVRAM (g ^. gpuMode)
+
+{-# INLINE canAccessOAM #-}
+canAccessOAM :: GPUControl -> Bool
+canAccessOAM g = canAccessGPURAM g && isn't _ModeOAM (g ^. gpuMode)
 
 -- returns stat interrupt, renderer requests and new state
 updateGPUControl :: Word -> GPUControl -> (Bool, Maybe GPURequest, GPUControl)
-updateGPUControl cycles g =
+updateGPUControl cycles g
+  | g ^. gpuEnabled =
   let cyclesMode = gpuModeDuration (_gpuMode g)
       g' = g { _gpuClock = _gpuClock g + cycles }
   in if _gpuClock g' >= cyclesMode
      then gpuNextConfig $ g' { _gpuClock = _gpuClock g' - cyclesMode }
      else (False, Nothing, g')
+  | otherwise = (False, Nothing, g)
 
 gpuNextConfig :: GPUControl -> (Bool, Maybe GPURequest, GPUControl)
 gpuNextConfig g = case _gpuMode g of
@@ -151,44 +164,42 @@ gpuYAtCompare :: GPUControl -> Bool
 gpuYAtCompare GPUControl { _gpuLine = ly , _gpuLineCompare = lyc }
   = ly == lyc
 
-storeGPUControl :: GPUControl -> Word16 -> Word8 -> GPUControl
-storeGPUControl g 0xFF40 b = g & gpuLCDControlByte .~ b
-storeGPUControl g 0xFF41 b = g
+storeGPUControl :: Word16 -> Word8 -> GPUControl -> GPUControl
+storeGPUControl 0xFF40 b g = g & gpuLCDControlByte .~ b
+storeGPUControl 0xFF41 b g = g
   { _gpuLineCompareInterrupt = b `testBit` 6
   , _gpuOAMInterrupt      = b `testBit` 5
   , _gpuVblankInterrupt   = b `testBit` 4
   , _gpuHblankInterrupt   = b `testBit` 3
   }
-storeGPUControl g 0xFF42 b = g & gpuScroll._y .~ b
-storeGPUControl g 0xFF43 b = g & gpuScroll._x .~ b
-storeGPUControl g 0xFF44 _ = g
-storeGPUControl g 0xFF45 b = g & gpuLineCompare .~ b
--- storeGPUControl g 0xFF46 _ = g -- ??? dma transfer ... should be handled separately
-storeGPUControl g 0xFF47 b = g & gpuBGPalette   .~ Palette b -- non CBG mode only
-storeGPUControl g 0xFF48 b = g & gpuOBJ0Palette .~ Palette b -- non CBG mode only
-storeGPUControl g 0xFF49 b = g & gpuOBJ1Palette .~ Palette b -- non CBG mode only
-storeGPUControl g 0xFF4A b = g & gpuWindow._y .~ b
-storeGPUControl g 0xFF4B b = g & gpuWindow._x .~ b
+storeGPUControl 0xFF42 b g = g & gpuScroll._y .~ b
+storeGPUControl 0xFF43 b g = g & gpuScroll._x .~ b
+storeGPUControl 0xFF44 _ g = g
+storeGPUControl 0xFF45 b g = g & gpuLineCompare .~ b
+storeGPUControl 0xFF47 b g = g & gpuBGPalette   .~ Palette b -- non CBG mode only
+storeGPUControl 0xFF48 b g = g & gpuOBJ0Palette .~ Palette b -- non CBG mode only
+storeGPUControl 0xFF49 b g = g & gpuOBJ1Palette .~ Palette b -- non CBG mode only
+storeGPUControl 0xFF4A b g = g & gpuWindow._y .~ b
+storeGPUControl 0xFF4B b g = g & gpuWindow._x .~ b
 storeGPUControl _ _ _ = error "storeGPUControl: not in range"
 
-loadGPUControl :: GPUControl -> Word16 -> Word8
-loadGPUControl g 0xFF40 = g ^. gpuLCDControlByte
-loadGPUControl g 0xFF41 = 0x80
+loadGPUControl :: Word16 -> GPUControl -> Word8
+loadGPUControl 0xFF40 g = g ^. gpuLCDControlByte
+loadGPUControl 0xFF41 g = 0x80
   .|. (if g ^. gpuEnabled then gpuModeNumber g else 0x00)
   & bitAt 6 .~ (g ^. gpuLineCompareInterrupt)
   & bitAt 5 .~ (g ^. gpuOAMInterrupt)
   & bitAt 4 .~ (g ^. gpuVblankInterrupt)
   & bitAt 3 .~ (g ^. gpuHblankInterrupt)
   & bitAt 2 .~ gpuYAtCompare g
-loadGPUControl g 0xFF42 = g ^. gpuScroll._y
-loadGPUControl g 0xFF43 = g ^. gpuScroll._x
-loadGPUControl g 0xFF44 = _gpuLine g
-loadGPUControl g 0xFF45  = _gpuLineCompare g
--- loadGPUControl g 0xFF46 = g -- ??? dma transfer ... should be handled separately
-loadGPUControl g 0xFF47 = getPalette $ _gpuBGPalette   g -- non CBG mode only
-loadGPUControl g 0xFF48 = getPalette $ _gpuOBJ0Palette g -- non CBG mode only
-loadGPUControl g 0xFF49 = getPalette $ _gpuOBJ1Palette g -- non CBG mode only
-loadGPUControl g 0xFF4A = g ^. gpuWindow._y
-loadGPUControl g 0xFF4B = g ^. gpuWindow._x
-loadGPUControl _ 0xff4d = 0xff
-loadGPUControl _ addr = error $ printf "loadGPUControl: not in range 0x%04x" addr
+loadGPUControl 0xFF42 g = g ^. gpuScroll._y
+loadGPUControl 0xFF43 g = g ^. gpuScroll._x
+loadGPUControl 0xFF44 g = _gpuLine g
+loadGPUControl 0xFF45 g = _gpuLineCompare g
+loadGPUControl 0xFF47 g = getPalette $ _gpuBGPalette   g -- non CBG mode only
+loadGPUControl 0xFF48 g = getPalette $ _gpuOBJ0Palette g -- non CBG mode only
+loadGPUControl 0xFF49 g = getPalette $ _gpuOBJ1Palette g -- non CBG mode only
+loadGPUControl 0xFF4A g = g ^. gpuWindow._y
+loadGPUControl 0xFF4B g = g ^. gpuWindow._x
+loadGPUControl 0xff4d _ = 0xff
+loadGPUControl addr _ = error $ printf "loadGPUControl: not in range 0x%04x" addr

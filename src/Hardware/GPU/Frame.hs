@@ -1,20 +1,29 @@
+{-# LANGUAGE RankNTypes #-}
 module Hardware.GPU.Frame where
 
-import Hardware.GPU.Drawing
-import Hardware.GPU.Sprite
-import Hardware.GPU.Memory
-import Hardware.GPU.GPUControl
+import Control.Monad.ST
+import Control.Lens
 
 import qualified Data.Vector.Unboxed as V
+import qualified Data.Vector.Unboxed.Mutable as VM
 import Data.Word
+
+import Hardware.GPU.GPUControl
+import Hardware.GPU.Drawing
 
 newtype Frame = Frame (V.Vector Word8)
 
-newFrame :: Frame
-newFrame = Frame V.empty
+getFrame :: FrameBuffer -> Frame
+getFrame (FrameBuffer v) = Frame $ V.create v
 
-frameDone :: Frame -> Bool
-frameDone (Frame v) = V.length v == 144 * 160
+newtype FrameBuffer = FrameBuffer (forall s . ST s (VM.MVector s Word8))
 
-updateFrame :: GPUControl -> VideoRAM -> OAM -> Frame -> Frame
-updateFrame gctrl vram oam (Frame v) = Frame $ v V.++ generateLine gctrl vram oam
+newFrameBuffer :: FrameBuffer
+newFrameBuffer = FrameBuffer $ VM.new (144 * 160)
+
+updateFrameBuffer :: GPUControl -> VideoRAM -> OAM -> FrameBuffer -> FrameBuffer
+updateFrameBuffer gctrl vram oam (FrameBuffer buffer) = FrameBuffer $ do
+  let start = 160 * fromIntegral (gctrl ^. gpuLine)
+  v <- buffer
+  V.copy (VM.slice start 160 v) (generateLine gctrl vram oam)
+  return v

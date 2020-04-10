@@ -1,4 +1,20 @@
-module Hardware.Cartridge where
+module Hardware.Cartridge
+  ( CartridgeState
+  , makeCartridge
+
+  , loadCartridge
+  , storeCartridge
+
+  , loadCartridgeRAM
+  , storeCartridgeRAM
+
+  , loadCartridgeBootRomRegister
+  , storeCartridgeBootRomRegister
+
+  , Rom (..)
+  , readRom
+  )
+where
 
 import Hardware.BootRom
 
@@ -6,86 +22,61 @@ import qualified Hardware.Cartridge.Header as Header
 import Hardware.Cartridge.Bank.RomBank
 import Hardware.Cartridge.Bank.RamBank
 import Hardware.Cartridge.MemoryBankController
+import Hardware.Cartridge.Rom
 
-import qualified Data.ByteString as B
-import qualified Data.Vector.Unboxed as VU
 import Data.Word
 import Data.Maybe
-import Text.Printf
 
-import Control.Lens
-import Control.Monad
+import Control.Monad.ST
+import Data.STRef
 
-import Utilities.Vector
-
-data CartridgeState = CartridgeState
+data CartridgeState s = CartridgeState
   { header :: Header.Header
-  , bootrom :: Maybe BootRom
-  , romBanks :: RomBank
-  , ramBanks :: Maybe RamBank
-  , mbc :: MemoryBankController
+  , bootrom :: STRef s (Maybe BootRom)
+  , romBanks :: RomBanks
+  , mbc :: STRef s MemoryBankController
   }
 
-defaultCartridge :: CartridgeState
-defaultCartridge =
-  CartridgeState
-  { header = error "no default header implementation"
-  , bootrom = Nothing
-  , romBanks = defaultRomBank
-
-  , mbc = defaultMBC
-
-  , ramBanks = Nothing
-  }
-
-makeCartridge :: Maybe BootRom -> Rom -> CartridgeState
-makeCartridge boot (Rom h xs) =
-  CartridgeState
+makeCartridge :: Maybe BootRom -> Rom -> ST s (CartridgeState s)
+makeCartridge boot rom = do
+  let h = getRomHeader rom
+  mbc' <- newSTRef $ newMemoryBankController h
+  boot' <- newSTRef boot
+  return $ CartridgeState
     { header = h
-    , bootrom = boot
-    , romBanks = makeRomBanks (Header.headerRomBanks h) xs
-
-    , mbc = memoryBankController (view Header.mbcType $ Header.headerType h)
-
-    , ramBanks = newRamBanks (fromIntegral $ Header.headerRamBanks h)
+    , bootrom = boot'
+    , romBanks = makeRomBanks rom
+    , mbc = mbc'
     }
 
-loadCartridge :: Word16 -> CartridgeState -> Word8
+loadCartridge :: Word16 -> CartridgeState s -> ST s Word8
 loadCartridge addr s
-  | Just b <- bootrom s , addr <= 0xff = loadBootRom addr b
-  | addr < 0x8000 = loadRom (romBanks s) addr
+  | addr <= 0xff = do
+      b <- readSTRef $ bootrom s
+      romBankselect <- romBankSel <$> readSTRef (mbc s)
+      return $
+        maybe (loadRom romBankselect addr (romBanks s)) (loadBootRom addr) b
+  | addr < 0x8000 = do
+      romBankselect <- romBankSel <$> readSTRef (mbc s)
+      return $ loadRom romBankselect addr (romBanks s)
   | otherwise = error "loadCartridge: address not in cartridge range"
 
-loadCartridgeRAM :: Word16 -> CartridgeState -> Word8
-loadCartridgeRAM addr s = maybe 0xff id $ do
-  guard $ ramAccessible $ mbc s
-  banks <- ramBanks s
-  return $ loadRam banks addr
+loadCartridgeRAM :: Word16 -> CartridgeState s -> ST s Word8
+loadCartridgeRAM addr s = do
+  mbc' <- readSTRef (mbc s)
+  return $ fromMaybe 0xff $ loadRam <$> ramBank mbc' <*> pure addr
 
-loadCartridgeBootRomRegister :: CartridgeState -> Word8
-loadCartridgeBootRomRegister s = fromIntegral . fromEnum . not $ (isJust $ bootrom s)
-
-storeCartridge :: Word16 -> Word8 -> CartridgeState -> CartridgeState
+storeCartridge :: Word16 -> Word8 -> CartridgeState s -> ST s ()
 storeCartridge addr b c =
-  let (mbc' , rom', ram') = storeMBC addr b (mbc c, romBanks c, ramBanks c)
-  in c { mbc = mbc' , romBanks = rom', ramBanks = ram' }
+  modifySTRef (mbc c) (\m -> storeMBC addr b m (romBanks c))
 
-storeCartridgeRAM :: Word16 -> Word8 -> CartridgeState -> CartridgeState
-storeCartridgeRAM addr b c = maybe c (\ram -> c { ramBanks = Just ram }) $ do
-  guard $ ramAccessible $ mbc c
-  storeRam addr b <$> ramBanks c
+storeCartridgeRAM :: Word16 -> Word8 -> CartridgeState s -> ST s ()
+storeCartridgeRAM addr b c = modifySTRef (mbc c) $ \m ->
+  maybe m (\mbcRAM -> m { mbcRamBank = Just mbcRAM }) $
+  storeRam addr b <$> ramBank m
 
-storeCartridgeBootRomRegister :: Word8 -> CartridgeState -> CartridgeState
-storeCartridgeBootRomRegister b c = c { bootrom = guard (b == 0) *> bootrom c }
+loadCartridgeBootRomRegister :: CartridgeState s -> ST s Bool
+loadCartridgeBootRomRegister s = isNothing <$> readSTRef (bootrom s)
 
-data Rom = Rom Header.Header (VU.Vector Word8)
-
-readRom :: FilePath -> IO (Either String Rom)
-readRom fp = do
-  bytes <- B.readFile fp
-  let vs = byteStringToVector bytes
-  return $ do
-    when (VU.length vs < 0x8000) $ Left "readRom: file too short"
-    when (VU.length vs `mod` 0x4000 /= 0) $ Left $ printf "readRom: file has invalid length 0x%x" (VU.length vs)
-    h <- Header.header bytes
-    return (Rom h vs)
+storeCartridgeBootRomRegister :: CartridgeState s -> ST s ()
+storeCartridgeBootRomRegister c = writeSTRef (bootrom c) Nothing

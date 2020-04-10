@@ -1,17 +1,13 @@
 module Hardware.HardwareMonad
   ( module Hardware.Timer
-  , Timer.defaultTimer
 
-  , module Hardware.GPU.GPUState
-  , Joypad.Joypad (..)
-  , Joypad.JoypadState
-  , Joypad.defaultJoypadState
+  , module Hardware.GPU
+  , module Hardware.Joypad
 
   , module Hardware.Cartridge
   , module Hardware.BootRom
 
-  , module Hardware.Interrupt.Interrupt
-  , module Hardware.Interrupt.InterruptType
+  , module Hardware.Interrupt
 
   , HardwareMonad (..)
 
@@ -19,10 +15,8 @@ module Hardware.HardwareMonad
 
   , modifyInterrupt
 
-  , updateTimer
-  , updateGPU
-  , updateGPU'
-  , updateJoypad
+  , tickHardware
+  , setJoypad
 
   , word16
   )
@@ -32,22 +26,31 @@ import Control.Lens
 import Control.Monad
 
 import Data.Word
+import qualified Data.Vector.Unboxed as V
 
-import Hardware.Interrupt.Interrupt
-import Hardware.Interrupt.InterruptType
+import Hardware.Interrupt
 
-import qualified Hardware.Timer as Timer
-import Hardware.Timer (Timer)
-import qualified Hardware.Joypad as Joypad
-import Hardware.GPU.GPUState
+import Hardware.Timer
+import Hardware.Joypad
+import Hardware.GPU
 import Hardware.Cartridge
 import Hardware.BootRom
 
 import Data.Bits
 
 class Monad m => HardwareMonad m where
-  getGPU :: m GPUState
-  putGPU :: GPUState -> m ()
+  readGPURAM :: Word16 -> m Word8
+  writeGPURAM :: Word16 -> Word8 -> m ()
+
+  readOAM :: Word16 -> m Word8
+  writeOAM :: Word16 -> Word8 -> m ()
+
+  getGPUControl :: m GPUControl
+  putGPUControl :: GPUControl -> m ()
+
+  fillOAMUnsafe :: V.Vector Word8 -> m ()
+
+  updateGPUInternal :: Word -> m (Bool, Maybe Frame)
 
   getInterrupt :: m InterruptState
   putInterrupt :: InterruptState -> m ()
@@ -55,11 +58,20 @@ class Monad m => HardwareMonad m where
   getTimer :: m Timer
   putTimer :: Timer -> m ()
 
-  getJoypad :: m Joypad.JoypadState
-  putJoypad :: Joypad.JoypadState -> m ()
+  getJoypad :: m JoypadState
+  putJoypad :: JoypadState -> m ()
 
-  getCartridge :: m CartridgeState
-  putCartridge :: CartridgeState -> m ()
+  -- 0x0000 - 0x7fff
+  readCartridge :: Word16 -> m Word8
+  writeCartridge :: Word16 -> Word8 -> m ()
+
+  -- 0xa000 - 0xbfff
+  readCartridgeRAM :: Word16 -> m Word8
+  writeCartridgeRAM :: Word16 -> Word8 -> m ()
+
+  -- 0xff50
+  disableBootRom :: m ()
+  bootRomDisabled :: m Bool
 
   -- 0xC000 - 0xDFFF
   readRAM :: Word16 -> m Word8
@@ -72,37 +84,30 @@ class Monad m => HardwareMonad m where
 modifyInterrupt :: HardwareMonad m => (InterruptState -> InterruptState) -> m ()
 modifyInterrupt f = putInterrupt . f =<< getInterrupt
 
-updateGPU :: HardwareMonad m => Word -> (GPUState -> GPURequest -> m ()) -> m ()
-updateGPU cyc f = do
-  (flag, req,  gpu') <- updateGPUState cyc <$> getGPU
-  putGPU gpu'
-  forM_ req $ \req -> do
-    when (req == Draw) $ modifyInterrupt $ interruptVBlank.interruptFlag .~ True
-    f gpu' req
-  when flag $ modifyInterrupt $ interruptLCD.interruptFlag .~ True
+{-# INLINE tickHardware #-}
+tickHardware :: HardwareMonad m => Word -> m (Maybe Frame)
+tickHardware cyc = do
+  updateTimer' cyc
+  updateGPU' cyc
 
 updateGPU' :: HardwareMonad m => Word -> m (Maybe Frame)
 updateGPU' cyc = do
-  (flag, im, gpu') <- updateGPUState' cyc <$> getGPU
-  putGPU gpu'
-  forM_ im $ \_ -> modifyInterrupt $ interruptVBlank.interruptFlag .~ True
-  when flag $      modifyInterrupt $ interruptLCD   .interruptFlag .~ True
+  (flag, im) <- updateGPUInternal cyc
+  forM_ im $ \_ -> modifyInterrupt $ interruptFlag INTVBLANK .~ True
+  when flag $      modifyInterrupt $ interruptFlag INTLCD .~ True
   return im
 
-updateTimer :: HardwareMonad m => Word -> m ()
-updateTimer cycles = do
+updateTimer' :: HardwareMonad m => Word -> m ()
+updateTimer' cycles = do
   ts <- getTimer
-  let (overflow, ts') = Timer.updateTimer cycles ts
+  let (overflow, ts') = updateTimer cycles ts
   putTimer ts'
-  when overflow $
-    modifyInterrupt $ interruptTimer.interruptFlag .~ True
+  when overflow $ modifyInterrupt $ interruptFlag INTTIMER .~ True
 
-updateJoypad :: HardwareMonad m => (Joypad.Joypad , Bool) -> m ()
-updateJoypad f = do
-  s0 <- getJoypad
-  let s1 = Joypad.updateJoypad f s0
-  putJoypad s1
-  when (snd f) $ modifyInterrupt $ interruptJoypad.interruptFlag .~ True
+setJoypad :: HardwareMonad m => (Joypad , Bool) -> m ()
+setJoypad f = do
+  putJoypad . updateJoypad f =<< getJoypad
+  when (snd f) $ modifyInterrupt $ interruptFlag INTJOYPAD .~ True
 
 {-# INLINE word16 #-}
 word16 :: Iso' (Word8, Word8) Word16
@@ -122,29 +127,23 @@ inSerialRange addr = 0xFF01 <= addr && addr < 0xFF03
 storeMem :: HardwareMonad m
          => Word16 -> Word8 -> m ()
 storeMem idx b
-  | idx < 0x8000 = putCartridge . storeCartridge idx b =<< getCartridge
-  | idx < 0xA000 = putGPU . storeGPURAM idx b =<< getGPU
-  | idx < 0xC000 = putCartridge . storeCartridgeRAM idx b =<< getCartridge
+  | idx < 0x8000 = writeCartridge idx b
+  | idx < 0xA000 = writeGPURAM idx b
+  | idx < 0xC000 = writeCartridgeRAM idx b
   | idx < 0xFE00 = writeRAM (idx .&. 0x1FFF) b -- ram + echo ram
-  | idx < 0xFEA0 = putGPU . storeGPUOAM idx b =<< getGPU
+  | idx < 0xFEA0 = writeOAM idx b
   | idx < 0xFF00 = return ()
 
-  | idx == 0xff00 = do
-      s <- getJoypad
-      putJoypad $ Joypad.store b s
-  | inInterruptRange idx = do
-      s <- getInterrupt
-      putInterrupt $ storeInterrupt s idx b
-  | Timer.inTimerRange idx = do
-      ts <- getTimer
-      let ts' = Timer.storeTimer idx b ts
-      putTimer ts'
+  | idx == 0xff00 = putJoypad . storeJoypad b =<< getJoypad
+  | idx == 0xff0f = putInterrupt =<< storeIntFlag b <$> getInterrupt
+  | idx == 0xffff = putInterrupt =<< storeIntEnable b <$> getInterrupt
+  | inTimerRange idx = putTimer . storeTimer idx b =<< getTimer
   | idx == 0xff46 = do
-      gpu <- getGPU
-      gpu' <- dmaTransfer loadMem ((b , 0x00) ^. word16) gpu
-      putGPU gpu'
-  | 0xFF40 <= idx && idx < 0xFF50 = putGPU . storeGPURegisters idx b =<< getGPU
-  | idx == 0xff50 = putCartridge . storeCartridgeBootRomRegister b =<< getCartridge
+      let baseaddr = (b , 0x00) ^. word16
+      vec <- V.generateM 0xa0 $ loadMem . fromIntegral . (fromIntegral baseaddr +)
+      fillOAMUnsafe vec
+  | 0xFF40 <= idx && idx < 0xFF50 = putGPUControl . storeGPUControl idx b =<< getGPUControl
+  | idx == 0xff50 = when (b `testBit` 0) disableBootRom
   -- unimplemented IO port
   | 0xFF00 <= idx && idx < 0xFF80 = return ()
 
@@ -154,25 +153,22 @@ storeMem idx b
 {-# INLINE loadMem #-}
 loadMem :: HardwareMonad m => Word16 -> m Word8
 loadMem idx
-  | idx < 0x8000 = loadCartridge idx <$> getCartridge
-  | idx < 0xA000 = loadGPURAM idx <$> getGPU
-  | idx < 0xC000 = loadCartridgeRAM idx <$> getCartridge
+  | idx < 0x8000 = readCartridge idx
+  | idx < 0xA000 = readGPURAM idx
+  | idx < 0xC000 = readCartridgeRAM idx
   | idx < 0xFE00 = readRAM (idx .&. 0x1FFF) -- ram + echo ram
-  | idx < 0xFEA0 = loadGPUOAM idx <$> getGPU
+  | idx < 0xFEA0 = readOAM idx
   | idx < 0xFF00 = return 0x00
 
-  | idx == 0xff00 = do
-      s <- getJoypad
-      return $ Joypad.load s
-  | 0xFF40 <= idx && idx < 0xFF50 = loadGPURegisters idx <$> getGPU
-  | idx == 0xff50 = loadCartridgeBootRomRegister <$> getCartridge
+  | idx == 0xff00 = loadJoypad <$> getJoypad
+  | 0xFF40 <= idx && idx < 0xFF50 = loadGPUControl idx <$> getGPUControl
+  | idx == 0xff50 = (\x -> if x then 0xff else 0xfe) <$> bootRomDisabled
 
-  | inInterruptRange idx = do
-      s <- getInterrupt
-      return $ loadInterrupt s idx
-  | Timer.inTimerRange idx = do
+  | idx == 0xff0f = loadIntFlag <$> getInterrupt
+  | idx == 0xffff = loadIntEnable <$> getInterrupt
+  | inTimerRange idx = do
       ts <- getTimer
-      return $ Timer.loadTimer ts idx
+      return $ loadTimer ts idx
   -- unimplemented IO port
   | 0xFF00 <= idx && idx < 0xFF80 = return 0x00
   | idx < 0xFFFF = readHRAM (idx - 0xFF80)

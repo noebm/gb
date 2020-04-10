@@ -8,8 +8,7 @@ module MonadEmulator
   , loadReg16
   , loadAddr16
 
-  , updateGPU
-  , updateTimer
+  , tickHardware
 
   , Interrupt
   , serviceInterrupt
@@ -104,7 +103,7 @@ class Monad m => MonadEmulator m where
   clearInterrupt :: Interrupt -> m ()
   {-# INLINE clearInterrupt #-}
   default clearInterrupt :: (HardwareMonad m) => Interrupt -> m ()
-  clearInterrupt i = modifyInterrupt (interrupt i . interruptFlag .~ False)
+  clearInterrupt i = modifyInterrupt (interruptFlag i .~ False)
 
 storeAddr16 :: MonadEmulator m => Word16 -> Word16 -> m ()
 storeAddr16 addr = store16LE (storeAddr addr) (storeAddr $ addr + 1)
@@ -121,58 +120,6 @@ loadReg16 :: MonadEmulator m => Reg16 -> m Word16
 loadReg16 r =
   let (r0, r1) = regPair r
   in load16LE (loadReg r1) (loadReg r0)
-
-{-# INLINE aux0 #-}
-{-# INLINE aux1 #-}
-{-# INLINE aux2 #-}
-aux0 :: Functor m => m a -> StateT s m a
-aux0 x = StateT $ \s -> flip (,) s <$> x
-aux1 :: Functor m => (a -> m b) -> (a -> StateT s m b)
-aux1 f  = aux0 . f
-aux2 :: Functor m => (a -> b -> m c) -> (a -> b -> StateT s m c)
-aux2 f = aux1 . f
-
-instance HardwareMonad m => HardwareMonad (StateT s m) where
-  getGPU = aux0 getGPU
-  putGPU = aux1 putGPU
-
-  getInterrupt = aux0 getInterrupt
-  putInterrupt = aux1 putInterrupt
-
-  getTimer = aux0 getTimer
-  putTimer = aux1 putTimer
-
-  getJoypad = aux0 getJoypad
-  putJoypad = aux1 putJoypad
-
-  getCartridge = aux0 getCartridge
-  putCartridge = aux1 putCartridge
-
-  readRAM = aux1 readRAM
-  writeRAM = aux2 writeRAM
-
-  readHRAM = aux1 readHRAM
-  writeHRAM = aux2 writeHRAM
-
-instance MonadEmulator m => MonadEmulator (StateT s m) where
-  storeReg = aux2 storeReg
-  storeAddr = aux2 storeAddr
-  storePC = aux1 storePC
-  storeSP = aux1 storeSP
-
-  loadReg = aux1 loadReg
-  loadAddr = aux1 loadAddr
-  loadPC = aux0 loadPC
-  loadSP = aux0 loadSP
-
-  setStop = aux0 setStop
-  stop    = aux0 stop
-
-  getIME = aux0 getIME
-  setIME = aux1 setIME
-
-  anyInterrupts = aux0 anyInterrupts
-  clearInterrupt = aux1 clearInterrupt
 
 serviceInterrupt :: (MonadEmulator m) => Interrupt -> m ()
 serviceInterrupt i = do
