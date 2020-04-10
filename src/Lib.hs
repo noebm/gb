@@ -18,6 +18,7 @@ import Instruction.Interpret
 
 import Utilities.Step
 import Utilities.Statistics.WindowedAverage
+import Utilities.Statistics.IncrementalAverage
 
 import System.Console.ANSI
 import Text.Printf
@@ -66,10 +67,13 @@ mainloop fp' nodelay = do
   gfx <- initializeGraphics
 
   tickRef <- newIORef 0
-  avgframeTime <- newIORef (emptyWindow 30 0)
+  avgWindowFrameTime <- newIORef (emptyWindow 30 0)
+  avgOverallFrameTime <- newIORef (IncrementalAverage 0 0)
 
   putStrLn "runtime statistics:"
-  putStrLn "" -- empty line to be filled by fps counter
+  -- empty lines for updates
+  putStrLn ""
+  putStrLn ""
 
   runGB cart $ do
 
@@ -87,11 +91,14 @@ mainloop fp' nodelay = do
               let dtime = tnew - told
               when (tnew > told && dtime < 16) $ SDL.delay (16 - dtime)
 
-              cursorUp 1
+              modifyIORef avgWindowFrameTime (addWindowSample (fromIntegral dtime :: Double))
+              modifyIORef avgOverallFrameTime (addSample (fromIntegral dtime :: Double))
+
+              cursorUp 2
               clearLine
-              putStrLn . (printf "frame time: %.2f ms") . averageWin
-                =<< readIORef avgframeTime
-              modifyIORef avgframeTime (addWindowSample (fromIntegral dtime :: Double))
+              putStrLn . (printf "current frame time: %.2f ms") . averageWin =<< readIORef avgWindowFrameTime
+              clearLine
+              putStrLn . (printf "overall frame time: %.2f ms") . average =<< readIORef avgOverallFrameTime
 
     let update s = do
           s' <- steps 100 s $ syncTimedHardware
