@@ -23,6 +23,7 @@ dependencies:
 - text
 - sdl2
 
+- ansi-terminal
 
 library:
   source-dirs: src

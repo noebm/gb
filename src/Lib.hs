@@ -17,6 +17,10 @@ import Utilities.SDL (_KeyboardEvent, _QuitEvent, _WindowClosedEvent)
 import Instruction.Interpret
 
 import Utilities.Step
+import Utilities.Statistics.WindowedAverage
+
+import System.Console.ANSI
+import Text.Printf
 
 -- faster than using Utilities.Step functions
 steps :: Monad m => Word -> Step m a -> (a -> m b) -> m (Step m a)
@@ -62,6 +66,10 @@ mainloop fp' nodelay = do
   gfx <- initializeGraphics
 
   tickRef <- newIORef 0
+  avgframeTime <- newIORef (emptyWindow 30 0)
+
+  putStrLn "runtime statistics:"
+  putStrLn "" -- empty line to be filled by fps counter
 
   runGB cart $ do
 
@@ -78,6 +86,12 @@ mainloop fp' nodelay = do
               writeIORef tickRef tnew
               let dtime = tnew - told
               when (tnew > told && dtime < 16) $ SDL.delay (16 - dtime)
+
+              cursorUp 1
+              clearLine
+              putStrLn . (printf "frame time: %.2f ms") . averageWin
+                =<< readIORef avgframeTime
+              modifyIORef avgframeTime (addWindowSample (fromIntegral dtime :: Double))
 
     let update s = do
           s' <- steps 100 s $ syncTimedHardware
