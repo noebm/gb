@@ -18,7 +18,6 @@ import Instruction.Interpret
 
 import Utilities.Step
 import Utilities.Statistics.WindowedAverage
-import Utilities.Statistics.IncrementalAverage
 
 import System.Console.ANSI
 import Text.Printf
@@ -68,7 +67,7 @@ mainloop fp' nodelay = do
 
   tickRef <- newIORef 0
   avgWindowFrameTime <- newIORef (emptyWindow 30 0)
-  avgOverallFrameTime <- newIORef (IncrementalAverage 0 0)
+  avgOverallFrameTime <- newIORef (emptyWindow 240 0)
 
   putStrLn "runtime statistics:"
   -- empty lines for updates
@@ -92,13 +91,13 @@ mainloop fp' nodelay = do
               when (tnew > told && dtime < 16) $ SDL.delay (16 - dtime)
 
               modifyIORef avgWindowFrameTime (addWindowSample (fromIntegral dtime :: Double))
-              modifyIORef avgOverallFrameTime (addSample (fromIntegral dtime :: Double))
+              modifyIORef avgOverallFrameTime (addWindowSample (fromIntegral dtime :: Double))
 
               cursorUp 2
               clearLine
               putStrLn . (printf "current frame time: %.2f ms") . averageWin =<< readIORef avgWindowFrameTime
               clearLine
-              putStrLn . (printf "overall frame time: %.2f ms") . average =<< readIORef avgOverallFrameTime
+              putStrLn . (printf "overall frame time: %.2f ms") . averageWin =<< readIORef avgOverallFrameTime
 
     let update s = do
           s' <- steps 100 s $ syncTimedHardware
