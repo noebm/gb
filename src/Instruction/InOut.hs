@@ -15,6 +15,7 @@ data Out16 = OutReg16 Reg16
            | OutSP
            | OutImmAddr16
 
+{-# INLINE out16ToIn16 #-}
 out16ToIn16 :: Out16 -> In16
 out16ToIn16 (OutReg16 r) = InReg16 r
 out16ToIn16 OutSP = InSP
@@ -43,6 +44,7 @@ data Addr = AddrBC | AddrDE | AddrHL | AddrHLi | AddrHLd | AddrDirect | ZeroPage
   deriving Show
 
 -- every output is also in input
+{-# INLINE outToIn #-}
 outToIn :: Out8 -> In8
 outToIn (OutReg8 r) = InReg8 r
 outToIn (OutAddr8 addr) = InAddr8 addr

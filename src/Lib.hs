@@ -2,7 +2,7 @@
 module Lib where
 
 import Control.Monad
-import Control.Lens
+import Control.Lens hiding ((:<))
 import Control.Monad.IO.Class
 import Control.Monad.ST
 
@@ -19,19 +19,14 @@ import Utilities.SDL (_KeyboardEvent, _QuitEvent, _WindowClosedEvent)
 
 import Instruction.Interpret
 
-import Utilities.Step
 import Utilities.Statistics.WindowedAverage
 
 import System.Console.ANSI
 import Text.Printf
 
--- faster than using Utilities.Step functions
-steps :: Monad m => Word -> Step m a -> (a -> m b) -> m (Step m a)
-steps 0 s _ = return s
-steps n s f = do
-  (dt, s') <- runStep s
-  f dt
-  steps (n - 1) s' f
+steps' :: Monad m => Word -> Cofree m a -> m (Cofree m a)
+steps' 0 = return
+steps' n = steps' (n - 1) <=< unwrap
 
 setupCartridge :: Maybe FilePath -> FilePath -> IO (CartridgeState RealWorld)
 setupCartridge fpBoot fpRom = do
@@ -51,6 +46,11 @@ keymap SDL.KeycodeA = Just JoypadSelect
 keymap SDL.KeycodeS = Just JoypadStart
 
 keymap _ = Nothing
+
+{-# INLINE extendM #-}
+extendM :: Monad m => (a -> m b) -> Cofree m a -> m (Cofree m b)
+extendM f = go
+  where go (x :< xs) = (:< (go =<< xs)) <$> f x
 
 mainloop :: FilePath -> Bool -> IO ()
 mainloop fp' nodelay = do
@@ -98,11 +98,15 @@ mainloop fp' nodelay = do
             unless nodelay $ liftIO $ do
               when (tnew > told && dtime < 16) $ SDL.delay (16 - dtime)
 
-    let update s = do
-          s' <- steps 100 s $ syncTimedHardware
+    let
+      update :: Cofree Emulator () -> Emulator ()
+      update s = do
+          s' <- steps' 100 s
 
           events <- fmap SDL.eventPayload <$> SDL.pollEvents
           mapMOf_ (folded . _KeyboardEvent) (updateKeys keymap) events
           unless (has (folded . _QuitEvent) events || has (folded . _WindowClosedEvent) events) $ update s'
 
-    update startExecution
+    let startStep = extendM syncTimedHardware =<< nextInstruction
+
+    update =<< startStep
