@@ -13,9 +13,9 @@ import Text.Printf
 import Data.Word
 import Data.Bits
 
-import MonadEmulator
+import MonadEmulator.Operations
 
-import GB
+import MonadEmulator.EmulatorT
 
 -- | decompose byte to xxyyyzzz
 byteCodeDecompose :: Word8 -> (Word8, Word8, Word8)
@@ -99,7 +99,7 @@ aluMnemonic w arg = case w of
   7 -> CP arg
   _ -> error "aluMnemonic: invalid argument"
 
-{-# SPECIALIZE parseInstructionM :: Word8 -> GB IO Instruction #-}
+{-# SPECIALIZE parseInstructionM :: Word8 -> Emulator Instruction #-}
 parseInstructionM :: MonadEmulator m => Word8 -> m Instruction
 parseInstructionM 0xCB = parseExtendedInstruction <$> byte
 parseInstructionM b = return $ parseInstruction b

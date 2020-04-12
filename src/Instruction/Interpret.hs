@@ -8,8 +8,6 @@ import Data.Bits
 
 import Control.Lens hiding (op, to, from)
 import Control.Monad
-
-
 import Control.Applicative
 
 import Instruction.Instruction
@@ -18,8 +16,8 @@ import Instruction.InOut
 import Instruction.Ops
 import Instruction.Flag
 
-import GB
-import MonadEmulator
+import MonadEmulator.EmulatorT
+import MonadEmulator.Operations
 
 import Utilities.Step
 
@@ -307,6 +305,6 @@ prefetch = do
   ime <- getIME
   return $ delay $ maybe (execute =<< byte) interrupt (guard ime *> i)
 
-{-# SPECIALIZE startExecution :: Step (GB IO) Word #-}
+{-# SPECIALIZE startExecution :: Step Emulator Word #-}
 startExecution :: (MonadEmulator m) => Step m Word
 startExecution = delay $ execute =<< byte

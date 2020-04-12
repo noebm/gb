@@ -3,7 +3,7 @@ module Instruction.InOut where
 import Control.Lens
 import Data.Word
 
-import MonadEmulator
+import MonadEmulator.Operations
 
 data In16 = InReg16 Reg16
          | InSP

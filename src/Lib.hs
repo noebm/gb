@@ -10,7 +10,7 @@ import Data.IORef
 
 import Graphics
 import Hardware.HardwareMonad
-import GB
+import MonadEmulator
 
 import qualified SDL
 import Utilities.SDL (_KeyboardEvent, _QuitEvent, _WindowClosedEvent)
@@ -55,7 +55,7 @@ pressRelease SDL.Pressed False = Just True
 pressRelease SDL.Released _ = Just False
 pressRelease _ _ = Nothing
 
-updateKeys :: SDL.KeyboardEventData -> GB IO ()
+updateKeys :: SDL.KeyboardEventData -> Emulator ()
 updateKeys (SDL.KeyboardEventData _ press repeat keysym) =
   forM_ ((,) <$> (keymap $ SDL.keysymKeycode keysym) <*> pressRelease press repeat) setJoypad
 
@@ -75,7 +75,7 @@ mainloop fp' nodelay = do
   putStrLn ""
   putStrLn ""
 
-  runGB cart $ do
+  runEmulator cart $ do
 
     let syncTimedHardware dt = do
           frame <- tickHardware dt

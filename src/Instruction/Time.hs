@@ -8,4 +8,3 @@ data Time a
 getTime :: Bool -> Time a -> a
 getTime _longPath (ConstantTime x) = x
 getTime longPath (VariableTime short long) = if longPath then long else short
-  

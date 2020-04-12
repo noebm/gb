@@ -3,7 +3,7 @@ module Instruction.Flag where
 import Control.Lens
 import Data.Word
 
-import MonadEmulator
+import MonadEmulator.Operations
 
 data Flag = FlagZ | FlagC | FlagNZ | FlagNC
   deriving (Eq)

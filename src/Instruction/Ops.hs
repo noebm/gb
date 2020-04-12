@@ -6,7 +6,7 @@ import Data.Bits
 import Control.Lens
 import Data.Bits.Lens
 
-import MonadEmulator
+import MonadEmulator.Operations
 
 import Instruction.InOut
 
