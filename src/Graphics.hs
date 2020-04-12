@@ -1,5 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Graphics where
+module Graphics
+  ( newWindow
+  , initializeGraphics
+  , renderFrame
+  )
+where
 
 import Control.Monad.IO.Class
 import Control.Monad
@@ -35,24 +40,11 @@ newWindow wndName wndSize textureScale = do
 initializeGraphics :: MonadIO m => m GraphicsContext
 initializeGraphics = newWindow "GamerBoy" (V2 160 144) Nothing
 
-renderImage :: MonadIO m => Renderer -> Texture -> m ()
-renderImage rend text = copy rend text Nothing Nothing
-
 renderGraphics :: MonadIO m => GraphicsContext -> m ()
 renderGraphics ctx = do
   clear (renderer ctx)
   copy (renderer ctx) (image ctx) Nothing Nothing
   present (renderer ctx)
-
-updateTextureLine :: MonadIO m => Texture -> Int -> VS.Vector (V4 Word8) -> m ()
-updateTextureLine tex line vs = do
-  let vs' = VS.unsafeCast vs
-  let rect = Rectangle (P $ V2 0 line) (V2 (VS.length vs) 1)
-  _ <- updateTexture tex
-    (Just $ fromIntegral <$> rect)
-    (vectorToByteString vs')
-    (fromIntegral $ VS.length vs')
-  return ()
 
 paletteColorToGrayscale :: Word8 -> V4 Word8
 paletteColorToGrayscale w = V4 c c c 0xff
@@ -76,3 +68,8 @@ updateImage texture im = do
     (vectorToByteString vs')
     (4 * 160)
   return ()
+
+renderFrame :: MonadIO m => GraphicsContext -> Frame -> m ()
+renderFrame gfx frame = do
+  generateImage (image gfx) frame
+  renderGraphics gfx

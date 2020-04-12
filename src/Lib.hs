@@ -9,6 +9,8 @@ import Control.Monad.ST
 import Data.IORef
 
 import Graphics
+import Input
+
 import Hardware.HardwareMonad
 import MonadEmulator
 
@@ -50,15 +52,6 @@ keymap SDL.KeycodeS = Just JoypadStart
 
 keymap _ = Nothing
 
-pressRelease :: SDL.InputMotion -> Bool -> Maybe Bool
-pressRelease SDL.Pressed False = Just True
-pressRelease SDL.Released _ = Just False
-pressRelease _ _ = Nothing
-
-updateKeys :: SDL.KeyboardEventData -> Emulator ()
-updateKeys (SDL.KeyboardEventData _ press repeat keysym) =
-  forM_ ((,) <$> (keymap $ SDL.keysymKeycode keysym) <*> pressRelease press repeat) setJoypad
-
 mainloop :: FilePath -> Bool -> IO ()
 mainloop fp' nodelay = do
 
@@ -81,15 +74,18 @@ mainloop fp' nodelay = do
           frame <- tickHardware dt
 
           forM_ frame $ \frame -> do
-            generateImage (image gfx) frame
-            renderGraphics gfx
-            unless nodelay $ liftIO $ do
+            renderFrame gfx frame
+
+            -- frame time in ms
+            (told, tnew) <- liftIO $ do
               told <- readIORef tickRef
               tnew <- SDL.ticks
               writeIORef tickRef tnew
-              let dtime = tnew - told
-              when (tnew > told && dtime < 16) $ SDL.delay (16 - dtime)
+              return (told, tnew)
+            let dtime = tnew - told
 
+            -- update terminal statistics output
+            liftIO $ do
               modifyIORef avgWindowFrameTime (addWindowSample (fromIntegral dtime :: Double))
               modifyIORef avgOverallFrameTime (addWindowSample (fromIntegral dtime :: Double))
 
@@ -99,11 +95,14 @@ mainloop fp' nodelay = do
               clearLine
               putStrLn . (printf "overall frame time: %.2f ms") . averageWin =<< readIORef avgOverallFrameTime
 
+            unless nodelay $ liftIO $ do
+              when (tnew > told && dtime < 16) $ SDL.delay (16 - dtime)
+
     let update s = do
           s' <- steps 100 s $ syncTimedHardware
 
           events <- fmap SDL.eventPayload <$> SDL.pollEvents
-          mapMOf_ (folded . _KeyboardEvent) updateKeys events
+          mapMOf_ (folded . _KeyboardEvent) (updateKeys keymap) events
           unless (has (folded . _QuitEvent) events || has (folded . _WindowClosedEvent) events) $ update s'
 
     update startExecution
