@@ -24,9 +24,8 @@ flag w = case w of
   _ -> error "flag: invalid argument"
 
 {-# INLINE getFlag #-}
-getFlag :: MonadEmulator m => Maybe Flag -> m Bool
-getFlag Nothing = return True
-getFlag (Just FlagC) = view flagC <$> loadReg F
-getFlag (Just FlagZ) = view flagZ <$> loadReg F
-getFlag (Just FlagNC) = views flagC not <$> loadReg F
-getFlag (Just FlagNZ) = views flagZ not <$> loadReg F
+getFlag :: MonadEmulator m => Flag -> m Bool
+getFlag FlagC = view flagC <$> loadReg F
+getFlag FlagZ = view flagZ <$> loadReg F
+getFlag FlagNC = views flagC not <$> loadReg F
+getFlag FlagNZ = views flagZ not <$> loadReg F

@@ -47,7 +47,6 @@ keymap SDL.KeycodeS = Just JoypadStart
 
 keymap _ = Nothing
 
-{-# INLINE extendM #-}
 extendM :: Monad m => (a -> m b) -> Cofree m a -> m (Cofree m b)
 extendM f = go
   where go (x :< xs) = (:< (go =<< xs)) <$> f x
@@ -107,6 +106,6 @@ mainloop fp' nodelay = do
           mapMOf_ (folded . _KeyboardEvent) (updateKeys keymap) events
           unless (has (folded . _QuitEvent) events || has (folded . _WindowClosedEvent) events) $ update s'
 
-    let startStep = extendM syncTimedHardware =<< nextInstruction
+    let startStep = extendM syncTimedHardware =<< instructions
 
     update =<< startStep
