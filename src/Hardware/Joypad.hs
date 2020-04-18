@@ -79,6 +79,6 @@ storeJoypad b
 
 loadJoypad :: JoypadState -> Word8
 loadJoypad s = case s ^. select of
-    Just SelectButton    -> foldl xor 0x2f . fmap (bit . joypadIndex) $ filter button    $ toList (s ^. pressed)
-    Just SelectDirection -> foldl xor 0x1f . fmap (bit . joypadIndex) $ filter direction $ toList (s ^. pressed)
-    _ -> 0x00
+    Just SelectButton    -> foldl xor 0xef . fmap (bit . joypadIndex) $ filter button    $ toList (s ^. pressed)
+    Just SelectDirection -> foldl xor 0xdf . fmap (bit . joypadIndex) $ filter direction $ toList (s ^. pressed)
+    _ -> 0xcf
