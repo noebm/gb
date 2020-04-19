@@ -44,14 +44,9 @@ interruptAddress INTTIMER  = 0x50
 interruptAddress INTSERIAL = 0x58
 interruptAddress INTJOYPAD = 0x60
 
+{-# INLINE interrupt' #-}
 interrupt' :: Interrupt -> Lens' Word8 Bool
-interrupt' int = bitAt intBit where
-  intBit = case int of
-    INTVBLANK -> 0
-    INTLCD    -> 1
-    INTTIMER  -> 2
-    INTSERIAL -> 3
-    INTJOYPAD -> 4
+interrupt' int = bitAt (fromEnum int)
 
 interrupts' :: IndexedTraversal' Interrupt Word8 Bool
 interrupts' f s = foldr step 0xe0 <$> traverse g bs where
@@ -62,7 +57,7 @@ interrupts' f s = foldr step 0xe0 <$> traverse g bs where
 
 checkForInterrupts :: InterruptState -> Maybe Interrupt
 checkForInterrupts (InterruptState inte intf)
-  = elemIndexOf interrupts' True (inte .&. intf)
+  = findIndexOf interrupts' id (inte .&. intf)
 
 interruptEnable :: Interrupt -> Lens' InterruptState Bool
 interruptEnable int = interruptEnable' . interrupt' int
