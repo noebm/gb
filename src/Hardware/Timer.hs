@@ -30,7 +30,6 @@ data Timer = Timer
   , _modulo     :: Word8
   , _enabled    :: Bool
   , _clockSpeed :: ClockSpeed
-  , __timerBit :: Word16 -> Bool
   }
 
 makeLenses ''Timer
@@ -43,7 +42,6 @@ defaultTimer = Timer
   , _overflow = False
   , _enabled = False
   , _clockSpeed = Clock1024
-  , __timerBit = const False
   }
 
 updateTimerControl :: Word8 -> State Timer ()
@@ -54,14 +52,20 @@ updateTimerControl b = do
         3 -> Clock256
         0 -> Clock1024
         _ -> error "impossible"
+
+  enabled .= (b `testBit` 2)
+  clockSpeed .= storeClockspeed b
+
+{-# INLINE timerBit #-}
+timerBit :: State Timer (Word16 -> Bool)
+timerBit = do
+  e <- use enabled
+  cs <- use clockSpeed
   let clockspeedBit Clock16   = 3
       clockspeedBit Clock64   = 5
       clockspeedBit Clock256  = 7
       clockspeedBit Clock1024 = 9
-
-  enabled .= (b `testBit` 2)
-  clockSpeed .= storeClockspeed b
-  _timerBit .= \d -> (b `testBit` 2) && testBit d (clockspeedBit $ storeClockspeed b)
+  return $ \d -> e && testBit d (clockspeedBit cs)
 
 loadClockSpeed :: ClockSpeed -> Word8
 loadClockSpeed c = case c of
@@ -79,9 +83,9 @@ loadClockSpeed c = case c of
 {-# INLINE withFallingEdge #-}
 withFallingEdge :: State Timer a -> State Timer a
 withFallingEdge go = do
-  d0 <- use _timerBit <*> use divider
+  d0 <- timerBit <*> use divider
   val <- go
-  d1 <- use _timerBit <*> use divider
+  d1 <- timerBit <*> use divider
   when (d0 && not d1) increaseCounter
   return val
 
