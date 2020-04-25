@@ -104,9 +104,11 @@ cartridgeType x = Left $ "cartridgetype invalid / not supported " ++ show x
 ramBanks :: Word8 -> Either String Word
 ramBanks x = case x of
   0x00 -> Right 0
-  0x01 -> Right 2
-  0x02 -> Right 8
-  0x03 -> Right 32
+  -- idk since it is smaller than 0x2000 = 8kB
+  -- so only a partial ram bank of size 0x800
+  -- 0x01 -> Right 2
+  0x02 -> Right 1
+  0x03 -> Right 4
   _ -> Left "RAM size not defined"
 
 -- cartridgeTypeSupported :: Word8 -> Bool
