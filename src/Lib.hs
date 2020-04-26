@@ -17,7 +17,7 @@ import MonadEmulator
 import qualified SDL
 import Utilities.SDL (_KeyboardEvent, _QuitEvent, _WindowClosedEvent)
 
-import Instruction.Interpret
+import Instruction.Interpreter
 
 import Utilities.Statistics.WindowedAverage
 

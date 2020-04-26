@@ -1,14 +1,16 @@
-module Instruction.Ops where
+module Instruction.Interpreter.Ops where
 
-import Data.Word
 import Data.Bits
+import Data.Word
 
-import Control.Lens
+import Control.Lens hiding (op)
 import Data.Bits.Lens
 
 import MonadEmulator.Operations
 
-import Instruction.InOut
+import Instruction.Parser (readable8)
+import Instruction.Types.Readable
+import Instruction.Types.Writable
 
 {-# INLINE modifyFlags #-}
 modifyFlags :: MonadEmulator m => (Word8 -> Word8) -> m ()
@@ -64,11 +66,11 @@ sub a v c =
 {-# INLINE arith #-}
 arith :: MonadEmulator m
       => (Word8 -> Word8 -> Bool -> (Word8 , Word8))
-      -> In8
+      -> Readable8
       -> Bool
       -> m ()
 arith fun arg useCarry = do
-  k <- getIn8 arg
+  k <- read8 arg
   a <- loadReg A
   cf <- if useCarry then view flagC <$> loadReg F else return False
   let (a' , f) = fun a k cf
@@ -76,9 +78,9 @@ arith fun arg useCarry = do
   storeReg F f
 
 {-# INLINE logicOp #-}
-logicOp :: MonadEmulator m => (Word8 -> Word8 -> Word8) -> (Word8 -> Word8) -> In8 -> m ()
+logicOp :: MonadEmulator m => (Word8 -> Word8 -> Word8) -> (Word8 -> Word8) -> Readable8 -> m ()
 logicOp op flag arg = do
-  v <- getIn8 arg
+  v <- read8 arg
   a <- loadReg A
   let a' = op v a
   storeReg A a'
@@ -88,7 +90,7 @@ logicOp op flag arg = do
 bitShiftCarryOp :: MonadEmulator m
          => (Word8 -> Bool -> (Word8, Bool))
          -> (Word8 -> Bool -> Word8)
-         -> Out8 -> m ()
+         -> Writable8 -> m ()
 bitShiftCarryOp op flag arg = do
   c <- view flagC <$> loadReg F
   bitShiftOp (\v -> op v c) flag arg
@@ -97,11 +99,11 @@ bitShiftCarryOp op flag arg = do
 bitShiftOp :: MonadEmulator m
               => (Word8 -> (Word8 , Bool))
               -> (Word8 -> Bool -> Word8)
-              -> Out8 -> m ()
+              -> Writable8 -> m ()
 bitShiftOp op flag arg = do
-  v <- getIn8 (outToIn arg)
+  v <- read8 (readable8 arg)
   let (v' , c') = op v
-  setOut8 arg v'
+  write8 arg v'
   storeReg F (flag v' c')
 
 {-# INLINE rotateLeft #-}
