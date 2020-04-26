@@ -8,6 +8,8 @@ import System.Console.GetOpt
 import Lib
 import Hardware.Cartridge
 
+import Text.Printf
+
 data Options = Help | Info | NoDelay
   deriving Eq
 
@@ -17,7 +19,7 @@ options =
   , Option []    ["no-delay"]   (NoArg NoDelay)         "Disable frame delay"
   ]
 
-parseCommandline argv = case getOpt Permute options argv of
+parseCommandline progName argv = case getOpt Permute options argv of
   (opts, files, [])
     | Help `elem` opts -> do
         hPutStrLn stderr (usageInfo header options)
@@ -32,9 +34,11 @@ parseCommandline argv = case getOpt Permute options argv of
     hPutStrLn stderr (concat errs ++ usageInfo header options)
     exitWith (ExitFailure 1)
   where
-    header = "Usage: <exec> [OPTION..] rom"
+    header = printf "Usage: %s [OPTION..] rom" progName
 
 main :: IO ()
 main = do
-  (file, nodelay) <- parseCommandline =<< getArgs
+  args <- getArgs
+  progName <- getProgName
+  (file, nodelay) <- parseCommandline progName args
   mainloop file nodelay
