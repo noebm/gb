@@ -2,6 +2,9 @@ module Hardware.Cartridge
   ( CartridgeState
   , makeCartridge
 
+  , CartridgeRAMSave
+  , saveCartridge
+
   , loadCartridge
   , storeCartridge
 
@@ -23,6 +26,7 @@ import Hardware.Cartridge.Bank.RomBank
 import Hardware.Cartridge.Bank.RamBank
 import Hardware.Cartridge.MemoryBankController
 import Hardware.Cartridge.Rom
+import Hardware.Cartridge.Persistent
 
 import Data.Word
 import Data.Maybe
@@ -37,10 +41,15 @@ data CartridgeState s = CartridgeState
   , mbc :: STRef s MemoryBankController
   }
 
+saveCartridge :: CartridgeState s -> ST s (Maybe CartridgeRAMSave)
+saveCartridge = fmap (fmap saveRamBank . aux) . readSTRef . mbc where
+  aux NoMemoryBankController = Nothing
+  aux (MemoryBankController1 _ _ x) = x
+
 makeCartridge :: Maybe BootRom -> Rom -> ST s (CartridgeState s)
 makeCartridge boot rom = do
   let h = getRomHeader rom
-  mbc' <- newSTRef $ newMemoryBankController h
+  mbc' <- newSTRef $ newMemoryBankController h (persistent rom)
   boot' <- newSTRef boot
   return $ CartridgeState
     { header = h

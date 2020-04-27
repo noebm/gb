@@ -1,11 +1,13 @@
 module Hardware.Cartridge.MemoryBankController where
 
+import Control.Applicative
 import Control.Monad
 import Data.Bits
 import Data.Word
 
 import Hardware.Cartridge.Bank.RamBank
 import Hardware.Cartridge.Bank.RomBank
+import Hardware.Cartridge.Persistent
 
 import qualified Hardware.Cartridge.Header as H
 
@@ -17,11 +19,11 @@ data MemoryBankController
     , mbcRamBank :: Maybe RamBank
     }
 
-newMemoryBankController :: H.Header -> MemoryBankController
-newMemoryBankController h = case H._mbcType $ H.headerType h of
+newMemoryBankController :: H.Header -> Maybe CartridgeRAMSave -> MemoryBankController
+newMemoryBankController h s = case H._mbcType $ H.headerType h of
   H.OnlyROM -> NoMemoryBankController
   H.MBC1    -> MemoryBankController1 defaultMBC1 defaultRomBankSelector
-               (newRamBanks $ fromIntegral $ H.headerRamBanks h)
+               ((restoreRamBank <$> s) <|> newRamBanks (fromIntegral $ H.headerRamBanks h))
 
 storeMBC :: Word16 -> Word8
          -> MemoryBankController

@@ -21,15 +21,16 @@ import Control.Monad
 import Data.Bits
 import Data.Word
 
-import Hardware.Cartridge.Bank.Bank
 import Hardware.Cartridge.Rom
+
+import Utilities.Vector
 
 data RomBankSelector = RomBankSelector Int Int
 
 defaultRomBankSelector :: RomBankSelector
 defaultRomBankSelector = RomBankSelector 0 1
 
-newtype RomBanks = RomBanks Banks
+newtype RomBanks = RomBanks (V.Vector (VU.Vector Word8))
 
 splitRomBanks :: VU.Vector Word8 -> Maybe (VU.Vector Word8, VU.Vector Word8)
 splitRomBanks xs = do
@@ -38,7 +39,7 @@ splitRomBanks xs = do
   return (ys , zs)
 
 makeRomBanks :: Rom -> RomBanks
-makeRomBanks rom = RomBanks $ V.unfoldr splitRomBanks (getRom rom)
+makeRomBanks rom = RomBanks $ V.unfoldr splitRomBanks $ byteStringToVector (getRom rom)
 
 selectRomBank1 :: Int -> (RomBanks -> Int)
 selectRomBank1 i0 (RomBanks s) = i0 `mod` V.length s

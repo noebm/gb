@@ -6,6 +6,7 @@ module Hardware.Cartridge.Header
   , MBCType (..)
   , _HasRAM, _IsPersistent
   , mbcType
+  , cartridgeOptions
 
   , CartridgeOptions (..)
   , CartridgeType (..)

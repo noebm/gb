@@ -1,7 +1,11 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Hardware.Cartridge.Bank.RamBank
   -- | General ram banks.
   -- | Supports swapping and initialization with zeros.
-  ( RamBank
+  ( RamBank (..)
+  , ramBankCount
+  , ramBankBytes
   , newRamBanks
   , selectRamBank
   , loadRam
@@ -12,36 +16,44 @@ where
 import qualified Data.Vector as V
 import qualified Data.Vector.Unboxed as VU
 
+import Data.Vector.Generic.Lens
+
 import Control.Lens
 import Control.Monad
 import Data.Bits
 import Data.Word
 
-import Hardware.Cartridge.Bank.Bank
+data RamBank = RamBank
+  { _ramIndex :: !Int
+  , _ramData :: V.Vector (VU.Vector Word8)
+  }
 
-newtype RamBank = RamBank BankState
+makeLenses ''RamBank
+
+{-# INLINE ramBankCount #-}
+ramBankCount :: RamBank -> Int
+ramBankCount = lengthOf ramData
+
+{-# INLINE ramBankBytes #-}
+ramBankBytes :: IndexedTraversal' (Int, Int) RamBank Word8
+ramBankBytes = ramData . vectorTraverse <.> vectorTraverse
+
+{-# INLINE ram #-}
+ram :: IndexedTraversal' Int RamBank (VU.Vector Word8)
+ram f s = (ramData .> iix idx) f s
+  where idx = s ^. ramIndex
 
 newRamBanks :: Int -> Maybe RamBank
 newRamBanks n = do
-  guard (0 <= n)
+  guard (0 < n)
   let vs = V.replicate n (VU.replicate 0x2000 0x00)
-  return $ RamBank $ makeBanks 0 vs
+  return $ RamBank 0 vs
 
 selectRamBank :: Int -> RamBank -> RamBank
-selectRamBank i (RamBank s) = RamBank (swapBank i s)
-
-{-# INLINE inRamRange #-}
-inRamRange :: (Num a, Ord a) => a -> Bool
-inRamRange addr = 0xA000 <= addr && addr < 0xC000
+selectRamBank i s = s & ramIndex .~ (i `rem` ramBankCount s)
 
 loadRam :: RamBank -> Word16 -> Word8
-loadRam (RamBank s) addr
-  | inRamRange addr = s ^?! activeBank . ix (fromIntegral addr .&. 0x1fff)
-  | otherwise = error "loadRam: index out of range"
+loadRam b addr = b ^?! ram . ix (fromIntegral addr .&. 0x1fff)
 
 storeRam :: Word16 -> Word8 -> RamBank -> RamBank
-storeRam addr b (RamBank s)
-  | inRamRange addr = s
-    & activeBank . ix (fromIntegral addr .&. 0x1fff) .~ b
-    & RamBank
-  | otherwise = error "storeRam: index out of range"
+storeRam addr dat = ram . ix (fromIntegral addr .&. 0x1fff) .~ dat

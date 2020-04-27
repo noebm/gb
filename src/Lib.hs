@@ -5,6 +5,7 @@ import Control.Monad
 import Control.Lens hiding ((:<))
 import Control.Monad.IO.Class
 import Control.Monad.ST
+import Control.Monad.Except
 
 import Data.IORef
 
@@ -24,16 +25,20 @@ import Utilities.Statistics.WindowedAverage
 import System.Console.ANSI
 import Text.Printf
 
+import Data.Serialize
+import Hardware.Cartridge.Rom
+import qualified Data.ByteString as B
+
 steps' :: Monad m => Word -> Cofree m a -> m (Cofree m a)
 steps' 0 = return
 steps' n = steps' (n - 1) <=< unwrap
 
-setupCartridge :: Maybe FilePath -> FilePath -> IO (CartridgeState RealWorld)
-setupCartridge fpBoot fpRom = do
-  let eitherError = either error id
-  rom      <- eitherError <$> readRom fpRom
-  bootrom' <- fmap eitherError <$> mapM readBootRom fpBoot
-  stToIO $ makeCartridge bootrom' rom
+setupCartridge :: Maybe FilePath -> FilePath -> IO (Maybe BootRom , Rom)
+  -- IO (CartridgeState RealWorld)
+setupCartridge fpBoot fpRom = fmap (either error id) $ runExceptT $ do
+  rom      <- readRom fpRom
+  bootrom' <- mapM readBootRom fpBoot
+  return (bootrom', rom)
 
 keymap :: SDL.Keycode -> Maybe Joypad
 keymap SDL.KeycodeUp    = Just JoypadUp
@@ -55,7 +60,8 @@ mainloop :: FilePath -> Bool -> IO ()
 mainloop fp' nodelay = do
 
   let bootStrapName = "DMG_ROM.bin"
-  cart <- setupCartridge (Just $ "./" ++ bootStrapName) fp'
+  (bootrom', rom) <- setupCartridge (Just $ "./" ++ bootStrapName) fp'
+
   gfx <- initializeGraphics
 
   tickRef <- newIORef 0
@@ -67,6 +73,7 @@ mainloop fp' nodelay = do
   putStrLn ""
   putStrLn ""
 
+  cart <- liftIO $ stToIO $ makeCartridge bootrom' rom
   runEmulator cart $ do
 
     let syncTimedHardware dt = do
@@ -109,3 +116,8 @@ mainloop fp' nodelay = do
     let startStep = extendM syncTimedHardware =<< instructions
 
     update =<< startStep
+    let fpSave = romSaveFilePath rom
+    saveFile <- saveEmulatorT
+    forM_ saveFile $ \dat -> do
+      liftIO . B.writeFile fpSave $ encode dat
+      liftIO $ putStrLn $ "wrote save file to " ++ fpSave

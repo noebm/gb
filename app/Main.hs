@@ -10,6 +10,8 @@ import Hardware.Cartridge
 
 import Text.Printf
 
+import Control.Monad.Except
+
 data Options = Help | Info | NoDelay
   deriving Eq
 
@@ -26,8 +28,10 @@ parseCommandline progName argv = case getOpt Permute options argv of
         exitWith ExitSuccess
     | Info `elem` opts
     , [ file ] <- files -> do
-        romOrError <- readRom file
-        flip (either putStrLn) romOrError $ print . getRomHeader
+        errors <- runExceptT $ do
+          rom <- readRom file
+          liftIO $ print $ getRomHeader rom
+        either (hPutStrLn stderr) return errors
         exitWith ExitSuccess
     | [ file ] <- files -> return (file, NoDelay `elem` opts)
   (_,_, errs) -> do

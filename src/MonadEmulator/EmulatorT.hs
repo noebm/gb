@@ -3,6 +3,7 @@ module MonadEmulator.EmulatorT
 ( MonadEmulator(..)
 , EmulatorT
 , runEmulatorT
+, saveEmulatorT
 
 , Emulator
 , runEmulator
@@ -87,6 +88,11 @@ runEmulatorTnoBoot cart f = runEmulatorT cart $ do
   storeAddr 0xff50 0x01 -- disable boot rom
   storePC 0x100
   f
+
+saveEmulatorT :: PrimMonad m => EmulatorT m (Maybe CartridgeRAMSave)
+saveEmulatorT = EmulatorT $ do
+  cart <- asks gbCartridge
+  lift $ stToPrim $ saveCartridge cart
 
 readState :: (PrimMonad m, s ~ PrimState m) => (EmulatorState s -> STRef s a) -> EmulatorT m a
 readState f = EmulatorT $ stToPrim . readSTRef =<< asks f

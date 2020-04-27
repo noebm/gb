@@ -1,38 +1,83 @@
 module Hardware.Cartridge.Rom
-  ( Rom
-  , getRomHeader
-  , getRom
-
+  ( Rom (..)
+  , romSaveFilePath
   , readRom
   )
 where
 
+import Control.Lens
 import Control.Monad
+import Control.Monad.Except
 
 import qualified Hardware.Cartridge.Header as Header
+import Hardware.Cartridge.Persistent
 
 import qualified Data.ByteString as B
-import qualified Data.Vector.Unboxed as VU
-import Utilities.Vector
-import Data.Word
+
+import Data.Serialize
 
 import Text.Printf
+import System.FilePath
+import System.Directory
 
 data Rom = Rom
-  { getRomHeader :: Header.Header
-  , getRom :: VU.Vector Word8
+  { romFilePath :: FilePath
+  , getRomHeader :: Header.Header
+  , getRom :: B.ByteString
+  , persistent :: Maybe CartridgeRAMSave
   }
 
-readRom :: FilePath -> IO (Either String Rom)
+romSaveFilePath :: Rom -> FilePath
+romSaveFilePath rom = addExtension (romFilePath rom) ".save"
+
+tryLoadSaveFile :: Rom -> ExceptT String IO (Maybe CartridgeRAMSave)
+tryLoadSaveFile rom = do
+  -- check for ram file
+  let ramfp = romSaveFilePath rom
+  hasRamFile <- liftIO $ doesFileExist ramfp
+
+  saveFile <- forM (ramfp <$ guard hasRamFile) $ \fp -> do
+    liftIO $ putStrLn $ "loading save file from " ++ fp
+    liftEither . runGet get <=< liftIO . B.readFile $ fp
+
+  forM_ saveFile $ \dat ->
+    unless (saveAgreesWithHeader dat (getRomHeader rom))
+    $ throwError "save file does not agree with the rom header"
+
+  return saveFile
+
+readRom' :: FilePath -> ExceptT String IO Rom
+readRom' fp = do
+  bytes <- liftIO $ B.readFile fp
+  -- sanity checks
+  let (q , r) = B.length bytes `quotRem` 0x4000
+  -- at least 0x8000 bytes long
+  when (q < 2) $ throwError "rom file shorter than 0x8000 bytes"
+  -- a multiple of 0x4000 bytes long
+  when (r /= 0) $ throwError
+    $ printf "file length (0x%x) not a multiple of 0x4000 bytes" (B.length bytes)
+
+  -- verify that the header agrees with the rom data
+  h <- liftEither $ Header.header bytes
+  let romBankCount = fromIntegral $ Header.headerRomBanks h
+  when (q /= romBankCount)
+    $ throwError
+    $ printf "number of banks does not match - should have %i but got %i"
+    romBankCount q
+
+  return $ Rom fp h bytes Nothing
+
+readRom :: FilePath -> ExceptT String IO Rom
 readRom fp = do
-  bytes <- B.readFile fp
-  let vs = byteStringToVector bytes
-  return $ do
-    when (VU.length vs < 0x8000) $ Left "readRom: file too short"
-    when (VU.length vs `mod` 0x4000 /= 0) $ Left $ printf "readRom: file has invalid length 0x%x" (VU.length vs)
-    h <- Header.header bytes
-    let romBankCount = fromIntegral $ Header.headerRomBanks h
-    when (VU.length vs `quot` 0x4000 /= romBankCount) $ Left
-      $ printf "readRom: number of banks does not match - should have %i but got %i"
-          romBankCount (VU.length vs `quot` 0x4000)
-    return (Rom h vs)
+  rom' <- readRom' fp
+
+  let cartPersistent
+        = has (Header.cartridgeOptions . folded . Header._IsPersistent)
+        $ Header.headerType (getRomHeader rom')
+
+  if cartPersistent
+    then do
+    saveFile <- tryLoadSaveFile rom'
+    return $ rom' { persistent = saveFile }
+    else
+    return rom'
