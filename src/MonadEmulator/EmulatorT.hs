@@ -15,6 +15,7 @@ import Data.Vector.Unboxed.Mutable (MVector)
 import Data.STRef
 import Data.Word
 
+import Control.Lens
 import Control.Monad.ST
 import Control.Monad.Primitive
 import Control.Monad.Reader
@@ -195,3 +196,11 @@ instance PrimMonad m => MonadEmulator (EmulatorT m) where
 
   getIME = readState  (ime . cpu)
   setIME = writeState (ime . cpu)
+
+  storeAddr = storeMem
+  loadAddr = loadMem
+
+  {-# INLINE anyInterrupts #-}
+  anyInterrupts = checkForInterrupts <$> getInterrupt
+  {-# INLINE clearInterrupt #-}
+  clearInterrupt i = modifyInterrupt (interruptFlag i .~ False)
