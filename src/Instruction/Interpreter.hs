@@ -148,22 +148,22 @@ interpretM instr = case instr ^. expr of
     prefetch
 
   JR offset -> do
-    let flag' = allOf flag id instr
+    let flag' = andOf flag instr
     when flag' $ jumpRelative offset
     prefetch
 
   JP addr -> do
-    let flag' = allOf flag id instr
+    let flag' = andOf flag instr
     when flag' . storePC =<< getAddress addr
     prefetch
 
   CALL addr -> do
-    let flag' = allOf flag id instr
+    let flag' = andOf flag instr
     when flag' $ call addr
     prefetch
 
   RET -> do
-    let flag' = allOf flag id instr
+    let flag' = andOf flag instr
     when flag' ret
     prefetch
 
