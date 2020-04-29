@@ -1,44 +1,24 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Lib where
 
 import Control.Monad
-import Control.Lens hiding ((:<))
-import Control.Monad.IO.Class
-import Control.Monad.ST
 import Control.Monad.Except
-
+import Control.Lens
 import Data.IORef
 
 import Graphics
 import Input
 
 import Hardware.HardwareMonad
-import MonadEmulator
 
 import qualified SDL
 import Utilities.SDL (_KeyboardEvent, _QuitEvent, _WindowClosedEvent)
-
-import Instruction.Interpreter
 
 import Utilities.Statistics.WindowedAverage
 
 import System.Console.ANSI
 import Text.Printf
 
-import Data.Serialize
-import Hardware.Cartridge.Rom
-import qualified Data.ByteString as B
-
-steps' :: Monad m => Word -> Cofree m a -> m (Cofree m a)
-steps' 0 = return
-steps' n = steps' (n - 1) <=< unwrap
-
-setupCartridge :: Maybe FilePath -> FilePath -> IO (Maybe BootRom , Rom)
-  -- IO (CartridgeState RealWorld)
-setupCartridge fpBoot fpRom = fmap (either error id) $ runExceptT $ do
-  rom      <- readRom fpRom
-  bootrom' <- mapM readBootRom fpBoot
-  return (bootrom', rom)
+import Emulate
 
 keymap :: SDL.Keycode -> Maybe Joypad
 keymap SDL.KeycodeUp    = Just JoypadUp
@@ -52,16 +32,8 @@ keymap SDL.KeycodeS = Just JoypadStart
 
 keymap _ = Nothing
 
-extendM :: Monad m => (a -> m b) -> Cofree m a -> m (Cofree m b)
-extendM f = go
-  where go (x :< xs) = (:< (go =<< xs)) <$> f x
-
-mainloop :: FilePath -> Bool -> IO ()
-mainloop fp' nodelay = do
-
-  let bootStrapName = "DMG_ROM.bin"
-  (bootrom', rom) <- setupCartridge (Just $ "./" ++ bootStrapName) fp'
-
+basicSDLEmulationConfig :: Bool -> IO EmulationConfig
+basicSDLEmulationConfig nodelay = do
   gfx <- initializeGraphics
 
   tickRef <- newIORef 0
@@ -73,51 +45,43 @@ mainloop fp' nodelay = do
   putStrLn ""
   putStrLn ""
 
-  cart <- liftIO $ stToIO $ makeCartridge bootrom' rom
-  runEmulator cart $ do
+  return $ EmulationConfig
+    { frameUpdate = \frame -> do
+        renderFrame gfx frame
 
-    let syncTimedHardware dt = do
-          frame <- tickHardware dt
+        -- frame time in ms
+        told <- readIORef tickRef
+        tnew <- SDL.ticks
+        writeIORef tickRef tnew
 
-          forM_ frame $ \frame -> do
-            renderFrame gfx frame
+        let dtime = tnew - told
 
-            -- frame time in ms
-            (told, tnew) <- liftIO $ do
-              told <- readIORef tickRef
-              tnew <- SDL.ticks
-              writeIORef tickRef tnew
-              return (told, tnew)
-            let dtime = tnew - told
+        -- update terminal statistics output
+        modifyIORef avgWindowFrameTime (addWindowSample (fromIntegral dtime :: Double))
+        modifyIORef avgOverallFrameTime (addWindowSample (fromIntegral dtime :: Double))
 
-            -- update terminal statistics output
-            liftIO $ do
-              modifyIORef avgWindowFrameTime (addWindowSample (fromIntegral dtime :: Double))
-              modifyIORef avgOverallFrameTime (addWindowSample (fromIntegral dtime :: Double))
+        cursorUp 2
+        clearLine
+        putStrLn . (printf "current frame time: %.2f ms") . averageWin =<< readIORef avgWindowFrameTime
+        clearLine
+        putStrLn . (printf "overall frame time: %.2f ms") . averageWin =<< readIORef avgOverallFrameTime
 
-              cursorUp 2
-              clearLine
-              putStrLn . (printf "current frame time: %.2f ms") . averageWin =<< readIORef avgWindowFrameTime
-              clearLine
-              putStrLn . (printf "overall frame time: %.2f ms") . averageWin =<< readIORef avgOverallFrameTime
+        unless nodelay $ do
+          when (tnew > told && dtime < 16) $ SDL.delay (16 - dtime)
 
-            unless nodelay $ liftIO $ do
-              when (tnew > told && dtime < 16) $ SDL.delay (16 - dtime)
+    , keyUpdate = do
+        events <- fmap SDL.eventPayload <$> SDL.pollEvents
+        let keys = events ^.. folded . _KeyboardEvent . to (updateKeys keymap) . _Just
+        let quit = has (folded . _QuitEvent) events || has (folded . _WindowClosedEvent) events
+        return (quit, keys)
+    , shouldSave = True
+    }
 
-    let
-      update :: Cofree Emulator () -> Emulator ()
-      update s = do
-          s' <- steps' 100 s
+mainloop :: FilePath -> Bool -> IO ()
+mainloop fp nodelay = do
 
-          events <- fmap SDL.eventPayload <$> SDL.pollEvents
-          mapMOf_ (folded . _KeyboardEvent) (updateKeys keymap) events
-          unless (has (folded . _QuitEvent) events || has (folded . _WindowClosedEvent) events) $ update s'
+  let bootStrapName = "DMG_ROM.bin"
+  (bootrom', rom) <- fmap (either error id) $ runExceptT $
+    (,) <$> readBootRom bootStrapName <*> readRom fp
 
-    let startStep = extendM syncTimedHardware =<< instructions
-
-    update =<< startStep
-    let fpSave = romSaveFilePath rom
-    saveFile <- saveEmulatorT
-    forM_ saveFile $ \dat -> do
-      liftIO . B.writeFile fpSave $ encode dat
-      liftIO $ putStrLn $ "wrote save file to " ++ fpSave
+  emulate (Just bootrom') rom =<< basicSDLEmulationConfig nodelay

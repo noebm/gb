@@ -4,10 +4,7 @@ module Input
 where
 
 import qualified SDL
-import MonadEmulator
-import Hardware.HardwareMonad
-
-import Data.Foldable
+import Hardware.Joypad
 
 type KeyMap = SDL.Keycode -> Maybe Joypad
 
@@ -16,6 +13,6 @@ pressRelease SDL.Pressed False = Just True
 pressRelease SDL.Released _ = Just False
 pressRelease _ _ = Nothing
 
-updateKeys :: KeyMap -> SDL.KeyboardEventData -> Emulator ()
-updateKeys keymap (SDL.KeyboardEventData _ press repeat keysym) =
-  forM_ ((,) <$> (keymap $ SDL.keysymKeycode keysym) <*> pressRelease press repeat) setJoypad
+updateKeys :: KeyMap -> SDL.KeyboardEventData -> Maybe (Joypad, Bool)
+updateKeys keymap (SDL.KeyboardEventData _ press rep keysym) =
+  (,) <$> keymap (SDL.keysymKeycode keysym) <*> pressRelease press rep
