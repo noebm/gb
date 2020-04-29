@@ -40,8 +40,7 @@ emulate brom rom conf = do
         forM_ keys setJoypad
         unless quit $ update s'
 
-  cart <- stToIO $ makeCartridge brom rom
-  runEmulator cart $ do
+  runEmulator brom rom $ do
     update =<< stepper
 
     when (shouldSave conf) $ do

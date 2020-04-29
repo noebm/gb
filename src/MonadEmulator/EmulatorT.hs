@@ -77,16 +77,18 @@ makeGBState cart = do
     <*> newSTRef defaultJoypadState
     <*> pure cart
 
-runEmulatorT :: PrimMonad m => CartridgeState (PrimState m) -> EmulatorT m a -> m a
-runEmulatorT cart (EmulatorT x) = do
+runEmulatorT :: PrimMonad m => Maybe BootRom -> Rom -> EmulatorT m a -> m a
+runEmulatorT brom rom (EmulatorT x) = do
+  cart <- stToPrim $ makeCartridge brom rom
   gbState <- stToPrim $ makeGBState cart
   runReaderT x gbState
 
-runEmulator :: CartridgeState RealWorld -> Emulator a -> IO a
+runEmulator :: Maybe BootRom -> Rom -> Emulator a -> IO a
 runEmulator = runEmulatorT
 
-runEmulatorTnoBoot cart f = runEmulatorT cart $ do
-  storeAddr 0xff50 0x01 -- disable boot rom
+runEmulatorTnoBoot :: PrimMonad m => Rom -> EmulatorT m a -> m a
+runEmulatorTnoBoot rom f = runEmulatorT Nothing rom $ do
+  disableBootRom
   storePC 0x100
   f
 
