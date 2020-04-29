@@ -32,7 +32,7 @@ makeLenses ''RamBank
 
 {-# INLINE ramBankCount #-}
 ramBankCount :: RamBank -> Int
-ramBankCount = lengthOf ramData
+ramBankCount = view (ramData . to V.length)
 
 {-# INLINE ramBankBytes #-}
 ramBankBytes :: IndexedTraversal' (Int, Int) RamBank Word8
