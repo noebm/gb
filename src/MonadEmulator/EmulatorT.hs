@@ -1,13 +1,14 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, RankNTypes, FlexibleInstances, TypeFamilies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, TypeFamilies #-}
 module MonadEmulator.EmulatorT
-( MonadEmulator(..)
-, EmulatorT
-, runEmulatorT
-, saveEmulatorT
+  ( MonadEmulator(..)
+  , EmulatorT
+  , runEmulatorT
+  , saveEmulatorT
 
-, Emulator
-, runEmulator
-)
+  , Emulator
+  , runEmulator
+  , saveEmulator
+  )
 where
 
 import qualified Data.Vector.Unboxed.Mutable as V
@@ -33,25 +34,25 @@ data CPU s = CPU
 
 newCPU :: ST s (CPU s)
 newCPU = CPU
-    <$> V.replicate 0x8 0x00
-    <*> newSTRef 0x0000
-    <*> newSTRef 0x0000
-    <*> newSTRef False
+  <$> V.replicate 0x8 0x00
+  <*> newSTRef 0x0000
+  <*> newSTRef 0x0000
+  <*> newSTRef False
 
 data EmulatorState s = EmulatorState
-  { hiram :: MVector s Word8
-  , ram   :: MVector s Word8
+  { emuHiram :: MVector s Word8
+  , emuRam   :: MVector s Word8
 
-  , cpu :: CPU s
+  , emuCpu   :: CPU s
 
-  , shouldStop   :: STRef s Bool
+  , emuShouldStop :: STRef s Bool
 
-  , gbTimer     :: STRef s Timer
-  , gbInterrupt :: STRef s InterruptState
-  , gbGPU       :: GPUState s
-  , gbJoypad    :: STRef s JoypadState
+  , emuTimer     :: STRef s Timer
+  , emuInterrupt :: STRef s InterruptState
+  , emuGPU       :: GPUState s
+  , emuJoypad    :: STRef s JoypadState
 
-  , gbCartridge   :: CartridgeState s
+  , emuCartridge :: CartridgeState s
   }
 
 newtype EmulatorT m a = EmulatorT (ReaderT (EmulatorState (PrimState m)) m a)
@@ -62,52 +63,37 @@ instance MonadIO m => MonadIO (EmulatorT m) where
 
 type Emulator = EmulatorT IO
 
-makeGBState :: CartridgeState s -> ST s (EmulatorState s)
-makeGBState cart = do
-  hiram <- V.replicate 0x7f 0x00
-  ram <- V.replicate 0x2000 0x00
-  EmulatorState
-    <$> pure hiram
-    <*> pure ram
-    <*> newCPU
-    <*> newSTRef False
-    <*> newSTRef defaultTimer
-    <*> newSTRef defaultInterruptState
-    <*> defaultGPUState
-    <*> newSTRef defaultJoypadState
-    <*> pure cart
+makeEmulatorState :: Maybe BootRom -> Rom -> ST s (EmulatorState s)
+makeEmulatorState brom rom = EmulatorState
+  <$> V.replicate 0x7f 0x00
+  <*> V.replicate 0x2000 0x00
+  <*> newCPU
+  <*> newSTRef False
+  <*> newSTRef defaultTimer
+  <*> newSTRef defaultInterruptState
+  <*> defaultGPUState
+  <*> newSTRef defaultJoypadState
+  <*> makeCartridge brom rom
 
 runEmulatorT :: PrimMonad m => Maybe BootRom -> Rom -> EmulatorT m a -> m a
-runEmulatorT brom rom (EmulatorT x) = do
-  cart <- stToPrim $ makeCartridge brom rom
-  gbState <- stToPrim $ makeGBState cart
-  runReaderT x gbState
+runEmulatorT brom rom (EmulatorT m) = stToPrim (makeEmulatorState brom rom) >>= runReaderT m
 
 runEmulator :: Maybe BootRom -> Rom -> Emulator a -> IO a
 runEmulator = runEmulatorT
 
-runEmulatorTnoBoot :: PrimMonad m => Rom -> EmulatorT m a -> m a
-runEmulatorTnoBoot rom f = runEmulatorT Nothing rom $ do
-  disableBootRom
-  storePC 0x100
-  f
-
 saveEmulatorT :: PrimMonad m => EmulatorT m (Maybe CartridgeRAMSave)
-saveEmulatorT = EmulatorT $ do
-  cart <- asks gbCartridge
-  lift $ stToPrim $ saveCartridge cart
+saveEmulatorT = helper saveCartridge emuCartridge
 
-readState :: (PrimMonad m, s ~ PrimState m) => (EmulatorState s -> STRef s a) -> EmulatorT m a
-readState f = EmulatorT $ stToPrim . readSTRef =<< asks f
+saveEmulator :: Emulator (Maybe CartridgeRAMSave)
+saveEmulator = saveEmulatorT
 
-writeState :: (PrimMonad m, s ~ PrimState m) => (EmulatorState s -> STRef s a) -> a -> EmulatorT m ()
-writeState f b = EmulatorT $ stToPrim . (`writeSTRef` b) =<< asks f
+readState :: (PrimMonad m, s ~ PrimState m)
+          => (EmulatorState s -> STRef s a) -> EmulatorT m a
+readState = helper readSTRef
 
-modifyState :: (PrimMonad m, s ~ PrimState m)
-            => (EmulatorState s -> STRef s a)
-            -> (a -> a)
-            -> EmulatorT m ()
-modifyState accessor f = writeState accessor . f =<< readState accessor
+writeState :: (PrimMonad m, s ~ PrimState m)
+           => (EmulatorState s -> STRef s a) -> a -> EmulatorT m ()
+writeState f b = helper (`writeSTRef` b) f
 
 {-# INLINE reg8index #-}
 reg8index :: Reg8 -> Int
@@ -120,84 +106,66 @@ reg8index E = 5
 reg8index H = 6
 reg8index L = 7
 
+{-# INLINE helper #-}
+helper :: PrimMonad m
+         => (s -> ST (PrimState m) b) -> (EmulatorState (PrimState m) -> s) -> EmulatorT m b
+helper f get = EmulatorT $ stToPrim . f =<< asks get
+
 instance PrimMonad m => HardwareMonad (EmulatorT m) where
 
-  getTimer = readState  gbTimer
-  putTimer = writeState gbTimer
+  getTimer = readState  emuTimer
+  putTimer = writeState emuTimer
 
-  readGPURAM addr = EmulatorT $ stToPrim . loadGPURAM addr =<< asks gbGPU
-  writeGPURAM addr byte' = EmulatorT $ stToPrim . storeGPURAM addr byte' =<< asks gbGPU
+  readGPURAM addr = helper (loadGPURAM addr) emuGPU
+  writeGPURAM addr byte' = helper (storeGPURAM addr byte') emuGPU
 
-  readOAM addr = EmulatorT $ stToPrim . loadGPUOAM addr =<< asks gbGPU
-  writeOAM addr byte' = EmulatorT $ stToPrim . storeGPUOAM addr byte' =<< asks gbGPU
+  readOAM addr = helper (loadGPUOAM addr) emuGPU
+  writeOAM addr byte' = helper (storeGPUOAM addr byte') emuGPU
 
-  getGPUControl = readState (gpuConfig . gbGPU)
-  putGPUControl = writeState (gpuConfig . gbGPU)
+  getGPUControl = readState (gpuConfig . emuGPU)
+  putGPUControl = writeState (gpuConfig . emuGPU)
 
-  fillOAMUnsafe v = EmulatorT $ stToPrim . fillGPUOAMUnsafe v =<< asks gbGPU
+  fillOAMUnsafe v = helper (fillGPUOAMUnsafe v) emuGPU
 
-  updateGPUInternal cycles = EmulatorT $ stToPrim . updateGPUState cycles =<< asks gbGPU
+  updateGPUInternal cycles = helper (updateGPUState cycles) emuGPU
 
-  getInterrupt = readState  gbInterrupt
-  putInterrupt = writeState gbInterrupt
+  getInterrupt = readState  emuInterrupt
+  putInterrupt = writeState emuInterrupt
 
-  getJoypad = readState gbJoypad
-  putJoypad = writeState gbJoypad
+  getJoypad = readState emuJoypad
+  putJoypad = writeState emuJoypad
 
-  readCartridge addr = EmulatorT $ stToPrim . loadCartridge addr =<< asks gbCartridge
+  readCartridge addr = helper (loadCartridge addr) emuCartridge
+  writeCartridge addr byte' = helper (storeCartridge addr byte') emuCartridge
 
-  writeCartridge addr byte' = EmulatorT $ stToPrim . storeCartridge addr byte' =<< asks gbCartridge
+  readCartridgeRAM addr = helper (loadCartridgeRAM addr) emuCartridge
+  writeCartridgeRAM addr byte' = helper (storeCartridgeRAM addr byte') emuCartridge
 
-  readCartridgeRAM addr = EmulatorT $ stToPrim . loadCartridgeRAM addr =<< asks gbCartridge
+  disableBootRom = helper storeCartridgeBootRomRegister emuCartridge
+  bootRomDisabled = helper loadCartridgeBootRomRegister emuCartridge
 
-  writeCartridgeRAM addr byte' = EmulatorT $ stToPrim . storeCartridgeRAM addr byte' =<< asks gbCartridge
+  readRAM  idx   = helper (`V.read` fromIntegral idx) emuRam
+  writeRAM idx b = helper (\mem -> V.write mem (fromIntegral idx) b) emuRam
 
-  disableBootRom = EmulatorT $ stToPrim . storeCartridgeBootRomRegister =<< asks gbCartridge
-
-  bootRomDisabled = EmulatorT $ stToPrim . loadCartridgeBootRomRegister =<< asks gbCartridge
-
-  readRAM idx = EmulatorT $ do
-    ram <- asks ram
-    stToPrim $ V.read ram (fromIntegral idx)
-
-  readHRAM idx = EmulatorT $ do
-    hiram <- asks hiram
-    stToPrim $ V.read hiram (fromIntegral idx)
-
-  writeRAM idx b = EmulatorT $ do
-    ram <- asks ram
-    stToPrim $ V.write ram (fromIntegral idx) b
-
-  writeHRAM idx b = EmulatorT $ do
-    hiram <- asks hiram
-    stToPrim $ V.write hiram (fromIntegral idx) b
+  readHRAM  idx   = helper (`V.read` fromIntegral idx) emuHiram
+  writeHRAM idx b = helper (\mem -> V.write mem (fromIntegral idx) b) emuHiram
 
 instance PrimMonad m => MonadEmulator (EmulatorT m) where
 
-  storeReg r b = EmulatorT $ do
-    regs <- asks (registers . cpu)
-    stToPrim $ V.write regs (reg8index r) b
+  storeReg r b = helper (\regs -> V.write regs (reg8index r) b) (registers . emuCpu)
+  loadReg  r   = helper (\regs -> V.read regs (reg8index r)) (registers . emuCpu)
 
-  storeSP = writeState (stackPointer . cpu)
-  storePC = writeState (programCounter . cpu)
+  storeSP = writeState (stackPointer . emuCpu)
+  storePC = writeState (programCounter . emuCpu)
 
-  loadReg r = EmulatorT $ do
-    regs <- asks (registers . cpu)
-    stToPrim $ V.read regs (reg8index r)
+  loadSP = readState (stackPointer . emuCpu)
+  loadPC = readState (programCounter . emuCpu)
 
-  loadSP = readState (stackPointer . cpu)
-  loadPC = readState (programCounter . cpu)
+  setStop = helper (`writeSTRef` True) emuShouldStop
+  stop    = helper readSTRef emuShouldStop
 
-  setStop = EmulatorT $ do
-    s <- asks shouldStop
-    stToPrim $ writeSTRef s True
-
-  stop = EmulatorT $ do
-    s <- asks shouldStop
-    stToPrim $ readSTRef s
-
-  getIME = readState  (ime . cpu)
-  setIME = writeState (ime . cpu)
+  getIME = readState  (ime . emuCpu)
+  setIME = writeState (ime . emuCpu)
 
   storeAddr = storeMem
   loadAddr = loadMem
