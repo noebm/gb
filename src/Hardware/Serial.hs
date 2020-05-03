@@ -48,8 +48,9 @@ tickSerial port dt = runStateT $ do
   let shouldTransfer = v >= 128
   when shouldTransfer $ do
     transfer .= Inactive
-    ret <- lift . port =<< use payload
-    assign payload $ fromMaybe 0 ret
+    -- XXX temporary fix for performances issues
+    -- ret <- lift . port =<< use payload
+    -- assign payload $ fromMaybe 0 ret
   return shouldTransfer
 
 loadSerial :: Word16 -> SerialPort -> Word8
