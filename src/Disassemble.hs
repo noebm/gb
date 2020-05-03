@@ -19,8 +19,8 @@ import Text.Printf
 
 import Control.Monad.ST
 
-config :: Applicative f => Rom -> EmulatorConfig f
-config rom = EmulatorConfig Nothing rom $ \_ -> pure Nothing
+config :: Rom -> EmulatorConfig
+config = EmulatorConfig Nothing
 
 disassemble :: Rom -> M.Map Word16 (Instruction Flag ())
 disassemble rom = runST $ runEmulatorT (config rom) D.disassemble

@@ -33,7 +33,7 @@ data EmulationConfig = EmulationConfig
 
 emulate :: Maybe BootRom -> Rom -> EmulationConfig -> IO ()
 emulate brom rom conf = do
-  let sync = mapM_ (liftIO . frameUpdate conf) <=< tickHardware
+  let sync = mapM_ (liftIO . frameUpdate conf) <=< tickHardware Nothing
   let stepper = extendM sync =<< instructions
   let update s = do
         s' <- steps' 100 s
@@ -41,7 +41,7 @@ emulate brom rom conf = do
         forM_ keys setJoypad
         unless quit $ update s'
 
-  let inputConf = EmulatorConfig brom rom (\_ -> return Nothing)
+  let inputConf = EmulatorConfig brom rom
 
   runEmulator inputConf $ do
     maybe (storePC 0x100) (\_ -> return ()) brom

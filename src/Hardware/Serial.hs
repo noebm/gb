@@ -5,7 +5,8 @@
 -- Only master mode is currrently implemented.
 -- This module does not emulate the bitshifting behaviour when transfering bytes.
 module Hardware.Serial
-  ( SerialPort
+  ( SerialConnection
+  , SerialPort
   , defaultSerialPort
   , tickSerial
   , loadSerial
@@ -22,6 +23,8 @@ import Control.Lens
 import Data.Bits.Lens
 
 import Control.Monad.State.Strict
+
+type SerialConnection m = Word8 -> m Word8
 
 data SerialPortTransfer = Active {-# UNPACK #-} !Word | Inactive
 
@@ -42,15 +45,16 @@ defaultSerialPort = SerialPort 0x00 Inactive False
 _ActiveSum :: Prism' SerialPortTransfer (Sum Word)
 _ActiveSum = _Active . _Unwrapped
 
-tickSerial :: Monad m => (Word8 -> m (Maybe Word8)) -> Word -> SerialPort -> m (Bool, SerialPort)
-tickSerial port dt = runStateT $ do
+{-# INLINE tickSerial #-}
+tickSerial :: Monad m => Maybe (SerialConnection m) -> Word -> SerialPort -> m (Bool, SerialPort)
+tickSerial conn dt = runStateT $ do
   v <- transfer . _ActiveSum <+= fromIntegral dt
   let shouldTransfer = v >= 128
   when shouldTransfer $ do
     transfer .= Inactive
-    -- XXX temporary fix for performances issues
-    -- ret <- lift . port =<< use payload
-    -- assign payload $ fromMaybe 0 ret
+    forM_ conn $ \c -> do
+      ret <- lift . c =<< use payload
+      assign payload ret
   return shouldTransfer
 
 loadSerial :: Word16 -> SerialPort -> Word8

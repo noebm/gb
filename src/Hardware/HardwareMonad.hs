@@ -85,16 +85,16 @@ class Monad m => HardwareMonad m where
 
   getSerialPort :: m SerialPort
   putSerialPort :: SerialPort -> m ()
-  serialEndpoint :: Word8 -> m (Maybe Word8)
+  -- serialEndpoint :: Word8 -> m (Maybe Word8)
 
 modifyInterrupt :: HardwareMonad m => (InterruptState -> InterruptState) -> m ()
 modifyInterrupt f = putInterrupt . f =<< getInterrupt
 
 {-# INLINE tickHardware #-}
-tickHardware :: HardwareMonad m => Word -> m (Maybe Frame)
-tickHardware cyc = do
+tickHardware :: HardwareMonad m => Maybe (SerialConnection m) -> Word -> m (Maybe Frame)
+tickHardware f cyc = do
   updateTimer' cyc
-  updateSerialPort cyc
+  updateSerialPort f cyc
   updateGPU' cyc
 
 updateGPU' :: HardwareMonad m => Word -> m (Maybe Frame)
@@ -111,10 +111,11 @@ updateTimer' cycles = do
   putTimer ts'
   when overflow $ modifyInterrupt $ interruptFlag INTTIMER .~ True
 
-updateSerialPort :: HardwareMonad m => Word -> m ()
-updateSerialPort cycles = do
+{-# INLINE updateSerialPort #-}
+updateSerialPort :: HardwareMonad m => Maybe (SerialConnection m) -> Word -> m ()
+updateSerialPort f cycles = do
   serial <- getSerialPort
-  (reqInt, serial') <- tickSerial serialEndpoint cycles serial
+  (reqInt, serial') <- tickSerial f cycles serial
   putSerialPort serial'
   when reqInt $ modifyInterrupt $ interruptFlag INTSERIAL .~ True
 
