@@ -6,6 +6,7 @@ module Hardware.HardwareMonad
 
   , module Hardware.Cartridge
   , module Hardware.BootRom
+  , module Hardware.Serial
 
   , module Hardware.Interrupt
 
@@ -35,6 +36,7 @@ import Hardware.Joypad
 import Hardware.GPU
 import Hardware.Cartridge
 import Hardware.BootRom
+import Hardware.Serial
 
 import Data.Bits
 
@@ -81,6 +83,10 @@ class Monad m => HardwareMonad m where
   readHRAM :: Word16 -> m Word8
   writeHRAM :: Word16 -> Word8 -> m ()
 
+  getSerialPort :: m SerialPort
+  putSerialPort :: SerialPort -> m ()
+  serialEndpoint :: Word8 -> m (Maybe Word8)
+
 modifyInterrupt :: HardwareMonad m => (InterruptState -> InterruptState) -> m ()
 modifyInterrupt f = putInterrupt . f =<< getInterrupt
 
@@ -88,6 +94,7 @@ modifyInterrupt f = putInterrupt . f =<< getInterrupt
 tickHardware :: HardwareMonad m => Word -> m (Maybe Frame)
 tickHardware cyc = do
   updateTimer' cyc
+  updateSerialPort cyc
   updateGPU' cyc
 
 updateGPU' :: HardwareMonad m => Word -> m (Maybe Frame)
@@ -103,6 +110,13 @@ updateTimer' cycles = do
   let (overflow, ts') = updateTimer cycles ts
   putTimer ts'
   when overflow $ modifyInterrupt $ interruptFlag INTTIMER .~ True
+
+updateSerialPort :: HardwareMonad m => Word -> m ()
+updateSerialPort cycles = do
+  serial <- getSerialPort
+  (reqInt, serial') <- tickSerial serialEndpoint cycles serial
+  putSerialPort serial'
+  when reqInt $ modifyInterrupt $ interruptFlag INTSERIAL .~ True
 
 setJoypad :: HardwareMonad m => (Joypad , Bool) -> m ()
 setJoypad f = do
@@ -135,6 +149,8 @@ storeMem idx b
   | idx < 0xFF00 = return ()
 
   | idx == 0xff00 = putJoypad . storeJoypad b =<< getJoypad
+  | idx == 0xff01 = putSerialPort . storeSerial idx b =<< getSerialPort
+  | idx == 0xff02 = putSerialPort . storeSerial idx b =<< getSerialPort
   | idx == 0xff0f = putInterrupt =<< storeIntFlag b <$> getInterrupt
   | idx == 0xffff = putInterrupt =<< storeIntEnable b <$> getInterrupt
   | inTimerRange idx = putTimer . storeTimer idx b =<< getTimer
@@ -161,6 +177,8 @@ loadMem idx
   | idx < 0xFF00 = return 0x00
 
   | idx == 0xff00 = loadJoypad <$> getJoypad
+  | idx == 0xff01 = loadSerial idx <$> getSerialPort
+  | idx == 0xff02 = loadSerial idx <$> getSerialPort
   | 0xFF40 <= idx && idx < 0xFF50 = loadGPUControl idx <$> getGPUControl
   | idx == 0xff50 = (\x -> if x then 0xff else 0xfe) <$> bootRomDisabled
 

@@ -1,6 +1,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, TypeFamilies #-}
 module MonadEmulator.EmulatorT
   ( MonadEmulator(..)
+  , EmulatorConfig(..)
+
   , EmulatorT
   , runEmulatorT
   , saveEmulatorT
@@ -39,7 +41,7 @@ newCPU = CPU
   <*> newSTRef 0x0000
   <*> newSTRef False
 
-data EmulatorState s = EmulatorState
+data EmulatorState m s = EmulatorState
   { emuHiram :: MVector s Word8
   , emuRam   :: MVector s Word8
 
@@ -51,11 +53,13 @@ data EmulatorState s = EmulatorState
   , emuInterrupt :: STRef s InterruptState
   , emuGPU       :: GPUState s
   , emuJoypad    :: STRef s JoypadState
+  , emuSerialPort :: STRef s SerialPort
+  , emuSerialEndpoint :: Word8 -> m (Maybe Word8)
 
   , emuCartridge :: CartridgeState s
   }
 
-newtype EmulatorT m a = EmulatorT (ReaderT (EmulatorState (PrimState m)) m a)
+newtype EmulatorT m a = EmulatorT (ReaderT (EmulatorState m (PrimState m)) m a)
   deriving (Functor, Applicative, Monad)
 
 instance MonadIO m => MonadIO (EmulatorT m) where
@@ -63,8 +67,8 @@ instance MonadIO m => MonadIO (EmulatorT m) where
 
 type Emulator = EmulatorT IO
 
-makeEmulatorState :: Maybe BootRom -> Rom -> ST s (EmulatorState s)
-makeEmulatorState brom rom = EmulatorState
+makeEmulatorState :: EmulatorConfig m -> ST s (EmulatorState m s)
+makeEmulatorState config = EmulatorState
   <$> V.replicate 0x7f 0x00
   <*> V.replicate 0x2000 0x00
   <*> newCPU
@@ -73,12 +77,20 @@ makeEmulatorState brom rom = EmulatorState
   <*> newSTRef defaultInterruptState
   <*> defaultGPUState
   <*> newSTRef defaultJoypadState
-  <*> makeCartridge brom rom
+  <*> newSTRef defaultSerialPort
+  <*> pure (emulatorSerialEndpoint config)
+  <*> makeCartridge (emulatorUseBootRom config) (emulatorRom config)
 
-runEmulatorT :: PrimMonad m => Maybe BootRom -> Rom -> EmulatorT m a -> m a
-runEmulatorT brom rom (EmulatorT m) = stToPrim (makeEmulatorState brom rom) >>= runReaderT m
+data EmulatorConfig m = EmulatorConfig
+  { emulatorUseBootRom :: Maybe BootRom
+  , emulatorRom :: Rom
+  , emulatorSerialEndpoint :: Word8 -> m (Maybe Word8)
+  }
 
-runEmulator :: Maybe BootRom -> Rom -> Emulator a -> IO a
+runEmulatorT :: PrimMonad m => EmulatorConfig m -> EmulatorT m a -> m a
+runEmulatorT config (EmulatorT m) = stToPrim (makeEmulatorState config) >>= runReaderT m
+
+runEmulator :: EmulatorConfig IO -> Emulator a -> IO a
 runEmulator = runEmulatorT
 
 saveEmulatorT :: PrimMonad m => EmulatorT m (Maybe CartridgeRAMSave)
@@ -88,11 +100,11 @@ saveEmulator :: Emulator (Maybe CartridgeRAMSave)
 saveEmulator = saveEmulatorT
 
 readState :: (PrimMonad m, s ~ PrimState m)
-          => (EmulatorState s -> STRef s a) -> EmulatorT m a
+          => (EmulatorState m s -> STRef s a) -> EmulatorT m a
 readState = helper readSTRef
 
 writeState :: (PrimMonad m, s ~ PrimState m)
-           => (EmulatorState s -> STRef s a) -> a -> EmulatorT m ()
+           => (EmulatorState m s -> STRef s a) -> a -> EmulatorT m ()
 writeState f b = helper (`writeSTRef` b) f
 
 {-# INLINE reg8index #-}
@@ -108,7 +120,7 @@ reg8index L = 7
 
 {-# INLINE helper #-}
 helper :: PrimMonad m
-         => (s -> ST (PrimState m) b) -> (EmulatorState (PrimState m) -> s) -> EmulatorT m b
+         => (s -> ST (PrimState m) b) -> (EmulatorState m (PrimState m) -> s) -> EmulatorT m b
 helper f get = EmulatorT $ stToPrim . f =<< asks get
 
 instance PrimMonad m => HardwareMonad (EmulatorT m) where
@@ -149,6 +161,12 @@ instance PrimMonad m => HardwareMonad (EmulatorT m) where
 
   readHRAM  idx   = helper (`V.read` fromIntegral idx) emuHiram
   writeHRAM idx b = helper (\mem -> V.write mem (fromIntegral idx) b) emuHiram
+
+  getSerialPort        = helper readSTRef emuSerialPort
+  putSerialPort serial = helper (`writeSTRef` serial) emuSerialPort
+
+  {-# INLINE serialEndpoint #-}
+  serialEndpoint b = EmulatorT $ lift . ($ b) =<< asks emuSerialEndpoint
 
 instance PrimMonad m => MonadEmulator (EmulatorT m) where
 

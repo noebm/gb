@@ -13,6 +13,7 @@ import Hardware.HardwareMonad
 import Hardware.Cartridge.Rom
 import Instruction.Interpreter
 
+import Data.Word
 import Data.Serialize
 import qualified Data.ByteString as B
 
@@ -40,7 +41,10 @@ emulate brom rom conf = do
         forM_ keys setJoypad
         unless quit $ update s'
 
-  runEmulator brom rom $ do
+  let inputConf = EmulatorConfig brom rom (\_ -> return Nothing)
+
+  runEmulator inputConf $ do
+    maybe (storePC 0x100) (\_ -> return ()) brom
     update =<< stepper
 
     when (shouldSave conf) $ do
