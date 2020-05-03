@@ -8,6 +8,7 @@ import Data.Word
 import Text.Printf
 
 data Writable8 = WriteReg8 !Reg8 | WriteAddr8 !Addr
+  deriving Eq
 
 instance Show Writable8 where
   show arg = case arg of
@@ -22,6 +23,7 @@ write8 (WriteAddr8 addr) = \b -> (`storeAddr` b) =<< getAddress addr
 data Writable16 = WriteReg16 !Reg16
            | WriteSP
            | WriteImmAddr16 !Word16
+           deriving Eq
 
 instance Show Writable16 where
   show arg = case arg of

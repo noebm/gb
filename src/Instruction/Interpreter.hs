@@ -173,7 +173,7 @@ interpretM instr = case instr ^. expr of
     prefetch
 
   RST g -> do
-    restart $ (* 8) g
+    restart g
     prefetch
 
   PUSH reg -> do

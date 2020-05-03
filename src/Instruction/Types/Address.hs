@@ -9,6 +9,7 @@ import Data.Word
 import Text.Printf
 
 data Addr = AddrBC | AddrDE | AddrHL | AddrHLi | AddrHLd | AddrDirect !Word16 | ZeroPage !Word8 | ZeroPageC
+  deriving Eq
 
 instance Show Addr where
   show arg = printf "(%s)" $ case arg of

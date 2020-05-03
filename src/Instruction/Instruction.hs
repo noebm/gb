@@ -1,10 +1,11 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Instruction.Instruction
   ( Expr (..)
   , ConditionalExpr (..)
   , Instruction (..)
   , Instruction'
   , expr
-  , branch, flag
+  , branch, branch', flag
   , instructionASM
   )
 where
@@ -17,7 +18,7 @@ import Text.Printf
 import Data.Word
 import Data.Int
 
-import Data.Functor.Contravariant
+import Control.Lens hiding (op)
 
 type Instruction' = Instruction Flag Word
 
@@ -36,7 +37,7 @@ instance Functor (Instruction f) where
 
 exprASM' :: ConditionalExpr -> Flag -> String
 exprASM' (JP' addr) flg = printf "JP %s,%s" (show flg) (show addr)
-exprASM' (JR' addr) flg = printf "JR %s,%i" (show flg) (show addr)
+exprASM' (JR' addr) flg = printf "JR %s,%d" (show flg) addr
 exprASM' (CALL' addr) flg = printf "CALL %s,%s" (show flg) (show addr)
 exprASM' RET' flg = printf "RET %s" (show flg)
 
@@ -65,3 +66,8 @@ branch f (InstructionNode x op) = (\x' -> InstructionNode x' op) <$> f x
 branch f (InstructionBranch x y flg op) = if flg
   then (\y' -> InstructionBranch x y' flg op) <$> f y
   else (\x' -> InstructionBranch x' y flg op) <$> f x
+
+branch' :: IndexedTraversal Bool (Instruction f a) (Instruction f b) a b
+  -- Applicative g => (Bool -> a -> g b) -> Instruction f a -> g (Instruction f b)
+branch' f (InstructionNode x op) = (\x' -> InstructionNode x' op) <$> indexed f True x
+branch' f (InstructionBranch x y flg op) = (\x' y' -> InstructionBranch x' y' flg op) <$> indexed f False x <*> indexed f False y

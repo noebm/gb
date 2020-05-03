@@ -7,6 +7,7 @@ import Data.Word
 import Text.Printf
 
 data Readable8 = ReadReg8 !Reg8 | ReadImm8 !Word8 | ReadAddr8 !Addr
+  deriving Eq
 
 instance Show Readable8 where
   show arg = case arg of

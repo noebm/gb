@@ -41,7 +41,7 @@ data Expr
   | BIT Word8 Readable8 | SET Word8 Writable8 | RES Word8 Writable8
 
   | DAA | CPL | SCF | CCF
-  deriving Show
+  deriving (Eq, Show)
 
 exprASM :: Expr -> String
 exprASM (CALL addr) = printf "CALL 0x%04x" addr

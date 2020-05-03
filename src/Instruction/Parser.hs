@@ -201,5 +201,5 @@ parseInstructionM b =
     (3,y,6) -> do
       dat <- byte
       return $! o 8  $ aluMnemonic y (ReadImm8 dat)
-    (3,y,7) -> return $! o 16 $ RST y
+    (3,y,7) -> return $! o 16 $ RST (8 * y)
     _ -> error $ printf "unknown bytecode 0x%02x" b
