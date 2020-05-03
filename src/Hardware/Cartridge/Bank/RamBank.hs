@@ -1,8 +1,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
+-- | General ram banks
+-- Supports swapping and initialization with zeros
 module Hardware.Cartridge.Bank.RamBank
-  -- | General ram banks.
-  -- | Supports swapping and initialization with zeros.
   ( RamBank (..)
   , ramBankCount
   , ramBankBytes

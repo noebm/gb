@@ -1,6 +1,6 @@
+-- | General rom banks
+-- | Supports swapping and generation from cartridge data
 module Hardware.Cartridge.Bank.RomBank
-  -- | General rom banks.
-  -- | Supports swapping and generation from cartridge data.
   ( RomBankSelector (..)
   , defaultRomBankSelector
 
