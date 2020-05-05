@@ -55,7 +55,7 @@ tickSerial conn dt = runStateT $ do
     forM_ conn $ \c -> do
       ret <- lift . c =<< use payload
       assign payload ret
-  return shouldTransfer
+  return (shouldTransfer && has _Just conn)
 
 loadSerial :: Word16 -> SerialPort -> Word8
 loadSerial 0xff01 s = view payload s
