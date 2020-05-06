@@ -114,8 +114,9 @@ tick = do
 
 {-# INLINE updateTimer #-}
 updateTimer :: Word -> Timer -> (Bool, Timer)
-updateTimer bus_cycles = runState $
-  or <$> replicateM (fromIntegral bus_cycles) tick
+updateTimer bus_cycles = runState $ go bus_cycles False where
+  go 0 acc = return acc
+  go n acc = tick >>= go (n - 1) . (acc ||)
 
 inTimerRange :: Word16 -> Bool
 inTimerRange addr = 0xff04 <= addr && addr < 0xff08
