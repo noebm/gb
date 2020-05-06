@@ -82,6 +82,14 @@ data GPUControl = GPUControl
 makePrisms ''GPUMode
 makeLenses ''GPUControl
 
+{-# INLINE gpuEnabled             #-}
+{-# INLINE gpuWindowTileMapSelect #-}
+{-# INLINE displayWindow          #-}
+{-# INLINE gpuTileDataSelect      #-}
+{-# INLINE gpuBGTileMapSelect     #-}
+{-# INLINE gpuOBJSizeLarge        #-}
+{-# INLINE displayOBJ             #-}
+{-# INLINE displayBG              #-}
 gpuEnabled, gpuWindowTileMapSelect, displayWindow, gpuTileDataSelect,
   gpuBGTileMapSelect, gpuOBJSizeLarge, displayOBJ, displayBG :: Lens' GPUControl Bool
 gpuEnabled             = gpuLCDControlByte . bitAt 7
@@ -93,6 +101,7 @@ gpuOBJSizeLarge        = gpuLCDControlByte . bitAt 2
 displayOBJ             = gpuLCDControlByte . bitAt 1
 displayBG              = gpuLCDControlByte . bitAt 0
 
+{-# INLINE gpuOBJPalette #-}
 gpuOBJPalette :: Bool -> Lens' GPUControl Palette
 gpuOBJPalette f = if f then gpuOBJ1Palette else gpuOBJ0Palette
 
