@@ -22,6 +22,7 @@ import Control.Lens
 import Control.Monad.ST
 import Control.Monad.Primitive
 import Control.Monad.Reader
+import Control.Monad.Trans
 
 import MonadEmulator.Class
 import Hardware.HardwareMonad
@@ -186,3 +187,6 @@ instance PrimMonad m => MonadEmulator (EmulatorT m) where
   anyInterrupts = checkForInterrupts <$> getInterrupt
   {-# INLINE clearInterrupt #-}
   clearInterrupt i = modifyInterrupt (interruptFlag i .~ False)
+
+instance MonadTrans EmulatorT where
+  lift = EmulatorT . lift

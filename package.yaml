@@ -47,9 +47,9 @@ executables:
     - gb
 
 tests:
-  gb-test:
-    main:                Spec.hs
-    source-dirs:         test
+  rom-test:
+    main:               Spec.hs
+    source-dirs:        testing
     ghc-options:
     - -threaded
     - -rtsopts
@@ -57,4 +57,4 @@ tests:
     - -fllvm
     dependencies:
     - gb
-    - criterion
+    - hspec

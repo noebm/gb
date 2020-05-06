@@ -4,6 +4,7 @@ module MonadEmulator
   , tickHardware
   , showRegisters
 
+  , module CPU.Registers
   , module MonadEmulator.EmulatorT
   )
 where
