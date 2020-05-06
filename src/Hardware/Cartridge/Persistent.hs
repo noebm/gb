@@ -5,7 +5,7 @@ import Data.Serialize
 import GHC.Generics
 
 import Hardware.Cartridge.Bank.RamBank
-import qualified Hardware.Cartridge.Header as H
+import qualified Hardware.Cartridge.Rom.Header as H
 
 import qualified Data.ByteString as B
 import qualified Data.Vector as V

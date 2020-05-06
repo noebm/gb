@@ -21,7 +21,7 @@ where
 
 import Hardware.BootRom
 
-import qualified Hardware.Cartridge.Header as Header
+import qualified Hardware.Cartridge.Rom.Header as Header
 import Hardware.Cartridge.Bank.RomBank
 import Hardware.Cartridge.Bank.RamBank
 import Hardware.Cartridge.MemoryBankController

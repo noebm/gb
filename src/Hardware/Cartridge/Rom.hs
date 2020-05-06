@@ -9,7 +9,7 @@ import Control.Lens
 import Control.Monad
 import Control.Monad.Except
 
-import qualified Hardware.Cartridge.Header as Header
+import Hardware.Cartridge.Rom.Header
 import Hardware.Cartridge.Persistent
 
 import qualified Data.ByteString as B
@@ -22,7 +22,7 @@ import System.Directory
 
 data Rom = Rom
   { romFilePath :: FilePath
-  , getRomHeader :: Header.Header
+  , getRomHeader :: Header
   , getRom :: B.ByteString
   , persistent :: Maybe CartridgeRAMSave
   }
@@ -58,8 +58,8 @@ readRom' fp = do
     $ printf "file length (0x%x) not a multiple of 0x4000 bytes" (B.length bytes)
 
   -- verify that the header agrees with the rom data
-  h <- liftEither $ Header.header bytes
-  let romBankCount = fromIntegral $ Header.headerRomBanks h
+  h <- liftEither $ parseHeader bytes
+  let romBankCount = fromIntegral $ headerRomBanks h
   when (q /= romBankCount)
     $ throwError
     $ printf "number of banks does not match - should have %i but got %i"
@@ -72,8 +72,8 @@ readRom fp = do
   rom' <- readRom' fp
 
   let cartPersistent
-        = has (Header.cartridgeOptions . folded . Header._IsPersistent)
-        $ Header.headerType (getRomHeader rom')
+        = has (cartridgeMemoryType . _MemoryWithBattery)
+        $ headerType $ getRomHeader rom'
 
   if cartPersistent
     then do

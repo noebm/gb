@@ -1,15 +1,14 @@
-{-# LANGUAGE OverloadedStrings, TemplateHaskell #-}
-module Hardware.Cartridge.Header
+{-# LANGUAGE TemplateHaskell #-}
+module Hardware.Cartridge.Rom.Header
   ( Header(..)
-  , header
+  , parseHeader
 
-  , MBCType (..)
-  , _HasRAM, _IsPersistent
-  , mbcType
-  , cartridgeOptions
-
-  , CartridgeOptions (..)
   , CartridgeType (..)
+  , _HasNoMBC, _HasMBC1
+  , cartridgeMemoryType
+
+  , CartridgeMemoryType (..)
+  , _MemoryWithoutBattery, _MemoryWithBattery
   )
 where
 
@@ -23,26 +22,21 @@ import Control.Monad
 
 import Data.Serialize.Get
 
-data CartridgeOptions
-  = HasRAM
-  | IsPersistent
+data CartridgeMemoryType = MemoryWithoutBattery | MemoryWithBattery
   deriving Show
 
-makePrisms ''CartridgeOptions
+makePrisms ''CartridgeMemoryType
 
-data MBCType
-  = OnlyROM
-  | MBC1
---   | MBC2
+data CartridgeType
+  = HasNoMBC (Maybe CartridgeMemoryType)
+  | HasMBC1  (Maybe CartridgeMemoryType)
   deriving Show
 
-data CartridgeType = CartridgeType
-  { _mbcType :: MBCType
-  , _cartridgeOptions :: [ CartridgeOptions ]
-  }
-  deriving Show
+makePrisms ''CartridgeType
 
-makeLenses ''CartridgeType
+cartridgeMemoryType :: Traversal' CartridgeType CartridgeMemoryType
+cartridgeMemoryType f (HasNoMBC x) = HasNoMBC <$> _Just f x
+cartridgeMemoryType f (HasMBC1  x) = HasMBC1  <$> _Just f x
 
 data Header = Header
   { headerTitle    :: ByteString
@@ -53,16 +47,25 @@ data Header = Header
   }
   deriving Show
 
-header :: ByteString -> Either String Header
-header = runGet $ do
+calculateChecksum :: ByteString -> Word8
+calculateChecksum = B.foldl (\x y -> x - y - 1) 0x00
+
+parseHeader :: ByteString -> Either String Header
+parseHeader = runGet $ do
   skip 0x100
   isolate 0x50 $ do
     label "program entry point" $ skip 4
     label "nintendo logo" $ skip 0x30
 
+    -- 0x14b should be
+    newLicenseeCode <- lookAhead $ skip 0x16 *> ((0x33 ==) <$> getWord8)
+
     header' <- lookAhead $ do
       -- either 16 byte title or title + manufacturer code + cgb flag
-      title <- label "title" $ B.takeWhile (/= 0x00) <$> getBytes 0x10
+      let titleSize = if newLicenseeCode then 0x0b else 0x10
+      title <- label "title" $ B.takeWhile (/= 0x00) <$> getBytes titleSize
+      -- dont parse manufacturer code for now
+      skip $ 0x10 - titleSize
       -- label "manufacturer code" $ skip 4
       -- _cbg <- label "cgb flag" $ getWord8
       _code <- label "new licensee code" $ getBytes 2
@@ -81,7 +84,7 @@ header = runGet $ do
         , headerLocale   = loc
         }
 
-    headerchksm' <- B.foldl (\x y -> x - y - 1) 0x00 <$> getBytes 0x19
+    headerchksm' <- calculateChecksum <$> getBytes 0x19
     headerchksm <- label "header checksum" getWord8
     -- checksum over whole ROM (excluding both checksum bytes)
     _globalchksm <- label "global checksum" getWord16be
@@ -90,16 +93,14 @@ header = runGet $ do
     return header'
 
 cartridgeType :: Word8 -> Either String CartridgeType
-cartridgeType 0 = Right $ CartridgeType OnlyROM []
-cartridgeType 8 = Right $ CartridgeType OnlyROM [ HasRAM ]
-cartridgeType 9 = Right $ CartridgeType OnlyROM [ HasRAM, IsPersistent ]
+cartridgeType 0 = Right $ HasNoMBC Nothing
+cartridgeType 8 = Right $ HasNoMBC (Just MemoryWithoutBattery)
+cartridgeType 9 = Right $ HasNoMBC (Just MemoryWithBattery)
 
-cartridgeType 1 = Right $ CartridgeType MBC1 []
-cartridgeType 2 = Right $ CartridgeType MBC1 [ HasRAM ]
-cartridgeType 3 = Right $ CartridgeType MBC1 [ HasRAM, IsPersistent ]
+cartridgeType 1 = Right $ HasMBC1 Nothing
+cartridgeType 2 = Right $ HasMBC1 (Just MemoryWithoutBattery)
+cartridgeType 3 = Right $ HasMBC1 (Just MemoryWithBattery)
 
--- cartridgeType 5 = Right $ CartridgeType MBC2 []
--- cartridgeType 6 = Right $ CartridgeType MBC2 [ IsPersistent ]
 cartridgeType x = Left $ "cartridgetype invalid / not supported " ++ show x
 
 ramBanks :: Word8 -> Either String Word
