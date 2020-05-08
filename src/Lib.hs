@@ -82,6 +82,6 @@ mainloop fp nodelay = do
 
   let bootStrapName = "DMG_ROM.bin"
   (bootrom', rom) <- fmap (either error id) $ runExceptT $
-    (,) <$> readBootRom bootStrapName <*> readRom fp
+    (,) <$> readBootRom bootStrapName <*> readRom True fp
 
   emulate (Just bootrom') rom =<< basicSDLEmulationConfig nodelay

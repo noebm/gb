@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 module Hardware.Cartridge.MemoryBankController where
 
 import Control.Applicative
@@ -22,7 +23,7 @@ data MemoryBankController
 newMemoryBankController :: Header -> Maybe CartridgeRAMSave -> MemoryBankController
 newMemoryBankController h s = case headerType h of
   HasNoMBC _ -> NoMemoryBankController
-  HasMBC1  _ -> MemoryBankController1 defaultMBC1 defaultRomBankSelector
+  HasMBC1  _ f -> MemoryBankController1 (defaultMBC1 f) defaultRomBankSelector
                ((restoreRamBank <$> s) <|> newRamBanks (fromIntegral $ headerRamBanks h))
 
 storeMBC :: Word16 -> Word8
@@ -47,32 +48,40 @@ ramBank (MemoryBankController1 mbc1 _ ramb) = do
   ramb
 
 data MBC1Mode = MBC1_RomMode | MBC1_RamMode
-  deriving Eq
+  deriving (Show, Eq)
 
 data MBC1 = MBC1
   { ramg :: Bool
   , bank1 :: Word8
   , bank2 :: Word8
   , mode :: MBC1Mode
-  }
+  , multiCart :: Bool
+  } deriving Show
 
-defaultMBC1 :: MBC1
-defaultMBC1 = MBC1 { ramg = False , bank1 = 0x01, bank2 = 0x00, mode = MBC1_RomMode }
+defaultMBC1 :: Bool -> MBC1
+defaultMBC1 multirom = MBC1
+    { ramg = False , bank1 = 0x01, bank2 = 0x00, mode = MBC1_RomMode, multiCart = multirom }
+
+bank1Mask :: Bool -> Word8
+bank1Mask multiCart = if multiCart then 0x0f else 0x1f
+
+bank2Shift :: Bool -> Int
+bank2Shift multiCart = if multiCart then 4 else 5
 
 romBank1Index :: MBC1 -> Word8
-romBank1Index s = case mode s of
-  MBC1_RamMode -> (bank2 s .&. 0x03) `shiftL` 5
+romBank1Index MBC1{..} = case mode of
+  MBC1_RamMode -> (bank2 .&. 0x03) `shiftL` bank2Shift multiCart
   MBC1_RomMode -> 0x00
 
 romBank2Index :: MBC1 -> Word8
-romBank2Index s =
-  let lo = bank1 s .&. 0x1f
-      hi = (bank2 s .&. 0x03) `shiftL` 5
+romBank2Index MBC1{..} =
+  let lo = bank1 .&. bank1Mask multiCart
+      hi = (bank2 .&. 0x03) `shiftL` bank2Shift multiCart
   in hi .|. lo
 
 ramBankIndex :: MBC1 -> Word8
-ramBankIndex s = case mode s of
-  MBC1_RamMode -> bank2 s .&. 0x03
+ramBankIndex MBC1{..} = case mode of
+  MBC1_RamMode -> bank2 .&. 0x03
   MBC1_RomMode -> 0x00
 
 generateRomBankSelector :: MBC1 -> (RomBanks -> RomBankSelector)

@@ -21,7 +21,7 @@ where
 
 import Hardware.BootRom
 
-import qualified Hardware.Cartridge.Rom.Header as Header
+import Hardware.Cartridge.Rom.Header
 import Hardware.Cartridge.Bank.RomBank
 import Hardware.Cartridge.Bank.RamBank
 import Hardware.Cartridge.MemoryBankController
@@ -35,7 +35,7 @@ import Control.Monad.ST
 import Data.STRef
 
 data CartridgeState s = CartridgeState
-  { header :: Header.Header
+  { header :: Header
   , bootrom :: STRef s (Maybe BootRom)
   , romBanks :: RomBanks
   , mbc :: STRef s MemoryBankController

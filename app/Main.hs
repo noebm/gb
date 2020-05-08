@@ -40,14 +40,14 @@ parseCommandline progName argv = case getOpt Permute options argv of
     | Info `elem` opts
     , [ file ] <- files -> do
         errors <- runExceptT $ do
-          rom <- readRom file
+          rom <- readRom False file
           liftIO $ print $ getRomHeader rom
         either (hPutStrLn stderr) return errors
         exitWith ExitSuccess
     | Just optAddr <- firstOf (folded . _Disassemble) opts
     , [ file ] <- files -> do
         errors <- runExceptT $ do
-          rom <- readRom file
+          rom <- readRom False file
           liftIO $ putStrLn $ showAddressMap $ case optAddr of
             Nothing -> disassemble rom
             Just addr -> disassembleAt rom addr

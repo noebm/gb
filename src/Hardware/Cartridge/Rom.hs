@@ -20,6 +20,10 @@ import Text.Printf
 import System.FilePath
 import System.Directory
 
+import Data.Digest.CRC32
+import Data.List
+import Data.Functor
+
 data Rom = Rom
   { romFilePath :: FilePath
   , getRomHeader :: Header
@@ -65,17 +69,33 @@ readRom' fp = do
     $ printf "number of banks does not match - should have %i but got %i"
     romBankCount q
 
-  return $ Rom fp h bytes Nothing
+  let h' = h { headerType = headerType h & cartridgeMBC1MultiCart .~ isMultiCart bytes
+             }
 
-readRom :: FilePath -> ExceptT String IO Rom
-readRom fp = do
+  return $ Rom fp h' bytes Nothing
+
+-- | Check for mbc1 multicarts
+isMultiCart :: B.ByteString -> Bool
+isMultiCart romBytes
+  =  B.length romBytes == 2^20 -- only known multicart size
+  && (length headers >= 3)
+  where
+    headers
+      = filter ((== 0x46195417) . crc32 . B.take 0x30 . B.drop 0x104)
+      $ unfoldr (\bytes ->
+        let (xs , ys) = B.splitAt 0x40000 bytes
+         in guard (not $ B.null ys) $> (xs , ys))
+         romBytes
+
+readRom :: Bool -> FilePath -> ExceptT String IO Rom
+readRom loadSaves fp = do
   rom' <- readRom' fp
 
   let cartPersistent
         = has (cartridgeMemoryType . _MemoryWithBattery)
         $ headerType $ getRomHeader rom'
 
-  if cartPersistent
+  if loadSaves && cartPersistent
     then do
     saveFile <- tryLoadSaveFile rom'
     return $ rom' { persistent = saveFile }

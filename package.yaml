@@ -14,6 +14,7 @@ dependencies:
 - filepath
 - directory
 - containers
+- digest
 - free
 
 - cereal

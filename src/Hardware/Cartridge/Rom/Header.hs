@@ -6,6 +6,7 @@ module Hardware.Cartridge.Rom.Header
   , CartridgeType (..)
   , _HasNoMBC, _HasMBC1
   , cartridgeMemoryType
+  , cartridgeMBC1MultiCart
 
   , CartridgeMemoryType (..)
   , _MemoryWithoutBattery, _MemoryWithBattery
@@ -23,20 +24,24 @@ import Control.Monad
 import Data.Serialize.Get
 
 data CartridgeMemoryType = MemoryWithoutBattery | MemoryWithBattery
-  deriving Show
+  deriving (Eq, Show)
 
 makePrisms ''CartridgeMemoryType
 
 data CartridgeType
   = HasNoMBC (Maybe CartridgeMemoryType)
-  | HasMBC1  (Maybe CartridgeMemoryType)
-  deriving Show
+  | HasMBC1  (Maybe CartridgeMemoryType) Bool
+  deriving (Eq, Show)
 
 makePrisms ''CartridgeType
 
 cartridgeMemoryType :: Traversal' CartridgeType CartridgeMemoryType
 cartridgeMemoryType f (HasNoMBC x) = HasNoMBC <$> _Just f x
-cartridgeMemoryType f (HasMBC1  x) = HasMBC1  <$> _Just f x
+cartridgeMemoryType f (HasMBC1  x multi) = (`HasMBC1` multi) <$> _Just f x
+
+cartridgeMBC1MultiCart :: Traversal' CartridgeType Bool
+cartridgeMBC1MultiCart f (HasMBC1 x multi) = HasMBC1 x <$> f multi
+cartridgeMBC1MultiCart _ x = pure x
 
 data Header = Header
   { headerTitle    :: ByteString
@@ -97,9 +102,9 @@ cartridgeType 0 = Right $ HasNoMBC Nothing
 cartridgeType 8 = Right $ HasNoMBC (Just MemoryWithoutBattery)
 cartridgeType 9 = Right $ HasNoMBC (Just MemoryWithBattery)
 
-cartridgeType 1 = Right $ HasMBC1 Nothing
-cartridgeType 2 = Right $ HasMBC1 (Just MemoryWithoutBattery)
-cartridgeType 3 = Right $ HasMBC1 (Just MemoryWithBattery)
+cartridgeType 1 = Right $ HasMBC1 Nothing False
+cartridgeType 2 = Right $ HasMBC1 (Just MemoryWithoutBattery) False
+cartridgeType 3 = Right $ HasMBC1 (Just MemoryWithBattery) False
 
 cartridgeType x = Left $ "cartridgetype invalid / not supported " ++ show x
 

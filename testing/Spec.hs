@@ -25,24 +25,24 @@ blargg = do
     let d = blarggBase </> "cpu_instrs/individual"
     romfps <- runIO $ filter isRomFile <$> getDirectoryContents d
     forM_ romfps $ \romfp -> do
-      rom <- fmap (either error id) $ runIO $ runExceptT $ readRom $ (d </>) romfp
+      rom <- fmap (either error id) $ runIO $ runExceptT $ readRom False $ (d </>) romfp
       it romfp $ testWithSerial rom `shouldSatisfy` (B.isInfixOf "Passed" . view strict)
 
   id $ do
     let fp = "instr_timing/instr_timing.gb"
-    rom <- fmap (either error id) $ runIO $ runExceptT (readRom $ blarggBase </> fp)
+    rom <- fmap (either error id) $ runIO $ runExceptT (readRom False $ blarggBase </> fp)
     it (takeFileName fp) $ testWithSerial rom `shouldSatisfy` (B.isInfixOf "Passed" . view strict)
 
   -- let memoryTestable = [ "oam_bug/oam_bug.gb", "dmg_sound/dmg_sound.gb" ]
   -- describe "memory tests" $ forM_ memoryTestable $ \fp -> do
-  --   rom <- fmap (either error id) $ runIO $ runExceptT (readRom $ blarggBase </> fp)
+  --   rom <- fmap (either error id) $ runIO $ runExceptT (readRom False $ blarggBase </> fp)
   --   it fp $ testWithMemory rom `shouldSatisfy` (B.isInfixOf "Passed" . view strict)
   let memoryTestable = [ "oam_bug", "dmg_sound" ]
   forM_ memoryTestable $ \testGroup -> describe testGroup $ do
     let d = blarggBase </> testGroup </> "rom_singles"
     romfps <- runIO $ filter isRomFile <$> getDirectoryContents d
     forM_ romfps $ \romfp -> do
-      rom <- fmap (either error id) $ runIO $ runExceptT $ readRom $ (d </>) romfp
+      rom <- fmap (either error id) $ runIO $ runExceptT $ readRom False $ (d </>) romfp
       it romfp $ testWithMemory rom `shouldBe` 0x00
 
 mooneyeRequiresBoot :: FilePath -> Bool
@@ -64,7 +64,7 @@ mooneyeTestGroup brom base subdir = describe subdir $ do
   romfps <- runIO $ filter (\r -> isRomFile r && mooneyeDMG r && f (mooneyeRequiresBoot r))
         <$> getDirectoryContents d
   forM_ romfps $ \romfp -> do
-    rom <- fmap (either error id) $ runIO $ runExceptT $ readRom $ (d </>) romfp
+    rom <- fmap (either error id) $ runIO $ runExceptT $ readRom False $ (d </>) romfp
     it romfp $ testWithMooneye brom rom `shouldBe` True
 
 mooneye :: Spec
