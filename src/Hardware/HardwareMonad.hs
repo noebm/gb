@@ -127,8 +127,8 @@ setJoypad f = do
 {-# INLINE word16 #-}
 word16 :: Iso' (Word8, Word8) Word16
 word16 = iso
-  (\(h,l) -> shift (fromIntegral h) 8 .|. fromIntegral l)
-  (\w -> (fromIntegral $ shift (w .&. 0xff00) (negate 8), fromIntegral $ w .&. 0x00ff))
+  (\(h,l) -> shiftL (fromIntegral h) 8 .|. fromIntegral l)
+  (\w -> (fromIntegral $ shiftR w 8, fromIntegral w))
 
 -- currently not implemented
 inSoundRange :: Word16 -> Bool
