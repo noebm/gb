@@ -155,11 +155,12 @@ storeMem idx b
   | idx == 0xff0f = putInterrupt =<< storeIntFlag b <$> getInterrupt
   | idx == 0xffff = putInterrupt =<< storeIntEnable b <$> getInterrupt
   | inTimerRange idx = putTimer . storeTimer idx b =<< getTimer
-  | idx == 0xff46 = do
-      let baseaddr = (b , 0x00) ^. word16
-      vec <- V.generateM 0xa0 $ loadMem . fromIntegral . (fromIntegral baseaddr +)
-      fillOAMUnsafe vec
-  | 0xFF40 <= idx && idx < 0xFF50 = putGPUControl . storeGPUControl idx b =<< getGPUControl
+  | 0xFF40 <= idx && idx < 0xFF50 = do
+      putGPUControl . storeGPUControl idx b =<< getGPUControl
+      when (idx == 0xff46) $ do
+        let baseaddr = (b , 0x00) ^. word16
+        vec <- V.generateM 0xa0 $ loadMem . fromIntegral . (fromIntegral baseaddr +)
+        fillOAMUnsafe vec
   | idx == 0xff50 = when (b `testBit` 0) disableBootRom
   -- unimplemented IO port
   | 0xFF00 <= idx && idx < 0xFF80 = return ()

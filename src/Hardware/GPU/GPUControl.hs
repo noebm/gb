@@ -76,6 +76,7 @@ data GPUControl = GPUControl
 
   , _gpuScroll :: V2 Word8
   , _gpuWindow :: V2 Word8
+  , _gpuDMAAddress :: Word8
   }
   deriving (Show)
 
@@ -122,6 +123,7 @@ defaultGPUControl = GPUControl
   , _gpuBGPalette   = Palette 0
   , _gpuOBJ0Palette = Palette 0
   , _gpuOBJ1Palette = Palette 0
+  , _gpuDMAAddress = 0x00
 
   , _gpuScroll = zero
   , _gpuWindow = zero
@@ -185,6 +187,7 @@ storeGPUControl 0xFF42 b g = g & gpuScroll._y .~ b
 storeGPUControl 0xFF43 b g = g & gpuScroll._x .~ b
 storeGPUControl 0xFF44 _ g = g
 storeGPUControl 0xFF45 b g = g & gpuLineCompare .~ b
+storeGPUControl 0xFF46 b g = g & gpuDMAAddress .~ b
 storeGPUControl 0xFF47 b g = g & gpuBGPalette   .~ Palette b -- non CBG mode only
 storeGPUControl 0xFF48 b g = g & gpuOBJ0Palette .~ Palette b -- non CBG mode only
 storeGPUControl 0xFF49 b g = g & gpuOBJ1Palette .~ Palette b -- non CBG mode only
@@ -205,6 +208,7 @@ loadGPUControl 0xFF42 g = g ^. gpuScroll._y
 loadGPUControl 0xFF43 g = g ^. gpuScroll._x
 loadGPUControl 0xFF44 g = _gpuLine g
 loadGPUControl 0xFF45 g = _gpuLineCompare g
+loadGPUControl 0xFF46 g = _gpuDMAAddress g
 loadGPUControl 0xFF47 g = getPalette $ _gpuBGPalette   g -- non CBG mode only
 loadGPUControl 0xFF48 g = getPalette $ _gpuOBJ0Palette g -- non CBG mode only
 loadGPUControl 0xFF49 g = getPalette $ _gpuOBJ1Palette g -- non CBG mode only
