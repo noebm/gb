@@ -5,6 +5,7 @@ import Hardware.HardwareMonad
 import Instruction.Instruction
 import Instruction.Interpreter
 import Instruction.Types.Address
+import Utilities.Cofree
 
 import Control.Lens hiding ((:<))
 import Control.Monad
@@ -55,12 +56,6 @@ getMemoryTestValue :: MonadEmulator m => m (Maybe Word8)
 getMemoryTestValue = do
   valid <- [ 0xde, 0xb0, 0x61 ] `isByteSequenceAt` 0xa001
   sequenceA $ guard valid $> loadAddr 0xa000
-
-coExtend :: Monad m => (a -> m b) -> Cofree m a -> m (Cofree m b)
-coExtend f (x :< s) = (:< (coExtend f =<< s)) <$> f x
-
-coFilter :: Monad m => Cofree m (Maybe a) -> m (Cofree m a)
-coFilter (x :< s) = maybe id (\x -> return . (x :<)) x $ coFilter =<< s
 
 -- only output instructions .. continue on halt, etc.
 newInstr :: (MonadEmulator m, HardwareMonad m)
