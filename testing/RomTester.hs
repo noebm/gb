@@ -5,6 +5,8 @@ import Hardware.HardwareMonad
 import Instruction.Instruction
 import Instruction.Interpreter
 import Instruction.Types.Address
+import Instruction.Types.Readable
+import Instruction.Types.Writable
 import Utilities.Cofree
 
 import Control.Lens hiding ((:<))
@@ -65,35 +67,54 @@ newInstr conn = instructionsTrace
   >>= coExtend (\(dt, tr) -> tickHardware conn dt $> tr)
   >>= coFilter
 
+waitFor :: Monad m => (a -> Bool) -> Cofree m a -> m (Cofree m a)
+waitFor f (x :< xs) = if f x then return (x :< xs) else waitFor f =<< xs
+
 testWithMemory :: Rom -> Word8
 testWithMemory rom = unsafePerformIO $ runEmulatorT conf $ do
   storePC 0x100
   newInstr Nothing
     >>= coExtend (const getMemoryTestValue)
     >>= findStart >>= coFilter >>= findEnd
+    >>= return . view _extract
   where
     conf = EmulatorConfig Nothing rom
 
-    findStart (Just 0x80 :< x) = x
-    findStart (_ :< x) = findStart =<< x
+    findStart = waitFor (== Just 0x80)
+    findEnd = waitFor (/= 0x80)
 
-    findEnd (0x80 :< xs) = findEnd =<< xs
-    findEnd (x :< xs) = return x
+data MooneyeErrorCode
+  -- Magic in registers except A signals success / failure
+  = MooneyeMagicError Word8
+  -- D value signals success / failure
+  | MooneyeError42
+  deriving (Eq, Show)
 
-getMooneyeRet :: MonadEmulator m => m Bool
-getMooneyeRet = go regValues where
+-- check for magic value
+-- if it fails check for value 0x42 / 0x00 in D register
+getMooneyeRet :: MonadEmulator m => m (Maybe MooneyeErrorCode)
+getMooneyeRet = do
+  hasMagic <- go regValues
+  d <- loadReg D
+  a <- loadReg A
+  return $ if hasMagic
+    then Nothing
+    else do
+      case d of
+        0x42 -> Just $ MooneyeError42
+        0x00 -> Nothing
+        _ -> Just $ MooneyeMagicError a
+  where
   regValues = [(B, 3), (C, 5), (D, 8), (E, 13), (H, 21), (L, 34)]
   go = fmap and . mapM (\(r, v) -> (== v) <$> loadReg r)
 
-testWithMooneye :: Maybe BootRom -> Rom -> Bool
+testWithMooneye :: Maybe BootRom -> Rom -> Maybe MooneyeErrorCode
 testWithMooneye brom rom = unsafePerformIO $ runEmulatorT conf $ do
   maybe (storePC 0x100) (const (return ())) brom
   go =<< newInstr Nothing
   getMooneyeRet
-
   where
     conf = EmulatorConfig brom rom
 
-    go ((addr, _) :< s) = do
-      f <- [ 0x00, 0x18, 0xfd ] `isByteSequenceAt` addr
-      unless f $ go =<< s
+    magicOp = LD (ReadReg8 B) (WriteReg8 B)
+    go = waitFor $ has (_2 . expr . only magicOp)

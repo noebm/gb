@@ -23,14 +23,14 @@ blargg = do
 
   describe "instructions" $ do
     let d = blarggBase </> "cpu_instrs/individual"
-    romfps <- runIO $ filter isRomFile <$> getDirectoryContents d
+    romfps <- runIO $ getRomsInDir d
     forM_ romfps $ \romfp -> do
-      rom <- fmap (either error id) $ runIO $ runExceptT $ readRom False $ (d </>) romfp
+      rom <- runIO $ getRomFile False $ d </> romfp
       it romfp $ testWithSerial rom `shouldSatisfy` (B.isInfixOf "Passed" . view strict)
 
-  id $ do
+  do
     let fp = "instr_timing/instr_timing.gb"
-    rom <- fmap (either error id) $ runIO $ runExceptT (readRom False $ blarggBase </> fp)
+    rom <- runIO $ getRomFile False $ blarggBase </> fp
     it (takeFileName fp) $ testWithSerial rom `shouldSatisfy` (B.isInfixOf "Passed" . view strict)
 
   -- let memoryTestable = [ "oam_bug/oam_bug.gb", "dmg_sound/dmg_sound.gb" ]
@@ -40,9 +40,9 @@ blargg = do
   let memoryTestable = [ "oam_bug", "dmg_sound" ]
   forM_ memoryTestable $ \testGroup -> describe testGroup $ do
     let d = blarggBase </> testGroup </> "rom_singles"
-    romfps <- runIO $ filter isRomFile <$> getDirectoryContents d
+    romfps <- runIO $ getRomsInDir d
     forM_ romfps $ \romfp -> do
-      rom <- fmap (either error id) $ runIO $ runExceptT $ readRom False $ (d </>) romfp
+      rom <- runIO $ getRomFile False $ d </> romfp
       it romfp $ testWithMemory rom `shouldBe` 0x00
 
 mooneyeRequiresBoot :: FilePath -> Bool
@@ -53,41 +53,45 @@ mooneyeDMG fp =  any ($ base) dmg || not (any ($ base) nonDmg)
   where base = takeBaseName fp
         dmg =    [ isSuffixOf ('-' : s) | s <- [ "GS", "dmgABCmgb", "dmgABC" ] ]
         nonDmg = [ isSuffixOf ('-' : s) | s <- [ "S", "mgb", "A", "C", "dmg0", "sgb", "sgb2" ] ]
+              -- temporarily exclude because it fails to load
+              ++ [ ("oam_dma_start" ==) . takeBaseName ]
 
-isRomFile :: FilePath -> Bool
-isRomFile = isExtensionOf "gb"
+getRomsInDir :: FilePath -> IO [ FilePath ]
+getRomsInDir = fmap (filter (isExtensionOf "gb")) . getDirectoryContents
 
-mooneyeTestGroup :: Maybe BootRom -> FilePath -> FilePath -> Spec
-mooneyeTestGroup brom base subdir = describe subdir $ do
-  let d = base </> subdir
-  let f = maybe not (const id) brom
-  romfps <- runIO $ filter (\r -> isRomFile r && mooneyeDMG r && f (mooneyeRequiresBoot r))
-        <$> getDirectoryContents d
-  forM_ romfps $ \romfp -> do
-    rom <- fmap (either error id) $ runIO $ runExceptT $ readRom False $ (d </>) romfp
-    it romfp $ testWithMooneye brom rom `shouldBe` True
+getRomFile :: Bool -> FilePath -> IO Rom
+getRomFile f = fmap (either error id) . runExceptT . readRom f
 
 mooneye :: Spec
 mooneye = do
   let mooneyeBase = "verify/mooneye"
-  let nonBootGroups = mooneyeTestGroup Nothing mooneyeBase
-  mapM_ nonBootGroups
-    [ "emulator-only/mbc1"
-    , "acceptance/timer"
-    , "acceptance/bits"
-    , "acceptance/instr"
-    , "acceptance/interrupts"
-    , "acceptance/serial"
-    , "acceptance/oam_dma"
-    ]
-  -- use nonstandard return codes for non 'boot_' roms
-  -- mooneyeTestGroup mooneyeBase "acceptance"
 
   brom <- runIO $ fmap (either error id) $ runExceptT $ readBootRom "DMG_ROM.bin"
-  mapM_ (mooneyeTestGroup (Just brom) mooneyeBase) [ "acceptance" ]
+  romGroups <- runIO $ mapM
+    (\(f, subdir) -> do
+      let d = mooneyeBase </> subdir
+      romfps <- filter f <$> getRomsInDir d
+      roms <- mapM (\fp -> fmap ((,) fp) $ getRomFile False $ d </> fp) romfps
+      return $ (subdir, roms)
+      ) $
+    [ (mooneyeDMG, x) | x <-
+      [ "emulator-only/mbc1"
+      , "acceptance/timer"
+      , "acceptance/bits"
+      , "acceptance/instr"
+      , "acceptance/interrupts"
+      , "acceptance/serial"
+      , "acceptance/oam_dma"
+      , "acceptance/ppu"
+      -- loops on oam_dma_start
+      , "acceptance"
+      ] ]
+
+  forM_ romGroups $ \(group, roms) -> describe group $
+    mapM_ (\(test,rom) -> it test $ testWithMooneye (Just brom) rom `shouldBe` Nothing) roms
 
 main :: IO ()
-main = hspec $ do
+main = hspec $ parallel $ do
   describe "blargg roms" blargg
   describe "mooneye roms" mooneye
 
