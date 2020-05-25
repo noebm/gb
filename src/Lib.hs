@@ -16,12 +16,8 @@ import Hardware.Cartridge.Rom
 import qualified SDL
 import Utilities.SDL (_KeyboardEvent, _QuitEvent, _WindowClosedEvent)
 
-import Utilities.Statistics.WindowedAverage
-
-import System.Console.ANSI
-import Text.Printf
-
 import Emulate
+import Utilities.FrameCounter
 
 keymap :: SDL.Keycode -> Maybe Joypad
 keymap SDL.KeycodeUp    = Just JoypadUp
@@ -40,13 +36,8 @@ basicSDLEmulationConfig nodelay = do
   gfx <- initializeGraphics
 
   tickRef <- newIORef 0
-  avgWindowFrameTime <- newIORef (emptyWindow 30 0)
-  avgOverallFrameTime <- newIORef (emptyWindow 240 0)
 
-  putStrLn "runtime statistics:"
-  -- empty lines for updates
-  putStrLn ""
-  putStrLn ""
+  counter <- setupFrameCounter
 
   return $ EmulationConfig
     { frameUpdate = \frame -> do
@@ -58,19 +49,11 @@ basicSDLEmulationConfig nodelay = do
         writeIORef tickRef tnew
 
         let dtime = tnew - told
-
-        -- update terminal statistics output
-        modifyIORef avgWindowFrameTime (addWindowSample (fromIntegral dtime :: Double))
-        modifyIORef avgOverallFrameTime (addWindowSample (fromIntegral dtime :: Double))
-
-        cursorUp 2
-        clearLine
-        putStrLn . (printf "current frame time: %.2f ms") . averageWin =<< readIORef avgWindowFrameTime
-        clearLine
-        putStrLn . (printf "overall frame time: %.2f ms") . averageWin =<< readIORef avgOverallFrameTime
-
         unless nodelay $ do
           when (tnew > told && dtime < 16) $ SDL.delay (16 - dtime)
+
+        updateCounter counter dtime
+        displayCounter counter
 
     , keyUpdate = do
         events <- fmap SDL.eventPayload <$> SDL.pollEvents
