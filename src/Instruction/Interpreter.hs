@@ -256,13 +256,8 @@ interpretM instr = case instr ^. expr of
       & flagH .~ (v .&. 0x0F == 0x00)
     prefetch
 
-  DI -> do
-    setIME False
-    prefetch
-
-  EI -> do
-    setIME True
-    prefetch
+  DI -> setIME False *> prefetch
+  EI -> prefetch <* setIME True
 
   DAA -> do
     daa
