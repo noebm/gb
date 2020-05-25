@@ -4,11 +4,14 @@ import Control.Monad
 import Control.Monad.Except
 import Control.Lens
 import Data.IORef
+import Data.Serialize
+import qualified Data.ByteString as B
 
 import Graphics
 import Input
 
 import Hardware.HardwareMonad
+import Hardware.Cartridge.Rom
 
 import qualified SDL
 import Utilities.SDL (_KeyboardEvent, _QuitEvent, _WindowClosedEvent)
@@ -84,4 +87,6 @@ mainloop fp nodelay = do
   (bootrom', rom) <- fmap (either error id) $ runExceptT $
     (,) <$> readBootRom bootStrapName <*> readRom True fp
 
-  emulate (Just bootrom') rom =<< basicSDLEmulationConfig nodelay
+  config <- basicSDLEmulationConfig nodelay
+  ramSave <- emulate (Just bootrom') rom config
+  mapM_ (B.writeFile (romSaveFilePath rom) . encode) (guard (shouldSave config) *> ramSave)
