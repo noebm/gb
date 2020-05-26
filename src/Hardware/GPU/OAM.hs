@@ -15,7 +15,8 @@ module Hardware.GPU.OAM
   , defaultOAM, dumpOAM
   , loadOAM, storeOAM
   , getLineSprites
-  , directMemoryAccessOAM
+  , oamFromDMA
+  , prettyOAM
   )
 where
 
@@ -24,7 +25,9 @@ import qualified Data.Vector.Generic as G
 import qualified Data.Vector.Generic.Mutable as M
 
 import Control.Applicative
-import Data.List (sortBy)
+import Control.Monad
+import Data.List
+import Text.Printf
 
 import Control.Lens
 import Data.Bits.Lens
@@ -124,15 +127,22 @@ defaultOAM = OAM (G.replicate 40 defaultSprite)
 dumpOAM :: OAM -> [ Word8 ]
 dumpOAM = G.toList . view oamBytesInternal
 
+prettyOAM :: OAM -> String
+prettyOAM = intercalate "\n"
+          . fmap (intercalate ", " . fmap (printf "0x%02x"))
+          . unfoldr (\xs -> guard (not (null xs)) *> Just (splitAt 16 xs))
+          . G.toList
+          . view oamBytesInternal
+
 {-# INLINE oamBytesInternal #-}
 oamBytesInternal :: Lens' OAM (U.Vector Word8)
 oamBytesInternal f (OAM (V_Sprite n v)) = OAM . V_Sprite n <$> f v
 
 loadOAM :: Word16 -> OAM -> Word8
-loadOAM addr oam = oam ^?! oamBytesInternal.ix (fromIntegral (addr .&. 0x9f))
+loadOAM addr oam = oam ^?! oamBytesInternal.ix (fromIntegral (addr .&. 0xff))
 
 storeOAM :: Word16 -> Word8 -> OAM -> OAM
-storeOAM addr b = oamBytesInternal.ix (fromIntegral (addr .&. 0x9f)) .~ b
+storeOAM addr b = oamBytesInternal.ix (fromIntegral (addr .&. 0xff)) .~ b
 
 {- |
   Returns all sprites for the current line.
@@ -155,7 +165,6 @@ getLineSprites line size (OAM oam)
                  <> (i `compare` j))
       [0..G.length collectedSprites - 1]
 
-directMemoryAccessOAM :: U.Vector Word8 -> OAM
-directMemoryAccessOAM v
-  | G.length v == 0xa0 = OAM (V_Sprite 40 v)
-  | otherwise          = error $ "directMemoryAccessOAM: incorrect length - expected " ++ show 0xa0 ++ " but got " ++ show (G.length v)
+oamFromDMA :: Monad m => (Word16 -> m Word8) -> Word8 -> m OAM
+oamFromDMA load base = OAM . V_Sprite 40 <$> G.generateM 0xa0 (load . fromIntegral . (baseAddr +))
+  where baseAddr = fromIntegral base `shiftL` 8

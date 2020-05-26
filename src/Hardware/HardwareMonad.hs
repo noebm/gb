@@ -34,6 +34,7 @@ import Hardware.Interrupt
 import Hardware.Timer
 import Hardware.Joypad
 import Hardware.GPU
+import Hardware.GPU.OAM
 import Hardware.Cartridge
 import Hardware.BootRom
 import Hardware.Serial
@@ -50,7 +51,7 @@ class Monad m => HardwareMonad m where
   getGPUControl :: m GPUControl
   putGPUControl :: GPUControl -> m ()
 
-  fillOAMUnsafe :: V.Vector Word8 -> m ()
+  fillOAMUnsafe :: OAM -> m ()
 
   updateGPUInternal :: Word -> m (Bool, Maybe Frame)
 
@@ -157,10 +158,7 @@ storeMem idx b
   | inTimerRange idx = putTimer . storeTimer idx b =<< getTimer
   | 0xFF40 <= idx && idx < 0xFF50 = do
       putGPUControl . storeGPUControl idx b =<< getGPUControl
-      when (idx == 0xff46) $ do
-        let baseaddr = (b , 0x00) ^. word16
-        vec <- V.generateM 0xa0 $ loadMem . fromIntegral . (fromIntegral baseaddr +)
-        fillOAMUnsafe vec
+      when (idx == 0xff46) $ fillOAMUnsafe =<< oamFromDMA loadMem b
   | idx == 0xff50 = when (b `testBit` 0) disableBootRom
   -- unimplemented IO port
   | 0xFF00 <= idx && idx < 0xFF80 = return ()

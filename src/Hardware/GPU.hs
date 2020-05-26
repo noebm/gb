@@ -89,8 +89,8 @@ storeGPUOAM addr b g = do
   when (canAccessOAM gctrl) $
     modifySTRef (gpuOAM g) $ storeOAM addr b
 
-fillGPUOAMUnsafe :: VU.Vector Word8 -> GPUState s -> ST s ()
-fillGPUOAMUnsafe oam g = writeSTRef (gpuOAM g) $ directMemoryAccessOAM oam
+fillGPUOAMUnsafe :: OAM -> GPUState s -> ST s ()
+fillGPUOAMUnsafe oam g = writeSTRef (gpuOAM g) oam
 
 storeGPURegisters :: Word16 -> Word8 -> GPUState s -> ST s ()
 storeGPURegisters addr b g = modifySTRef (gpuConfig g) $ storeGPUControl addr b
