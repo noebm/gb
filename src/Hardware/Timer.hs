@@ -122,7 +122,7 @@ inTimerRange :: Word16 -> Bool
 inTimerRange addr = 0xff04 <= addr && addr < 0xff08
 
 loadTimer :: Timer -> Word16 -> Word8
-loadTimer t 0xff04 = views divider (fromIntegral . (`shiftR` 6)) t
+loadTimer t 0xff04 = views divider (fromIntegral . (`shiftR` 8)) t
 loadTimer t 0xff05 = view counter t
 loadTimer t 0xff06 = view modulo t
 loadTimer t 0xff07 = views clockSpeed loadClockSpeed t
