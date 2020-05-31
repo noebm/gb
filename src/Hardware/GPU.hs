@@ -46,7 +46,7 @@ defaultGPUState = GPUState
 updateGPUState :: Word -> GPUState s -> ST s (Bool, Maybe Frame)
 updateGPUState cycles s = do
     gctrl <- readSTRef (gpuConfig s)
-    let (f , req, c) = updateGPUControl cycles gctrl
+    let ((f , req), c) = updateGPUControl cycles gctrl
     writeSTRef (gpuConfig s) c
     (,) f <$> case req of
       Just Draw -> do

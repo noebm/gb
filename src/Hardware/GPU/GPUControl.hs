@@ -37,6 +37,8 @@ import SDL.Vect
 import Control.Lens
 import Data.Bits.Lens
 
+import Control.Monad.State.Strict
+
 -- should go from 0 to 3
 data GPUMode = ModeHBlank | ModeVBlank | ModeOAM | ModeVRAM
   deriving (Eq, Show)
@@ -130,7 +132,7 @@ defaultGPUControl = GPUControl
   }
 
 data GPURequest = Draw | NewLine
-  deriving (Eq)
+  deriving (Eq, Show)
 
 lineInterrupt :: GPUControl -> Bool
 lineInterrupt gpu = gpu ^. gpuLineCompareInterrupt && gpuYAtCompare gpu
@@ -144,31 +146,55 @@ canAccessOAM :: GPUControl -> Bool
 canAccessOAM g = canAccessGPURAM g && isn't _ModeOAM (g ^. gpuMode)
 
 -- returns stat interrupt, renderer requests and new state
-updateGPUControl :: Word -> GPUControl -> (Bool, Maybe GPURequest, GPUControl)
-updateGPUControl cycles g
-  | g ^. gpuEnabled =
-  let cyclesMode = gpuModeDuration (_gpuMode g)
-      g' = g { _gpuClock = _gpuClock g + cycles }
-  in if _gpuClock g' >= cyclesMode
-     then gpuNextConfig $ g' { _gpuClock = _gpuClock g' - cyclesMode }
-     else (False, Nothing, g')
-  | otherwise = (False, Nothing, g)
+updateGPUControl :: Word -> GPUControl -> ((Bool, Maybe GPURequest), GPUControl)
+updateGPUControl cycles = runState $ do
+  enabled <- use gpuEnabled
+  if enabled
+     then do
+       clock <- gpuClock <+= cycles
+       cyclesMode <- uses gpuMode gpuModeDuration
+       if clock >= cyclesMode
+          then do
+            gpuClock -= cyclesMode
+            gpuNextConfig
+          else return (False, Nothing)
+     else return (False, Nothing)
 
-gpuNextConfig :: GPUControl -> (Bool, Maybe GPURequest, GPUControl)
-gpuNextConfig g = case _gpuMode g of
-  ModeHBlank ->
-    let (f, req, g') = if y < 143
-                       then (g ^. gpuOAMInterrupt   , Nothing  , g & gpuMode .~ ModeOAM    & gpuLine +~ 1)
-                       else (g ^. gpuVblankInterrupt, Just Draw, g & gpuMode .~ ModeVBlank & gpuLine +~ 1)
-    in (f || lineInterrupt g', req, g')
-  ModeVBlank ->
-    let (f, req, g') = if _gpuLine g < 153
-                       then (False, Nothing, g & gpuLine +~ 1)
-                       else (g ^. gpuOAMInterrupt, Nothing, g & gpuMode .~ ModeOAM & gpuLine .~ 0)
-    in (f || lineInterrupt g', req, g')
-  ModeOAM    -> (False , Nothing, g & gpuMode .~ ModeVRAM)
-  ModeVRAM   -> (g ^. gpuHblankInterrupt, Just NewLine, g & gpuMode .~ ModeHBlank)
-  where y = _gpuLine g
+setLine :: Word8 -> State GPUControl Bool
+setLine y = do
+  gpuLine .= y
+  use (to lineInterrupt)
+
+setMode :: GPUMode -> State GPUControl (Bool, Maybe GPURequest)
+setMode mode = do
+  gpuMode .= mode
+  int <- case mode of
+    ModeOAM    -> use gpuOAMInterrupt
+    ModeHBlank -> use gpuHblankInterrupt
+    ModeVRAM   -> return False
+    ModeVBlank -> use gpuVblankInterrupt
+  let req = case mode of
+              ModeVBlank -> Just Draw
+              ModeHBlank -> Just NewLine
+              _ -> Nothing
+  return (int, req)
+
+gpuNextConfig :: State GPUControl (Bool, Maybe GPURequest)
+gpuNextConfig = do
+  mode <- use gpuMode
+  case mode of
+    ModeHBlank -> do
+      y <- use gpuLine
+      flgLine <- setLine (y + 1)
+      (flg, req) <- setMode $! if y < 143 then ModeOAM else ModeVBlank
+      return (flg || flgLine, req)
+    ModeVBlank -> do
+      y <- use gpuLine
+      flgLine <- setLine $! if y < 153 then y + 1 else 0
+      (flg, req) <- if y < 153 then return (False, Nothing) else setMode ModeOAM
+      return (flg || flgLine, req)
+    ModeOAM    -> setMode ModeVRAM
+    ModeVRAM   -> setMode ModeHBlank
 
 {-# INLINE gpuYAtCompare #-}
 gpuYAtCompare :: GPUControl -> Bool
