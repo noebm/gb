@@ -202,7 +202,22 @@ gpuYAtCompare GPUControl { _gpuLine = ly , _gpuLineCompare = lyc }
   = ly == lyc
 
 storeGPUControl :: Word16 -> Word8 -> GPUControl -> GPUControl
-storeGPUControl 0xFF40 b g = g & gpuLCDControlByte .~ b
+storeGPUControl 0xFF40 b g = g &~ do
+  enabled <- use gpuEnabled
+  gpuLCDControlByte .= b
+  enabled' <- use gpuEnabled
+  -- gpu enable
+  when (not enabled && enabled') $ do
+    gpuClock .= 0
+    gpuMode .= ModeOAM
+    -- gpuLineAtCompare .= True
+
+  -- gpu disable
+  when (enabled && not enabled') $ do
+    gpuLine .= 0
+    mode <- use gpuMode
+    unless (mode == ModeVBlank) $ error "gpu shutdown not in VBLANK"
+
 storeGPUControl 0xFF41 b g = g
   { _gpuLineCompareInterrupt = b `testBit` 6
   , _gpuOAMInterrupt      = b `testBit` 5
