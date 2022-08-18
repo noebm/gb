@@ -67,7 +67,7 @@ spriteLine gctrl mem oam pixels = do
               (idxOffset, y') = y0 `divMod` 8
           in  (obj ^. spriteTile + idxOffset, y')
     let t               = getSpriteTile idx (tiles mem)
-    let adjustTileCoord = if obj ^. spriteFlippedX then \x -> 7 - x else id
+    let adjustTileCoord = if obj ^. spriteFlippedX then (7 -) else id
     forM_ [0 .. 7] $ \x ->
       when (obj ^. spritePositionX + x < 160) $ if obj ^. spriteBGPriority
         then do

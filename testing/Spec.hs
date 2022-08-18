@@ -84,7 +84,7 @@ mooneye = do
           romfps <- filter f <$> getRomsInDir d
           roms   <- mapM (\fp -> fmap ((,) fp) $ getRomFile False $ d </> fp)
                          romfps
-          return $ (subdir, roms)
+          return (subdir, roms)
         )
     $ [ (mooneyeDMG, x)
       | x <-

@@ -121,7 +121,7 @@ bitShiftCarryOp
   -> m ()
 bitShiftCarryOp op flag arg = do
   c <- view flagC <$> loadReg F
-  bitShiftOp (\v -> op v c) flag arg
+  bitShiftOp (`op` c) flag arg
 
 {-# INLINE bitShiftOp #-}
 bitShiftOp

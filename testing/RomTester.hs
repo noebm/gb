@@ -106,7 +106,7 @@ getMooneyeRet = do
     then Nothing
     else do
       case d of
-        0x42 -> Just $ MooneyeError42
+        0x42 -> Just MooneyeError42
         0x00 -> Nothing
         _    -> Just $ MooneyeMagicError a
  where

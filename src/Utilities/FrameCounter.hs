@@ -26,12 +26,12 @@ setupFrameCounter = do
                          cursorUp 2
                          clearLine
                          putStrLn
-                           .   (printf "30 frame window: %.2f ms")
+                           .   printf "30 frame window: %.2f ms"
                            .   averageWin
                            =<< readIORef avgWindowFrameTime
                          clearLine
                          putStrLn
-                           .   (printf "240 frame window: %.2f ms")
+                           .   printf "240 frame window: %.2f ms"
                            .   averageWin
                            =<< readIORef avgOverallFrameTime
     }

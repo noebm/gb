@@ -34,13 +34,13 @@ parseCommandline progName argv = case getOpt Permute options argv of
   (opts, files, [])
     | Help `elem` opts -> do
       hPutStrLn stderr (usageInfo header options)
-      exitWith ExitSuccess
+      exitSuccess
     | Info `elem` opts, [file] <- files -> do
       errors <- runExceptT $ do
         rom <- readRom False file
         liftIO $ print $ getRomHeader rom
       either (hPutStrLn stderr) return errors
-      exitWith ExitSuccess
+      exitSuccess
     | Just optAddr <- firstOf (folded . _Disassemble) opts, [file] <- files -> do
       errors <- runExceptT $ do
         rom <- readRom False file
@@ -48,7 +48,7 @@ parseCommandline progName argv = case getOpt Permute options argv of
           Nothing   -> disassemble rom
           Just addr -> disassembleAt rom addr
       either (hPutStrLn stderr) return errors
-      exitWith ExitSuccess
+      exitSuccess
     | [file] <- files -> return (file, NoDelay `elem` opts)
   (_, _, errs) -> do
     hPutStrLn stderr (concat errs ++ usageInfo header options)

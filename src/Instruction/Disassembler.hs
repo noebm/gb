@@ -11,6 +11,7 @@ import           Instruction.Parser
 import           Instruction.Types.Address
 import           Instruction.Types.Flag
 
+import           Data.Maybe                     ( fromMaybe )
 import           MonadEmulator.Class
 import           MonadEmulator.Operations
 
@@ -53,7 +54,7 @@ build addr = do
           _ -> instr & flag .~ ()
 
     forOf_ branch' instr' $ \maddr' -> do
-      let addr' = maybe pc id maddr'
+      let addr' = fromMaybe pc maddr'
       assignable <- use (at addr' . to (has _Nothing))
       when assignable $ build addr'
 

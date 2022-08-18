@@ -69,15 +69,14 @@ expr f = contramap expr' . f . expr' where
 {-# INLINE branch #-}
 branch
   :: Functor g => (a -> g a) -> Instruction Bool a -> g (Instruction Bool a)
-branch f (InstructionNode x op        ) = (\x' -> InstructionNode x' op) <$> f x
+branch f (InstructionNode x op        ) = (`InstructionNode` op) <$> f x
 branch f (InstructionBranch x y flg op) = if flg
   then (\y' -> InstructionBranch x y' flg op) <$> f y
   else (\x' -> InstructionBranch x' y flg op) <$> f x
 
 branch' :: IndexedTraversal Bool (Instruction f a) (Instruction f b) a b
   -- Applicative g => (Bool -> a -> g b) -> Instruction f a -> g (Instruction f b)
-branch' f (InstructionNode x op) =
-  (\x' -> InstructionNode x' op) <$> indexed f True x
+branch' f (InstructionNode x op) = (`InstructionNode` op) <$> indexed f True x
 branch' f (InstructionBranch x y flg op) =
   (\x' y' -> InstructionBranch x' y' flg op)
     <$> indexed f False x

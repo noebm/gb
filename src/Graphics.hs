@@ -27,14 +27,12 @@ data GraphicsContext = GraphicsContext
 
 newWindow :: MonadIO m => Text -> V2 Int -> Maybe Int -> m GraphicsContext
 newWindow wndName wndSize textureScale = do
-  let wndConfig =
-        maybe
-            id
-            (\scale x ->
-              x { windowInitialSize = fromIntegral <$> scale *^ wndSize }
-            )
-            textureScale
-          $ defaultWindow
+  let wndConfig = maybe
+        id
+        (\scale x -> x { windowInitialSize = fromIntegral <$> scale *^ wndSize }
+        )
+        textureScale
+        defaultWindow
   wnd  <- createWindow wndName wndConfig
   rndr <- createRenderer wnd (negate 1) defaultRenderer
   text <- createTexture rndr
