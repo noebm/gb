@@ -1,32 +1,29 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RankNTypes, FlexibleContexts #-}
 module Hardware.Interrupt
-  ( Interrupt (..)
-
+  ( Interrupt(..)
   , InterruptState
   , defaultInterruptState
-
   , interruptEnable
   , interruptFlag
-
   , interruptAddress
-
-  , storeIntFlag, loadIntFlag
-  , storeIntEnable, loadIntEnable
-
+  , storeIntFlag
+  , loadIntFlag
+  , storeIntEnable
+  , loadIntEnable
   , checkForInterrupts
-  )
-where
+  ) where
 
-import Control.Lens
-import Data.Bits.Lens
-import Data.Bits
-import Data.Word
+import           Control.Lens
+import           Data.Bits
+import           Data.Bits.Lens
+import           Data.Word
 
 data InterruptState = InterruptState
   { _interruptEnable' :: {-# UNPACK #-} !Word8
   , _interruptFlag'   :: {-# UNPACK #-} !Word8
-  } deriving Show
+  }
+  deriving Show
 
 makeLenses ''InterruptState
 
@@ -53,11 +50,11 @@ interrupts' f s = foldr step 0xe0 <$> traverse g bs where
   g int = (,) int <$> indexed f int (s ^. interrupt' int)
   bs = [INTVBLANK .. INTJOYPAD]
   step (int, True) r = r & interrupt' int .~ True
-  step _ r = r
+  step _           r = r
 
 checkForInterrupts :: InterruptState -> Maybe Interrupt
-checkForInterrupts (InterruptState inte intf)
-  = findIndexOf interrupts' id (inte .&. intf)
+checkForInterrupts (InterruptState inte intf) =
+  findIndexOf interrupts' id (inte .&. intf)
 
 interruptEnable :: Interrupt -> Lens' InterruptState Bool
 interruptEnable int = interruptEnable' . interrupt' int

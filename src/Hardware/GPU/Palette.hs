@@ -1,7 +1,7 @@
 module Hardware.GPU.Palette where
 
-import Data.Word
-import Data.Bits
+import           Data.Bits
+import           Data.Word
 
 newtype Palette = Palette { getPalette :: Word8 }
   deriving Show
@@ -13,15 +13,16 @@ newtype Color = Color Word8
   deriving (Eq, Show)
 
 colorOff, colorLight, colorDark, colorOn :: Color
-colorOff   = Color 0
+colorOff = Color 0
 colorLight = Color 1
-colorDark  = Color 2
-colorOn    = Color 3
+colorDark = Color 2
+colorOn = Color 3
 
 paletteValue :: Palette -> Color -> Word8
-paletteValue (Palette p) (Color idx) = (p `shiftR` fromIntegral (2 * idx)) .&. 0x3
+paletteValue (Palette p) (Color idx) =
+  (p `shiftR` fromIntegral (2 * idx)) .&. 0x3
 
 -- object palettes are transparent for color 0
 objPaletteValue :: Palette -> Color -> Maybe Word8
 objPaletteValue _ (Color 0x00) = Nothing
-objPaletteValue p c = Just (paletteValue p c)
+objPaletteValue p c            = Just (paletteValue p c)

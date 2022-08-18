@@ -1,64 +1,65 @@
 module Hardware.GPU
   ( module X
-  , GPUState (..)
+  , GPUState(..)
   , GPURequest(..)
   , defaultGPUState
   , updateGPUState
-
   , VideoRAM
   , OAM
   , Frame
-
-  , loadGPURAM, loadGPUOAM, loadGPURegisters
-  , storeGPURAM, storeGPUOAM, storeGPURegisters
-
+  , loadGPURAM
+  , loadGPUOAM
+  , loadGPURegisters
+  , storeGPURAM
+  , storeGPUOAM
+  , storeGPURegisters
   , fillGPUOAMUnsafe
-  )
-where
+  ) where
 
-import Hardware.GPU.GPUControl as X
-import Hardware.GPU.VideoRAM
-import Hardware.GPU.OAM
-import Hardware.GPU.Frame
+import           Hardware.GPU.Frame
+import           Hardware.GPU.GPUControl       as X
+import           Hardware.GPU.OAM
+import           Hardware.GPU.VideoRAM
 
-import Control.Monad
-import Data.Word
+import           Control.Monad
+import           Data.Word
 
-import Data.STRef
-import Control.Monad.ST
+import           Control.Monad.ST
+import           Data.STRef
 
-import qualified Data.Vector.Unboxed as VU
+import qualified Data.Vector.Unboxed           as VU
 
 data GPUState s = GPUState
-  { gpuVideoRAM        :: STRef s VideoRAM
-  , gpuOAM             :: STRef s OAM
-  , gpuConfig          :: STRef s GPUControl
-  , frameBuffer        :: STRef s FrameBuffer
+  { gpuVideoRAM :: STRef s VideoRAM
+  , gpuOAM      :: STRef s OAM
+  , gpuConfig   :: STRef s GPUControl
+  , frameBuffer :: STRef s FrameBuffer
   }
 
 defaultGPUState :: ST s (GPUState s)
-defaultGPUState = GPUState
-  <$> newSTRef defaultVideoRAM
-  <*> newSTRef defaultOAM
-  <*> newSTRef defaultGPUControl
-  <*> newSTRef newFrameBuffer
+defaultGPUState =
+  GPUState
+    <$> newSTRef defaultVideoRAM
+    <*> newSTRef defaultOAM
+    <*> newSTRef defaultGPUControl
+    <*> newSTRef newFrameBuffer
 
 updateGPUState :: Word -> GPUState s -> ST s (Bool, Maybe Frame)
 updateGPUState cycles s = do
-    gctrl <- readSTRef (gpuConfig s)
-    let ((f , req), c) = updateGPUControl cycles gctrl
-    writeSTRef (gpuConfig s) c
-    (,) f <$> case req of
-      Just Draw -> do
-        frame <- getFrame <$> readSTRef (frameBuffer s)
-        writeSTRef (frameBuffer s) newFrameBuffer
-        return $ Just frame
-      Just NewLine -> do
-        vram <- readSTRef (gpuVideoRAM s)
-        oam <- readSTRef (gpuOAM s)
-        modifySTRef (frameBuffer s) $ updateFrameBuffer c vram oam
-        return Nothing
-      Nothing -> return Nothing
+  gctrl <- readSTRef (gpuConfig s)
+  let ((f, req), c) = updateGPUControl cycles gctrl
+  writeSTRef (gpuConfig s) c
+  (,) f <$> case req of
+    Just Draw -> do
+      frame <- getFrame <$> readSTRef (frameBuffer s)
+      writeSTRef (frameBuffer s) newFrameBuffer
+      return $ Just frame
+    Just NewLine -> do
+      vram <- readSTRef (gpuVideoRAM s)
+      oam  <- readSTRef (gpuOAM s)
+      modifySTRef (frameBuffer s) $ updateFrameBuffer c vram oam
+      return Nothing
+    Nothing -> return Nothing
 
 loadGPURAM :: Word16 -> GPUState s -> ST s Word8
 loadGPURAM addr g = do
@@ -80,14 +81,14 @@ loadGPURegisters addr s = loadGPUControl addr <$> readSTRef (gpuConfig s)
 storeGPURAM :: Word16 -> Word8 -> GPUState s -> ST s ()
 storeGPURAM addr b g = do
   gctrl <- readSTRef (gpuConfig g)
-  when (canAccessGPURAM gctrl) $
-    modifySTRef (gpuVideoRAM g) $ storeVideoRAM addr b
+  when (canAccessGPURAM gctrl) $ modifySTRef (gpuVideoRAM g) $ storeVideoRAM
+    addr
+    b
 
 storeGPUOAM :: Word16 -> Word8 -> GPUState s -> ST s ()
 storeGPUOAM addr b g = do
   gctrl <- readSTRef (gpuConfig g)
-  when (canAccessOAM gctrl) $
-    modifySTRef (gpuOAM g) $ storeOAM addr b
+  when (canAccessOAM gctrl) $ modifySTRef (gpuOAM g) $ storeOAM addr b
 
 fillGPUOAMUnsafe :: OAM -> GPUState s -> ST s ()
 fillGPUOAMUnsafe oam g = writeSTRef (gpuOAM g) oam

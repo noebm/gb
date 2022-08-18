@@ -2,17 +2,16 @@ module Hardware.BootRom
   ( BootRom
   , loadBootRom
   , readBootRom
-  )
-where
+  ) where
 
-import qualified Data.Vector.Unboxed as VU
-import qualified Data.ByteString as B
+import qualified Data.ByteString               as B
+import qualified Data.Vector.Unboxed           as VU
 
-import Data.Word
-import Control.Monad
-import Control.Monad.Except
+import           Control.Monad
+import           Control.Monad.Except
+import           Data.Word
 
-import Utilities.Vector
+import           Utilities.Vector
 
 newtype BootRom = BootRom (VU.Vector Word8)
 

@@ -1,15 +1,15 @@
 {-# LANGUAGE RankNTypes #-}
 module Hardware.GPU.Frame where
 
-import Control.Monad.ST
-import Control.Lens
+import           Control.Lens
+import           Control.Monad.ST
 
-import qualified Data.Vector.Unboxed as V
-import qualified Data.Vector.Unboxed.Mutable as VM
-import Data.Word
+import qualified Data.Vector.Unboxed           as V
+import qualified Data.Vector.Unboxed.Mutable   as VM
+import           Data.Word
 
-import Hardware.GPU.GPUControl
-import Hardware.GPU.Drawing
+import           Hardware.GPU.Drawing
+import           Hardware.GPU.GPUControl
 
 newtype Frame = Frame (V.Vector Word8)
 
@@ -21,7 +21,8 @@ newtype FrameBuffer = FrameBuffer (forall s . ST s (VM.MVector s Word8))
 newFrameBuffer :: FrameBuffer
 newFrameBuffer = FrameBuffer $ VM.new (144 * 160)
 
-updateFrameBuffer :: GPUControl -> VideoRAM -> OAM -> FrameBuffer -> FrameBuffer
+updateFrameBuffer
+  :: GPUControl -> VideoRAM -> OAM -> FrameBuffer -> FrameBuffer
 updateFrameBuffer gctrl vram oam (FrameBuffer buffer) = FrameBuffer $ do
   let start = 160 * fromIntegral (gctrl ^. gpuLine)
   v <- buffer

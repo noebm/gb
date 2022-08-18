@@ -2,48 +2,53 @@ module Instruction.Interpreter
   ( instructions
   , instructionsTrace
   , module Control.Comonad.Cofree
-  )
-where
+  ) where
 
-import Data.Bits
-import Data.Word
+import           Data.Bits
+import           Data.Word
 
-import Control.Lens hiding (op, to, from, (:<))
-import Control.Monad
+import           Control.Lens            hiding ( (:<)
+                                                , from
+                                                , op
+                                                , to
+                                                )
+import           Control.Monad
 
-import Instruction.Types.Address
-import Instruction.Types.Readable
-import Instruction.Types.Writable
-import Instruction.Types.Flag
-import Instruction.Instruction
+import           Instruction.Instruction
+import           Instruction.Types.Address
+import           Instruction.Types.Flag
+import           Instruction.Types.Readable
+import           Instruction.Types.Writable
 
-import Instruction.Parser
-import Instruction.Interpreter.Ops
+import           Instruction.Interpreter.Ops
+import           Instruction.Parser
 
-import MonadEmulator.EmulatorT
-import MonadEmulator.Operations
+import           MonadEmulator.EmulatorT
+import           MonadEmulator.Operations
 
-import Control.Comonad.Cofree
+import           Control.Comonad.Cofree
 
 data InterpretState a = Run a | Halt | Interrupt' Interrupt
 
 {-# INLINE run #-}
 run :: Applicative f => (a -> f b) -> InterpretState a -> f (InterpretState b)
-run f (Run x) = Run <$> f x
-run _ Halt = pure Halt
+run f (Run x)          = Run <$> f x
+run _ Halt             = pure Halt
 run _ (Interrupt' int) = pure $! Interrupt' int
 
 {-# INLINE _Run #-}
 _Run :: Prism (InterpretState a) (InterpretState b) a b
 _Run = prism Run $ \arg -> case arg of
-  Run x -> Right x
-  Halt -> Left Halt
+  Run x          -> Right x
+  Halt           -> Left Halt
   Interrupt' int -> Left (Interrupt' int)
 
-interpretM :: (MonadEmulator m, Show a)
-           => Instruction Bool a -> m (InterpretState (m Instruction'))
+interpretM
+  :: (MonadEmulator m, Show a)
+  => Instruction Bool a
+  -> m (InterpretState (m Instruction'))
 interpretM instr = case instr ^. expr of
-  NOP -> prefetch
+  NOP        -> prefetch
 
   LD from to -> do
     write8 to =<< read8 from
@@ -57,9 +62,12 @@ interpretM instr = case instr ^. expr of
     sp <- loadSP
     let v = addRelative sp r
     storeReg16 HL v
-    storeReg F $ 0x00
-      & flagC .~ ((v .&. 0xFF) < (sp .&. 0xFF))
-      & flagH .~ ((v .&. 0x0F) < (sp .&. 0x0F))
+    storeReg F
+      $  0x00
+      &  flagC
+      .~ ((v .&. 0xFF) < (sp .&. 0xFF))
+      &  flagH
+      .~ ((v .&. 0x0F) < (sp .&. 0x0F))
     prefetch
 
   AND arg -> do
@@ -77,10 +85,14 @@ interpretM instr = case instr ^. expr of
   {- 0xCB instructions and specialization for A -}
   BIT y arg -> do
     v <- read8 arg
-    modifyFlags $ \f -> f
-      & flagZ .~ not (v `testBit` fromIntegral y)
-      & flagN .~ False
-      & flagH .~ True
+    modifyFlags $ \f ->
+      f
+        &  flagZ
+        .~ not (v `testBit` fromIntegral y)
+        &  flagN
+        .~ False
+        &  flagH
+        .~ True
     prefetch
 
   SWAP arg -> do
@@ -99,7 +111,9 @@ interpretM instr = case instr ^. expr of
     prefetch
 
   RL arg -> do
-    bitShiftCarryOp rotateLeft (\v' c' -> 0x00 & flagC .~ c' & flagZ .~ (v' == 0)) arg
+    bitShiftCarryOp rotateLeft
+                    (\v' c' -> 0x00 & flagC .~ c' & flagZ .~ (v' == 0))
+                    arg
     prefetch
 
   RLA -> do
@@ -107,7 +121,9 @@ interpretM instr = case instr ^. expr of
     prefetch
 
   RR arg -> do
-    bitShiftCarryOp rotateRight (\v' c' -> 0x00 & flagC .~ c' & flagZ .~ (v' == 0)) arg
+    bitShiftCarryOp rotateRight
+                    (\v' c' -> 0x00 & flagC .~ c' & flagZ .~ (v' == 0))
+                    arg
     prefetch
 
   RRA -> do
@@ -123,28 +139,34 @@ interpretM instr = case instr ^. expr of
     prefetch
 
   RLC arg -> do
-    bitShiftOp rotateLeftCarry (\v' c' -> 0x00 & flagC .~ c' & flagZ .~ (v' == 0)) arg
+    bitShiftOp rotateLeftCarry
+               (\v' c' -> 0x00 & flagC .~ c' & flagZ .~ (v' == 0))
+               arg
     prefetch
 
   RRC arg -> do
-    bitShiftOp rotateRightCarry (\v' c' -> 0x00 & flagC .~ c' & flagZ .~ (v' == 0)) arg
+    bitShiftOp rotateRightCarry
+               (\v' c' -> 0x00 & flagC .~ c' & flagZ .~ (v' == 0))
+               arg
     prefetch
 
   SRL arg -> do
     v <- read8 (readable8 arg)
     let v' = v `shiftR` 1
     write8 arg v'
-    modifyFlags $ \_ -> 0x00
-      & flagC .~ (v `testBit` 0)
-      & flagZ .~ (v' == 0)
+    modifyFlags $ \_ -> 0x00 & flagC .~ (v `testBit` 0) & flagZ .~ (v' == 0)
     prefetch
 
   SLA arg -> do
-    bitShiftOp shiftLeftArithmetic (\v' c' -> 0x00 & flagC .~ c' & flagZ .~ (v' == 0)) arg
+    bitShiftOp shiftLeftArithmetic
+               (\v' c' -> 0x00 & flagC .~ c' & flagZ .~ (v' == 0))
+               arg
     prefetch
 
   SRA arg -> do
-    bitShiftOp shiftRightArithmetic (\v' c' -> 0x00 & flagC .~ c' & flagZ .~ (v' == 0)) arg
+    bitShiftOp shiftRightArithmetic
+               (\v' c' -> 0x00 & flagC .~ c' & flagZ .~ (v' == 0))
+               arg
     prefetch
 
   JR offset -> do
@@ -189,24 +211,31 @@ interpretM instr = case instr ^. expr of
     prefetch
 
   ADD16_HL from -> do
-    v <- loadReg16 HL
+    v  <- loadReg16 HL
     dv <- read16 from
     let v' = v + dv
     storeReg16 HL v'
-    modifyFlags $ \f -> f
-      & flagN .~ False
-      & flagC .~ (v' < v)
-      & flagH .~ ((v' .&. 0x0FFF) < (v .&. 0x0FFF))
+    modifyFlags $ \f ->
+      f
+        &  flagN
+        .~ False
+        &  flagC
+        .~ (v' < v)
+        &  flagH
+        .~ ((v' .&. 0x0FFF) < (v .&. 0x0FFF))
     prefetch
 
   ADD16_SP -> do
-    v <- loadSP
+    v  <- loadSP
     dv <- sbyte
     let v' = addRelative v dv
     storeSP v'
-    storeReg F $ 0x00
-      & flagC .~ ((v' .&. 0xFF) < (v .&. 0xFF))
-      & flagH .~ ((v' .&. 0x0F) < (v .&. 0x0F))
+    storeReg F
+      $  0x00
+      &  flagC
+      .~ ((v' .&. 0xFF) < (v .&. 0xFF))
+      &  flagH
+      .~ ((v' .&. 0x0F) < (v .&. 0x0F))
     prefetch
 
   SUB arg -> do
@@ -232,14 +261,19 @@ interpretM instr = case instr ^. expr of
     v <- read8 (readable8 arg)
     let v' = v + 1
     write8 arg v'
-    modifyFlags $ \f -> f
-      & flagZ .~ (v == 0xFF)
-      & flagN .~ False
-      & flagH .~ (v .&. 0x0F == 0x0F)
+    modifyFlags
+      $ \f ->
+          f
+            &  flagZ
+            .~ (v == 0xFF)
+            &  flagN
+            .~ False
+            &  flagH
+            .~ (v .&. 0x0F == 0x0F)
     prefetch
 
   INC16 arg -> do
-    write16 arg . (+1) =<< read16 (readable16 arg)
+    write16 arg . (+ 1) =<< read16 (readable16 arg)
     prefetch
 
   DEC16 arg -> do
@@ -250,14 +284,12 @@ interpretM instr = case instr ^. expr of
     v <- read8 (readable8 arg)
     let v' = v - 1
     write8 arg v'
-    modifyFlags $ \f -> f
-      & flagZ .~ (v == 0x01)
-      & flagN .~ True
-      & flagH .~ (v .&. 0x0F == 0x00)
+    modifyFlags $ \f ->
+      f & flagZ .~ (v == 0x01) & flagN .~ True & flagH .~ (v .&. 0x0F == 0x00)
     prefetch
 
-  DI -> setIME False *> prefetch
-  EI -> prefetch <* setIME True
+  DI  -> setIME False *> prefetch
+  EI  -> prefetch <* setIME True
 
   DAA -> do
     daa
@@ -265,27 +297,19 @@ interpretM instr = case instr ^. expr of
 
   CPL -> do
     storeReg A . complement =<< loadReg A
-    modifyFlags $ \f -> f
-      & flagH .~ True
-      & flagN .~ True
+    modifyFlags $ \f -> f & flagH .~ True & flagN .~ True
     prefetch
 
   CCF -> do
-    modifyFlags $ \f -> f
-      & flagH .~ False
-      & flagN .~ False
-      & flagC %~ not
+    modifyFlags $ \f -> f & flagH .~ False & flagN .~ False & flagC %~ not
     prefetch
 
   SCF -> do
-    modifyFlags $ \f -> f
-      & flagH .~ False
-      & flagN .~ False
-      & flagC .~ True
+    modifyFlags $ \f -> f & flagH .~ False & flagN .~ False & flagC .~ True
     prefetch
 
   HALT -> do
-    i <- anyInterrupts
+    i   <- anyInterrupts
     ime <- getIME
     if not ime && has _Just i then haltBug else return Halt
 
@@ -298,7 +322,7 @@ haltBug = do
 
 prefetch :: MonadEmulator m => m (InterpretState (m Instruction'))
 prefetch = do
-  i <- anyInterrupts
+  i   <- anyInterrupts
   ime <- getIME
   maybe (Run <$> fetch) (return . Interrupt') (guard ime *> i)
 
@@ -306,32 +330,37 @@ fetch :: MonadEmulator m => m (m Instruction')
 fetch = parseInstructionM <$> byte
 
 {-# INLINE interpretStateM #-}
-interpretStateM :: MonadEmulator m => InterpretState Instruction' -> m (Word, InterpretState (m Instruction'))
+interpretStateM
+  :: MonadEmulator m
+  => InterpretState Instruction'
+  -> m (Word, InterpretState (m Instruction'))
 interpretStateM (Run op) = do
   op' <- traverseOf flag evalFlag op
   (,) (op' ^. branch) <$> interpretM op'
-interpretStateM (Interrupt' int) = (,) 20 . Run <$> (serviceInterrupt int *> fetch)
+interpretStateM (Interrupt' int) =
+  (,) 20 . Run <$> (serviceInterrupt int *> fetch)
 interpretStateM Halt = (,) 4 <$> do
   i <- anyInterrupts
   case i of
     Just int -> do
       ime <- getIME
       if ime then return $! Interrupt' int else Run <$> fetch
-    _      -> return Halt
+    _ -> return Halt
 
 {-# SPECIALIZE instructions :: Emulator (Cofree Emulator Word) #-}
 instructions :: MonadEmulator m => m (Cofree m Word)
 instructions = go . Run =<< fetch where
   go s = do
-    (dt ,s') <- interpretStateM =<< run id s
+    (dt, s') <- interpretStateM =<< run id s
     return $! dt :< go s'
 
 {-# SPECIALIZE instructionsTrace :: Emulator (Cofree Emulator (Word, Maybe (Word16, Instruction'))) #-}
-instructionsTrace :: MonadEmulator m => m (Cofree m (Word, Maybe (Word16, Instruction')))
+instructionsTrace
+  :: MonadEmulator m => m (Cofree m (Word, Maybe (Word16, Instruction')))
 instructionsTrace = go . Run =<< fetch where
   go s = do
-    pc <- subtract 1 <$> loadPC
+    pc    <- subtract 1 <$> loadPC
     sEval <- run id s
-    let instr = (pc , sEval) ^? aside _Run
+    let instr = (pc, sEval) ^? aside _Run
     (dt, s') <- interpretStateM sEval
-    return $! (dt , instr) :< go s'
+    return $! (dt, instr) :< go s'

@@ -4,19 +4,17 @@ module Hardware.Timer
   , Timer
   , defaultTimer
   , updateTimer
-
   , inTimerRange
   , loadTimer
   , storeTimer
-  )
-where
+  ) where
 
-import Control.Lens
-import Data.Bits.Lens
-import Data.Bits
-import Data.Word
+import           Control.Lens
+import           Data.Bits
+import           Data.Bits.Lens
+import           Data.Word
 
-import Control.Monad.State.Strict
+import           Control.Monad.State.Strict
 
 -- | Possible timer speeds relative to cpu frequency.
 -- For example Clock16 means that the timer is running at 1 / 16 the speed of the cpu.
@@ -35,14 +33,13 @@ data Timer = Timer
 makeLenses ''Timer
 
 defaultTimer :: Timer
-defaultTimer = Timer
-  { _divider = 0
-  , _counter = 0
-  , _modulo = 0
-  , _overflow = False
-  , _enabled = False
-  , _clockSpeed = Clock1024
-  }
+defaultTimer = Timer { _divider    = 0
+                     , _counter    = 0
+                     , _modulo     = 0
+                     , _overflow   = False
+                     , _enabled    = False
+                     , _clockSpeed = Clock1024
+                     }
 
 updateTimerControl :: Word8 -> State Timer ()
 updateTimerControl b = do
@@ -59,7 +56,7 @@ updateTimerControl b = do
 {-# INLINE timerBit #-}
 timerBit :: State Timer (Word16 -> Bool)
 timerBit = do
-  e <- use enabled
+  e  <- use enabled
   cs <- use clockSpeed
   let clockspeedBit Clock16   = 3
       clockspeedBit Clock64   = 5
@@ -83,9 +80,9 @@ loadClockSpeed c = case c of
 {-# INLINE withFallingEdge #-}
 withFallingEdge :: State Timer a -> State Timer a
 withFallingEdge go = do
-  d0 <- timerBit <*> use divider
+  d0  <- timerBit <*> use divider
   val <- go
-  d1 <- timerBit <*> use divider
+  d1  <- timerBit <*> use divider
   when (d0 && not d1) increaseCounter
   return val
 
@@ -125,8 +122,8 @@ loadTimer :: Timer -> Word16 -> Word8
 loadTimer t 0xff04 = views divider (fromIntegral . (`shiftR` 8)) t
 loadTimer t 0xff05 = view counter t
 loadTimer t 0xff06 = view modulo t
-loadTimer t 0xff07 = views clockSpeed loadClockSpeed t
-                   & bitAt 2 .~ view enabled t
+loadTimer t 0xff07 =
+  views clockSpeed loadClockSpeed t & bitAt 2 .~ view enabled t
 loadTimer _ _ = error "loadTimer: not in range"
 
 storeTimer :: Word16 -> Word8 -> Timer -> Timer
@@ -135,4 +132,4 @@ storeTimer 0xff05 b = counter .~ b
 storeTimer 0xff06 b = modulo .~ b
 storeTimer 0xff07 b = execState $ withFallingEdge $ updateTimerControl b
 
-storeTimer _ _ = error "storeTimer: not in range"
+storeTimer _      _ = error "storeTimer: not in range"

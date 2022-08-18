@@ -1,36 +1,40 @@
 module MonadEmulator.Operations
-  ( MonadEmulator (..)
-  , storeReg16, loadReg16
-  , storeAddr16, loadAddr16
-
+  ( MonadEmulator(..)
+  , storeReg16
+  , loadReg16
+  , storeAddr16
+  , loadAddr16
   , Interrupt
   , serviceInterrupt
-
-  , flagC, flagH, flagN, flagZ
-  , byte, word, sbyte
-
+  , flagC
+  , flagH
+  , flagN
+  , flagZ
+  , byte
+  , word
+  , sbyte
   , addRelative
-  , jump, jumpRelative
-  , push, pop
-  , call, ret
+  , jump
+  , jumpRelative
+  , push
+  , pop
+  , call
+  , ret
   , restart
-
   , word16
-
   , module CPU.Registers
-  )
-where
+  ) where
 
-import Control.Lens
-import Data.Bits.Lens
+import           Control.Lens
+import           Data.Bits.Lens
 
-import Data.Word
-import Data.Int
+import           Data.Int
+import           Data.Word
 
-import MonadEmulator.Class
-import Hardware.Interrupt
-import Hardware.HardwareMonad (word16)
-import CPU.Registers
+import           CPU.Registers
+import           Hardware.HardwareMonad         ( word16 )
+import           Hardware.Interrupt
+import           MonadEmulator.Class
 
 {-# INLINE load16LE #-}
 load16LE :: Monad m => m Word8 -> m Word8 -> m Word16
@@ -38,23 +42,20 @@ load16LE b0 b1 = flip (curry (view word16)) <$> b0 <*> b1
 
 {-# INLINE store16LE #-}
 store16LE :: Monad m => (Word8 -> m ()) -> (Word8 -> m ()) -> (Word16 -> m ())
-store16LE b0 b1 w = let (h , l) = w ^. from word16 in b0 l >> b1 h
+store16LE b0 b1 w = let (h, l) = w ^. from word16 in b0 l >> b1 h
 
 storeAddr16 :: MonadEmulator m => Word16 -> Word16 -> m ()
 storeAddr16 addr = store16LE (storeAddr addr) (storeAddr $ addr + 1)
 
 storeReg16 :: MonadEmulator m => Reg16 -> Word16 -> m ()
 storeReg16 r =
-  let (r0, r1) = regPair r
-  in store16LE (storeReg r1) (storeReg r0)
+  let (r0, r1) = regPair r in store16LE (storeReg r1) (storeReg r0)
 
 loadAddr16 :: MonadEmulator m => Word16 -> m Word16
 loadAddr16 addr = load16LE (loadAddr addr) (loadAddr $ addr + 1)
 
 loadReg16 :: MonadEmulator m => Reg16 -> m Word16
-loadReg16 r =
-  let (r0, r1) = regPair r
-  in load16LE (loadReg r1) (loadReg r0)
+loadReg16 r = let (r0, r1) = regPair r in load16LE (loadReg r1) (loadReg r0)
 
 serviceInterrupt :: (MonadEmulator m) => Interrupt -> m ()
 serviceInterrupt i = do

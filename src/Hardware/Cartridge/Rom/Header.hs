@@ -2,26 +2,25 @@
 module Hardware.Cartridge.Rom.Header
   ( Header(..)
   , parseHeader
-
-  , CartridgeType (..)
-  , _HasNoMBC, _HasMBC1
+  , CartridgeType(..)
+  , _HasNoMBC
+  , _HasMBC1
   , cartridgeMemoryType
   , cartridgeMBC1MultiCart
+  , CartridgeMemoryType(..)
+  , _MemoryWithoutBattery
+  , _MemoryWithBattery
+  ) where
 
-  , CartridgeMemoryType (..)
-  , _MemoryWithoutBattery, _MemoryWithBattery
-  )
-where
+import           Data.Bits                      ( Bits(shiftL) )
+import qualified Data.ByteString               as B
+import           Data.ByteString                ( ByteString )
+import           Data.Word
 
-import qualified Data.ByteString as B
-import Data.ByteString (ByteString)
-import Data.Word
-import Data.Bits
+import           Control.Lens
+import           Control.Monad
 
-import Control.Lens
-import Control.Monad
-
-import Data.Serialize.Get
+import           Data.Serialize.Get
 
 data CartridgeMemoryType = MemoryWithoutBattery | MemoryWithBattery
   deriving (Eq, Show)
@@ -36,12 +35,12 @@ data CartridgeType
 makePrisms ''CartridgeType
 
 cartridgeMemoryType :: Traversal' CartridgeType CartridgeMemoryType
-cartridgeMemoryType f (HasNoMBC x) = HasNoMBC <$> _Just f x
-cartridgeMemoryType f (HasMBC1  x multi) = (`HasMBC1` multi) <$> _Just f x
+cartridgeMemoryType f (HasNoMBC x     ) = HasNoMBC <$> _Just f x
+cartridgeMemoryType f (HasMBC1 x multi) = (`HasMBC1` multi) <$> _Just f x
 
 cartridgeMBC1MultiCart :: Traversal' CartridgeType Bool
 cartridgeMBC1MultiCart f (HasMBC1 x multi) = HasMBC1 x <$> f multi
-cartridgeMBC1MultiCart _ x = pure x
+cartridgeMBC1MultiCart _ x                 = pure x
 
 data Header = Header
   { headerTitle    :: ByteString
@@ -65,7 +64,7 @@ parseHeader = runGet $ do
     -- 0x14b should be
     newLicenseeCode <- lookAhead $ skip 0x16 *> ((0x33 ==) <$> getWord8)
 
-    header' <- lookAhead $ do
+    header'         <- lookAhead $ do
       -- either 16 byte title or title + manufacturer code + cgb flag
       let titleSize = if newLicenseeCode then 0x0b else 0x10
       title <- label "title" $ B.takeWhile (/= 0x00) <$> getBytes titleSize
@@ -73,24 +72,24 @@ parseHeader = runGet $ do
       skip $ 0x10 - titleSize
       -- label "manufacturer code" $ skip 4
       -- _cbg <- label "cgb flag" $ getWord8
-      _code <- label "new licensee code" $ getBytes 2
-      _sgb <- label "sgb flag" getWord8
-      cartTy <- either fail return . cartridgeType =<< label "cartridge type" getWord8
+      _code  <- label "new licensee code" $ getBytes 2
+      _sgb   <- label "sgb flag" getWord8
+      cartTy <-
+        either fail return . cartridgeType =<< label "cartridge type" getWord8
       rom <- shiftL 2 . fromIntegral <$> label "ROM size" getWord8
       ram <- either fail return . ramBanks =<< label "RAM size" getWord8
       loc <- label "locale" getWord8
       label "old licensee code" $ skip 1
       label "game version number" $ skip 1
-      return $ Header
-        { headerTitle = title
-        , headerType  = cartTy
-        , headerRomBanks = rom
-        , headerRamBanks = ram
-        , headerLocale   = loc
-        }
+      return $ Header { headerTitle    = title
+                      , headerType     = cartTy
+                      , headerRomBanks = rom
+                      , headerRamBanks = ram
+                      , headerLocale   = loc
+                      }
 
     headerchksm' <- calculateChecksum <$> getBytes 0x19
-    headerchksm <- label "header checksum" getWord8
+    headerchksm  <- label "header checksum" getWord8
     -- checksum over whole ROM (excluding both checksum bytes)
     _globalchksm <- label "global checksum" getWord16be
 
@@ -116,7 +115,7 @@ ramBanks x = case x of
   -- 0x01 -> Right 2
   0x02 -> Right 1
   0x03 -> Right 4
-  _ -> Left "RAM size not defined"
+  _    -> Left "RAM size not defined"
 
 -- cartridgeTypeSupported :: Word8 -> Bool
 -- cartridgeTypeSupported 0x00 = True

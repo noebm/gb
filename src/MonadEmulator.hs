@@ -1,22 +1,19 @@
 module MonadEmulator
-  ( MonadEmulator (..)
-
+  ( MonadEmulator(..)
   , tickHardware
   , showRegisters
-
   , module CPU.Registers
   , module MonadEmulator.EmulatorT
-  )
-where
+  ) where
 
-import Control.Monad
+import           Control.Monad
 
-import Text.Printf
+import           Text.Printf
 
-import Hardware.HardwareMonad
-import MonadEmulator.Class
-import MonadEmulator.EmulatorT
-import CPU.Registers
+import           CPU.Registers
+import           Hardware.HardwareMonad
+import           MonadEmulator.Class
+import           MonadEmulator.EmulatorT
 
 showRegisters :: MonadEmulator m => m String
 showRegisters = do

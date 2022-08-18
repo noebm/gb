@@ -11,18 +11,17 @@ module Hardware.Serial
   , tickSerial
   , loadSerial
   , storeSerial
-  )
-where
+  ) where
 
-import Data.Maybe
-import Data.Word
-import Data.Bits
-import Data.Monoid
+import           Data.Bits
+import           Data.Maybe
+import           Data.Monoid
+import           Data.Word
 
-import Control.Lens
-import Data.Bits.Lens
+import           Control.Lens
+import           Data.Bits.Lens
 
-import Control.Monad.State.Strict
+import           Control.Monad.State.Strict
 
 type SerialConnection m = Word8 -> m Word8
 
@@ -46,7 +45,12 @@ _ActiveSum :: Prism' SerialPortTransfer (Sum Word)
 _ActiveSum = _Active . _Unwrapped
 
 {-# INLINE tickSerial #-}
-tickSerial :: Monad m => Maybe (SerialConnection m) -> Word -> SerialPort -> m (Bool, SerialPort)
+tickSerial
+  :: Monad m
+  => Maybe (SerialConnection m)
+  -> Word
+  -> SerialPort
+  -> m (Bool, SerialPort)
 tickSerial conn dt = runStateT $ do
   v <- transfer . _ActiveSum <+= fromIntegral dt
   let shouldTransfer = v >= 128
@@ -59,9 +63,8 @@ tickSerial conn dt = runStateT $ do
 
 loadSerial :: Word16 -> SerialPort -> Word8
 loadSerial 0xff01 s = view payload s
-loadSerial 0xff02 s = 0b0111_1110
-  & bitAt 0 .~ view master s
-  & bitAt 7 .~ has (transfer . _Active) s
+loadSerial 0xff02 s =
+  0b0111_1110 & bitAt 0 .~ view master s & bitAt 7 .~ has (transfer . _Active) s
 loadSerial _ _ = error "loadSerial: not in range"
 
 storeSerial :: Word16 -> Word8 -> SerialPort -> SerialPort

@@ -1,45 +1,37 @@
 module Hardware.HardwareMonad
   ( module Hardware.Timer
-
   , module Hardware.GPU
   , module Hardware.Joypad
-
   , module Hardware.Cartridge
   , module Hardware.BootRom
   , module Hardware.Serial
-
   , module Hardware.Interrupt
-
-  , HardwareMonad (..)
-
-  , loadMem, storeMem
-
+  , HardwareMonad(..)
+  , loadMem
+  , storeMem
   , modifyInterrupt
-
   , tickHardware
   , setJoypad
-
   , word16
-  )
-where
+  ) where
 
-import Control.Lens
-import Control.Monad
+import           Control.Lens
+import           Control.Monad
 
-import Data.Word
-import qualified Data.Vector.Unboxed as V
+import qualified Data.Vector.Unboxed           as V
+import           Data.Word
 
-import Hardware.Interrupt
+import           Hardware.Interrupt
 
-import Hardware.Timer
-import Hardware.Joypad
-import Hardware.GPU
-import Hardware.GPU.OAM
-import Hardware.Cartridge
-import Hardware.BootRom
-import Hardware.Serial
+import           Hardware.BootRom
+import           Hardware.Cartridge
+import           Hardware.GPU
+import           Hardware.GPU.OAM
+import           Hardware.Joypad
+import           Hardware.Serial
+import           Hardware.Timer
 
-import Data.Bits
+import           Data.Bits
 
 class Monad m => HardwareMonad m where
   readGPURAM :: Word16 -> m Word8
@@ -88,11 +80,13 @@ class Monad m => HardwareMonad m where
   putSerialPort :: SerialPort -> m ()
   -- serialEndpoint :: Word8 -> m (Maybe Word8)
 
-modifyInterrupt :: HardwareMonad m => (InterruptState -> InterruptState) -> m ()
+modifyInterrupt
+  :: HardwareMonad m => (InterruptState -> InterruptState) -> m ()
 modifyInterrupt f = putInterrupt . f =<< getInterrupt
 
 {-# INLINE tickHardware #-}
-tickHardware :: HardwareMonad m => Maybe (SerialConnection m) -> Word -> m (Maybe Frame)
+tickHardware
+  :: HardwareMonad m => Maybe (SerialConnection m) -> Word -> m (Maybe Frame)
 tickHardware f cyc = do
   updateTimer' cyc
   updateSerialPort f cyc
@@ -102,7 +96,7 @@ updateGPU' :: HardwareMonad m => Word -> m (Maybe Frame)
 updateGPU' cyc = do
   (flag, im) <- updateGPUInternal cyc
   forM_ im $ \_ -> modifyInterrupt $ interruptFlag INTVBLANK .~ True
-  when flag $      modifyInterrupt $ interruptFlag INTLCD .~ True
+  when flag $ modifyInterrupt $ interruptFlag INTLCD .~ True
   return im
 
 updateTimer' :: HardwareMonad m => Word -> m ()
@@ -113,23 +107,23 @@ updateTimer' cycles = do
   when overflow $ modifyInterrupt $ interruptFlag INTTIMER .~ True
 
 {-# INLINE updateSerialPort #-}
-updateSerialPort :: HardwareMonad m => Maybe (SerialConnection m) -> Word -> m ()
+updateSerialPort
+  :: HardwareMonad m => Maybe (SerialConnection m) -> Word -> m ()
 updateSerialPort f cycles = do
-  serial <- getSerialPort
+  serial            <- getSerialPort
   (reqInt, serial') <- tickSerial f cycles serial
   putSerialPort serial'
   when reqInt $ modifyInterrupt $ interruptFlag INTSERIAL .~ True
 
-setJoypad :: HardwareMonad m => (Joypad , Bool) -> m ()
+setJoypad :: HardwareMonad m => (Joypad, Bool) -> m ()
 setJoypad f = do
   putJoypad . updateJoypad f =<< getJoypad
   when (snd f) $ modifyInterrupt $ interruptFlag INTJOYPAD .~ True
 
 {-# INLINE word16 #-}
 word16 :: Iso' (Word8, Word8) Word16
-word16 = iso
-  (\(h,l) -> shiftL (fromIntegral h) 8 .|. fromIntegral l)
-  (\w -> (fromIntegral $ shiftR w 8, fromIntegral w))
+word16 = iso (\(h, l) -> shiftL (fromIntegral h) 8 .|. fromIntegral l)
+             (\w -> (fromIntegral $ shiftR w 8, fromIntegral w))
 
 -- currently not implemented
 inSoundRange :: Word16 -> Bool
@@ -140,16 +134,15 @@ inSerialRange :: Word16 -> Bool
 inSerialRange addr = 0xFF01 <= addr && addr < 0xFF03
 
 {-# INLINE storeMem #-}
-storeMem :: HardwareMonad m
-         => Word16 -> Word8 -> m ()
+storeMem :: HardwareMonad m => Word16 -> Word8 -> m ()
 storeMem idx b
   | idx < 0x8000 = writeCartridge idx b
   | idx < 0xA000 = writeGPURAM idx b
   | idx < 0xC000 = writeCartridgeRAM idx b
-  | idx < 0xFE00 = writeRAM (idx .&. 0x1FFF) b -- ram + echo ram
-  | idx < 0xFEA0 = writeOAM idx b
+  | idx < 0xFE00 = writeRAM (idx .&. 0x1FFF) b
+  | -- ram + echo ram
+    idx < 0xFEA0 = writeOAM idx b
   | idx < 0xFF00 = return ()
-
   | idx == 0xff00 = putJoypad . storeJoypad b =<< getJoypad
   | idx == 0xff01 = putSerialPort . storeSerial idx b =<< getSerialPort
   | idx == 0xff02 = putSerialPort . storeSerial idx b =<< getSerialPort
@@ -157,12 +150,12 @@ storeMem idx b
   | idx == 0xffff = putInterrupt =<< storeIntEnable b <$> getInterrupt
   | inTimerRange idx = putTimer . storeTimer idx b =<< getTimer
   | 0xFF40 <= idx && idx < 0xFF50 = do
-      putGPUControl . storeGPUControl idx b =<< getGPUControl
-      when (idx == 0xff46) $ fillOAMUnsafe =<< oamFromDMA loadMem b
+    putGPUControl . storeGPUControl idx b =<< getGPUControl
+    when (idx == 0xff46) $ fillOAMUnsafe =<< oamFromDMA loadMem b
   | idx == 0xff50 = when (b `testBit` 0) disableBootRom
+  |
   -- unimplemented IO port
-  | 0xFF00 <= idx && idx < 0xFF80 = return ()
-
+    0xFF00 <= idx && idx < 0xFF80 = return ()
   | idx < 0xFFFF = writeHRAM (idx - 0xFF80) b
   | otherwise = error $ "storeMem: writing " ++ show b ++ " to " ++ show idx
 
@@ -172,22 +165,22 @@ loadMem idx
   | idx < 0x8000 = readCartridge idx
   | idx < 0xA000 = readGPURAM idx
   | idx < 0xC000 = readCartridgeRAM idx
-  | idx < 0xFE00 = readRAM (idx .&. 0x1FFF) -- ram + echo ram
-  | idx < 0xFEA0 = readOAM idx
+  | idx < 0xFE00 = readRAM (idx .&. 0x1FFF)
+  | -- ram + echo ram
+    idx < 0xFEA0 = readOAM idx
   | idx < 0xFF00 = return 0x00
-
   | idx == 0xff00 = loadJoypad <$> getJoypad
   | idx == 0xff01 = loadSerial idx <$> getSerialPort
   | idx == 0xff02 = loadSerial idx <$> getSerialPort
   | 0xFF40 <= idx && idx < 0xFF50 = loadGPUControl idx <$> getGPUControl
   | idx == 0xff50 = (\x -> if x then 0xff else 0xfe) <$> bootRomDisabled
-
   | idx == 0xff0f = loadIntFlag <$> getInterrupt
   | idx == 0xffff = loadIntEnable <$> getInterrupt
   | inTimerRange idx = do
-      ts <- getTimer
-      return $ loadTimer ts idx
+    ts <- getTimer
+    return $ loadTimer ts idx
+  |
   -- unimplemented IO port
-  | 0xFF00 <= idx && idx < 0xFF80 = return 0x00
+    0xFF00 <= idx && idx < 0xFF80 = return 0x00
   | idx < 0xFFFF = readHRAM (idx - 0xFF80)
   | otherwise = error $ "loadMem: access to " ++ show idx

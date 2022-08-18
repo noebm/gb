@@ -1,9 +1,9 @@
 module Instruction.Types.Flag where
 
-import Control.Lens
-import Data.Word
+import           Control.Lens
+import           Data.Word
 
-import MonadEmulator.Operations
+import           MonadEmulator.Operations
 
 data Flag = FlagZ | FlagC | FlagNZ | FlagNC
   deriving (Eq)
@@ -25,7 +25,7 @@ parseFlag w = case w of
 
 {-# INLINE evalFlag #-}
 evalFlag :: MonadEmulator m => Flag -> m Bool
-evalFlag FlagC = view flagC <$> loadReg F
-evalFlag FlagZ = view flagZ <$> loadReg F
+evalFlag FlagC  = view flagC <$> loadReg F
+evalFlag FlagZ  = view flagZ <$> loadReg F
 evalFlag FlagNC = views flagC not <$> loadReg F
 evalFlag FlagNZ = views flagZ not <$> loadReg F

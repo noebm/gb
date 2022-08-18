@@ -1,6 +1,6 @@
 module Utilities.Cofree where
 
-import Control.Comonad.Cofree
+import           Control.Comonad.Cofree
 
 {-# INLINE coExtend #-}
 coExtend :: Monad m => (a -> m b) -> Cofree m a -> m (Cofree m b)

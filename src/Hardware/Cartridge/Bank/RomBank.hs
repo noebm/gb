@@ -1,29 +1,26 @@
 -- | General rom banks
 -- | Supports swapping and generation from cartridge data
 module Hardware.Cartridge.Bank.RomBank
-  ( RomBankSelector (..)
+  ( RomBankSelector(..)
   , defaultRomBankSelector
-
   , makeRomBanks
   , RomBanks
-
   , selectRomBank1
   , selectRomBank2
   , loadRom
-  )
-where
+  ) where
 
-import qualified Data.Vector as V
-import qualified Data.Vector.Unboxed as VU
+import qualified Data.Vector                   as V
+import qualified Data.Vector.Unboxed           as VU
 
-import Control.Lens
-import Control.Monad
-import Data.Bits
-import Data.Word
+import           Control.Lens
+import           Control.Monad
+import           Data.Bits
+import           Data.Word
 
-import Hardware.Cartridge.Rom
+import           Hardware.Cartridge.Rom
 
-import Utilities.Vector
+import           Utilities.Vector
 
 data RomBankSelector = RomBankSelector Int Int
 
@@ -36,10 +33,11 @@ splitRomBanks :: VU.Vector Word8 -> Maybe (VU.Vector Word8, VU.Vector Word8)
 splitRomBanks xs = do
   let (ys, zs) = VU.splitAt 0x4000 xs
   guard (VU.length ys /= 0)
-  return (ys , zs)
+  return (ys, zs)
 
 makeRomBanks :: Rom -> RomBanks
-makeRomBanks rom = RomBanks $ V.unfoldr splitRomBanks $ byteStringToVector (getRom rom)
+makeRomBanks rom =
+  RomBanks $ V.unfoldr splitRomBanks $ byteStringToVector (getRom rom)
 
 selectRomBank1 :: Int -> (RomBanks -> Int)
 selectRomBank1 i0 (RomBanks s) = i0 `mod` V.length s
@@ -52,4 +50,4 @@ loadRom :: RomBankSelector -> Word16 -> (RomBanks -> Word8)
 loadRom (RomBankSelector i0 i1) addr (RomBanks s)
   | addr < 0x4000 = s ^?! ix i0 . ix (fromIntegral addr)
   | addr < 0x8000 = s ^?! ix i1 . ix (fromIntegral addr .&. 0x3fff)
-  | otherwise = error "loadRom: index out of range"
+  | otherwise     = error "loadRom: index out of range"

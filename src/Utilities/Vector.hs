@@ -2,14 +2,13 @@
 module Utilities.Vector
   ( byteStringToVector
   , vectorToByteString
-  )
-where
+  ) where
 
-import qualified Data.ByteString.Internal    as B
-import qualified Data.Vector.Storable as VS
-import qualified Data.Vector.Generic  as VG
+import qualified Data.ByteString.Internal      as B
+import qualified Data.Vector.Generic           as VG
+import qualified Data.Vector.Storable          as VS
 
-import Data.Word
+import           Data.Word
 
 {-# INLINE byteStringToVector #-}
 byteStringToVector :: VG.Vector v Word8 => B.ByteString -> v Word8
@@ -25,6 +24,5 @@ vector (B.PS ptr off l) = VS.unsafeFromForeignPtr ptr off l
 
 {-# INLINE byteString #-}
 byteString :: VS.Vector Word8 -> B.ByteString
-byteString xs = B.PS ptr off l
-  where (ptr, off, l) = VS.unsafeToForeignPtr xs
+byteString xs = B.PS ptr off l where (ptr, off, l) = VS.unsafeToForeignPtr xs
 

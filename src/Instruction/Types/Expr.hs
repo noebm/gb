@@ -1,15 +1,15 @@
 module Instruction.Types.Expr where
 
-import Instruction.Types.Address
-import Instruction.Types.Readable
-import Instruction.Types.Writable
+import           Instruction.Types.Address
+import           Instruction.Types.Readable
+import           Instruction.Types.Writable
 
-import Data.Word
-import Data.Int
+import           Data.Int
+import           Data.Word
 
-import CPU.Registers
+import           CPU.Registers
 
-import Text.Printf
+import           Text.Printf
 
 data Expr
   = LD Readable8 Writable8 -- from -> to
@@ -45,4 +45,4 @@ data Expr
 
 exprASM :: Expr -> String
 exprASM (CALL addr) = printf "CALL 0x%04x" addr
-exprASM e = show e
+exprASM e           = show e

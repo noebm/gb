@@ -3,29 +3,28 @@
 -- | General ram banks
 -- Supports swapping and initialization with zeros
 module Hardware.Cartridge.Bank.RamBank
-  ( RamBank (..)
+  ( RamBank(..)
   , ramBankCount
   , ramBankBytes
   , newRamBanks
   , selectRamBank
   , loadRam
   , storeRam
-  )
-where
+  ) where
 
-import qualified Data.Vector as V
-import qualified Data.Vector.Unboxed as VU
+import qualified Data.Vector                   as V
+import qualified Data.Vector.Unboxed           as VU
 
-import Data.Vector.Generic.Lens
+import           Data.Vector.Generic.Lens
 
-import Control.Lens
-import Control.Monad
-import Data.Bits
-import Data.Word
+import           Control.Lens
+import           Control.Monad
+import           Data.Bits
+import           Data.Word
 
 data RamBank = RamBank
   { _ramIndex :: !Int
-  , _ramData :: V.Vector (VU.Vector Word8)
+  , _ramData  :: V.Vector (VU.Vector Word8)
   }
 
 makeLenses ''RamBank
@@ -40,8 +39,7 @@ ramBankBytes = ramData . vectorTraverse <.> vectorTraverse
 
 {-# INLINE ram #-}
 ram :: IndexedTraversal' Int RamBank (VU.Vector Word8)
-ram f s = (ramData .> iix idx) f s
-  where idx = s ^. ramIndex
+ram f s = (ramData .> iix idx) f s where idx = s ^. ramIndex
 
 newRamBanks :: Int -> Maybe RamBank
 newRamBanks n = do

@@ -1,8 +1,8 @@
 module MonadEmulator.Class where
 
-import Hardware.Interrupt
-import CPU.Registers
-import Data.Word
+import           CPU.Registers
+import           Data.Word
+import           Hardware.Interrupt
 
 -- | Allow reading and writing inside the address space.
 -- All loads and stores should be idempotent.
