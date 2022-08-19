@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveTraversable #-}
 module Instruction.Interpreter
   ( instructions
   , instructionsTrace
@@ -29,12 +30,11 @@ import           MonadEmulator.Operations
 import           Control.Comonad.Cofree
 
 data InterpretState a = Run a | Halt | Interrupt' Interrupt
+  deriving (Functor, Foldable, Traversable)
 
 {-# INLINE run #-}
 run :: Applicative f => (a -> f b) -> InterpretState a -> f (InterpretState b)
-run f (Run x)          = Run <$> f x
-run _ Halt             = pure Halt
-run _ (Interrupt' int) = pure $! Interrupt' int
+run = traverse
 
 {-# INLINE _Run #-}
 _Run :: Prism (InterpretState a) (InterpretState b) a b
