@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DeriveTraversable, TemplateHaskell #-}
 module Instruction.Interpreter
   ( instructions
   , instructionsTrace
@@ -32,12 +32,7 @@ import           Control.Comonad.Cofree
 data InterpretState a = Run a | Halt | Interrupt' Interrupt
   deriving (Functor, Foldable, Traversable)
 
-{-# INLINE _Run #-}
-_Run :: Prism (InterpretState a) (InterpretState b) a b
-_Run = prism Run $ \arg -> case arg of
-  Run x          -> Right x
-  Halt           -> Left Halt
-  Interrupt' int -> Left (Interrupt' int)
+makePrisms ''InterpretState
 
 interpretM
   :: (MonadEmulator m, Show a)
