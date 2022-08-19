@@ -1,9 +1,9 @@
 name:                gb
 version:             0.1.0.0
 license:             BSD3
-author:              "Author name here"
-maintainer:          "example@example.com"
-copyright:           "2019 Author name here"
+author:              "Moritz Noebauer"
+maintainer:          "moritz.noebauer@gmail.com"
+copyright:           "2022 Moritz Noebauer"
 
 extra-source-files:
 - README.md
