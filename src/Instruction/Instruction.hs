@@ -32,6 +32,13 @@ data Instruction f a
 data ConditionalExpr = JP' Addr | JR' !Int8 | CALL' !Word16 | RET'
   deriving Show
 
+conditionalExpr :: ConditionalExpr -> Expr
+conditionalExpr cond = case cond of
+  JP'   addr -> JP addr
+  JR'   addr -> JR addr
+  CALL' addr -> CALL addr
+  RET'       -> RET
+
 instance Functor (Instruction f) where
   fmap f (InstructionNode x e        ) = InstructionNode (f x) e
   fmap f (InstructionBranch x y flg e) = InstructionBranch (f x) (f y) flg e
@@ -60,11 +67,7 @@ expr
   -> g (Instruction f a)
 expr f = contramap expr' . f . expr' where
   expr' (InstructionNode _ op      ) = op
-  expr' (InstructionBranch _ _ _ op) = case op of
-    JP'   addr -> JP addr
-    JR'   addr -> JR addr
-    CALL' addr -> CALL addr
-    RET'       -> RET
+  expr' (InstructionBranch _ _ _ op) = conditionalExpr op
 
 {-# INLINE branch #-}
 branch
