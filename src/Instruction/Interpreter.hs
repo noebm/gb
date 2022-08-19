@@ -32,10 +32,6 @@ import           Control.Comonad.Cofree
 data InterpretState a = Run a | Halt | Interrupt' Interrupt
   deriving (Functor, Foldable, Traversable)
 
-{-# INLINE run #-}
-run :: Applicative f => (a -> f b) -> InterpretState a -> f (InterpretState b)
-run = traverse
-
 {-# INLINE _Run #-}
 _Run :: Prism (InterpretState a) (InterpretState b) a b
 _Run = prism Run $ \arg -> case arg of
@@ -351,7 +347,7 @@ interpretStateM Halt = (,) 4 <$> do
 instructions :: MonadEmulator m => m (Cofree m Word)
 instructions = go . Run =<< fetch where
   go s = do
-    (dt, s') <- interpretStateM =<< run id s
+    (dt, s') <- interpretStateM =<< sequenceA s
     return $! dt :< go s'
 
 {-# SPECIALIZE instructionsTrace :: Emulator (Cofree Emulator (Word, Maybe (Word16, Instruction'))) #-}
@@ -360,7 +356,7 @@ instructionsTrace
 instructionsTrace = go . Run =<< fetch where
   go s = do
     pc    <- subtract 1 <$> loadPC
-    sEval <- run id s
+    sEval <- sequenceA s
     let instr = (pc, sEval) ^? aside _Run
     (dt, s') <- interpretStateM sEval
     return $! (dt, instr) :< go s'
