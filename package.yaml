@@ -43,7 +43,6 @@ executables:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
-    - -fllvm
     dependencies:
     - gb
 
@@ -55,7 +54,6 @@ tests:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
-    - -fllvm
     dependencies:
     - gb
     - hspec
