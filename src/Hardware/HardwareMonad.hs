@@ -146,8 +146,8 @@ storeMem idx b
   | idx == 0xff00 = putJoypad . storeJoypad b =<< getJoypad
   | idx == 0xff01 = putSerialPort . storeSerial idx b =<< getSerialPort
   | idx == 0xff02 = putSerialPort . storeSerial idx b =<< getSerialPort
-  | idx == 0xff0f = putInterrupt =<< storeIntFlag b <$> getInterrupt
-  | idx == 0xffff = putInterrupt =<< storeIntEnable b <$> getInterrupt
+  | idx == 0xff0f = putInterrupt . storeIntFlag b =<< getInterrupt
+  | idx == 0xffff = putInterrupt . storeIntEnable b =<< getInterrupt
   | inTimerRange idx = putTimer . storeTimer idx b =<< getTimer
   | 0xFF40 <= idx && idx < 0xFF50 = do
     putGPUControl . storeGPUControl idx b =<< getGPUControl

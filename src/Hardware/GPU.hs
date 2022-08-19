@@ -22,6 +22,7 @@ import           Hardware.GPU.OAM
 import           Hardware.GPU.VideoRAM
 
 import           Control.Monad
+import           Data.Maybe                     ( fromMaybe )
 import           Data.Word
 
 import           Control.Monad.ST
@@ -64,14 +65,14 @@ updateGPUState cycles s = do
 loadGPURAM :: Word16 -> GPUState s -> ST s Word8
 loadGPURAM addr g = do
   gctrl <- readSTRef (gpuConfig g)
-  maybe (return 0xff) id $ do
+  fromMaybe (return 0xff) $ do
     guard (canAccessGPURAM gctrl)
     return $ loadVideoRAM <$> readSTRef (gpuVideoRAM g) <*> pure addr
 
 loadGPUOAM :: Word16 -> GPUState s -> ST s Word8
 loadGPUOAM addr s = do
   gctrl <- readSTRef (gpuConfig s)
-  maybe (return 0xff) id $ do
+  fromMaybe (return 0xff) $ do
     guard (canAccessOAM gctrl)
     return $ loadOAM addr <$> readSTRef (gpuOAM s)
 
