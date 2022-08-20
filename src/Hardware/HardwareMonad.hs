@@ -162,25 +162,23 @@ storeMem idx b
 {-# INLINE loadMem #-}
 loadMem :: HardwareMonad m => Word16 -> m Word8
 loadMem idx
-  | idx < 0x8000 = readCartridge idx
-  | idx < 0xA000 = readGPURAM idx
-  | idx < 0xC000 = readCartridgeRAM idx
-  | idx < 0xFE00 = readRAM (idx .&. 0x1FFF)
+  | idx < 0x8000                  = readCartridge idx
+  | idx < 0xA000                  = readGPURAM idx
+  | idx < 0xC000                  = readCartridgeRAM idx
+  | idx < 0xFE00                  = readRAM (idx .&. 0x1FFF)
   | -- ram + echo ram
-    idx < 0xFEA0 = readOAM idx
-  | idx < 0xFF00 = return 0x00
-  | idx == 0xff00 = loadJoypad <$> getJoypad
-  | idx == 0xff01 = loadSerial idx <$> getSerialPort
-  | idx == 0xff02 = loadSerial idx <$> getSerialPort
+    idx < 0xFEA0                  = readOAM idx
+  | idx < 0xFF00                  = return 0x00
+  | idx == 0xff00                 = loadJoypad <$> getJoypad
+  | idx == 0xff01                 = loadSerial idx <$> getSerialPort
+  | idx == 0xff02                 = loadSerial idx <$> getSerialPort
   | 0xFF40 <= idx && idx < 0xFF50 = loadGPUControl idx <$> getGPUControl
   | idx == 0xff50 = (\x -> if x then 0xff else 0xfe) <$> bootRomDisabled
-  | idx == 0xff0f = loadIntFlag <$> getInterrupt
-  | idx == 0xffff = loadIntEnable <$> getInterrupt
-  | inTimerRange idx = do
-    ts <- getTimer
-    return $ loadTimer ts idx
+  | idx == 0xff0f                 = loadIntFlag <$> getInterrupt
+  | idx == 0xffff                 = loadIntEnable <$> getInterrupt
+  | inTimerRange idx              = (`loadTimer` idx) <$> getTimer
   |
   -- unimplemented IO port
     0xFF00 <= idx && idx < 0xFF80 = return 0x00
-  | idx < 0xFFFF = readHRAM (idx - 0xFF80)
-  | otherwise = error $ "loadMem: access to " ++ show idx
+  | idx < 0xFFFF                  = readHRAM (idx - 0xFF80)
+  | otherwise                     = error $ "loadMem: access to " ++ show idx
