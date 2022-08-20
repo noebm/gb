@@ -25,7 +25,7 @@ emulate brom rom conf = runEmulator (EmulatorConfig brom rom) $ do
   saveEmulatorT
  where
   stepper =
-    instructions >>= coExtend (tickHardware Nothing) >>= coFilter >>= coExtend
+    instructions >>= coExtend (tickHardware Nothing) >>= catMaybes >>= coExtend
       (liftIO . frameUpdate conf)
   update s = do
     s'           <- unwrap s

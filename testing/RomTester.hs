@@ -67,7 +67,7 @@ newInstr
 newInstr conn =
   instructionsTrace
     >>= coExtend (\(dt, tr) -> tickHardware conn dt $> tr)
-    >>= coFilter
+    >>= catMaybes
 
 waitFor :: Monad m => (a -> Bool) -> Cofree m a -> m (Cofree m a)
 waitFor f (x :< xs) = if f x then return (x :< xs) else waitFor f =<< xs
@@ -78,7 +78,7 @@ testWithMemory rom = unsafePerformIO $ runEmulatorT conf $ do
   newInstr Nothing
     >>= coExtend (const getMemoryTestValue)
     >>= findStart
-    >>= coFilter
+    >>= catMaybes
     >>= findEnd
     >>= return
     .   view _extract
