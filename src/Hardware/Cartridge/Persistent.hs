@@ -18,7 +18,7 @@ import           Data.Word
 import           Control.Lens                   ( toListOf )
 import           Control.Monad
 
-data CartridgeRAMSave = CartridgeRAMSave B.ByteString
+newtype CartridgeRAMSave = CartridgeRAMSave B.ByteString
   deriving Generic
 
 instance Serialize CartridgeRAMSave
