@@ -3,8 +3,8 @@ module Utilities.Cofree where
 import           Control.Comonad.Cofree
 
 {-# INLINE coExtend #-}
-coExtend :: Monad m => (a -> m b) -> Cofree m a -> m (Cofree m b)
-coExtend f (x :< s) = (:< (coExtend f =<< s)) <$> f x
+coExtend :: Applicative f => (a -> f b) -> Cofree f a -> f (Cofree f b)
+coExtend f = go where go (x :< s) = (:<) <$> f x <*> (go <$> s)
 
 {-# INLINE coFilter #-}
 coFilter :: Monad m => Cofree m (Maybe a) -> m (Cofree m a)
