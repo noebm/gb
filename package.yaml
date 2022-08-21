@@ -29,6 +29,7 @@ dependencies:
 - sdl2
 
 - ansi-terminal
+- deepseq
 
 library:
   source-dirs: src
@@ -57,3 +58,15 @@ tests:
     dependencies:
     - gb
     - hspec
+
+benchmarks:
+  bios-run:
+    main:               Spec.hs
+    source-dirs:        bench
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - gb
+    - criterion

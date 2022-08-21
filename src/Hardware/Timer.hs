@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
 module Hardware.Timer
   ( ClockSpeed(..)
   , Timer
@@ -14,12 +15,14 @@ import           Data.Bits
 import           Data.Bits.Lens
 import           Data.Word
 
+import           Control.DeepSeq                ( NFData )
 import           Control.Monad.State.Strict
+import           GHC.Generics
 
 -- | Possible timer speeds relative to cpu frequency.
 -- For example Clock16 means that the timer is running at 1 / 16 the speed of the cpu.
 data ClockSpeed = Clock16 | Clock64 | Clock256 | Clock1024
-  deriving (Show)
+  deriving (Show, Generic, NFData)
 
 data Timer = Timer
   { _divider    :: {-# UNPACK #-} !Word16
@@ -29,6 +32,7 @@ data Timer = Timer
   , _enabled    :: Bool
   , _clockSpeed :: ClockSpeed
   }
+  deriving (Generic, NFData)
 
 makeLenses ''Timer
 
