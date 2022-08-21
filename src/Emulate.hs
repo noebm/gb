@@ -26,8 +26,8 @@ emulate brom rom conf = runEmulator (EmulatorConfig brom rom) $ do
   saveEmulatorT
  where
   genIterations = instructions >>= genFrames >>= drawFrames
-  genFrames     = coExtend (tickHardware Nothing) >=> catMaybes
-  drawFrames    = coExtend (liftIO . frameUpdate conf)
+  genFrames     = traverseCofree (tickHardware Nothing) >=> catMaybes
+  drawFrames    = traverseCofree (liftIO . frameUpdate conf)
   update iters = do
     (quit, keys) <- liftIO (keyUpdate conf)
     forM_ keys setJoypad

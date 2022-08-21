@@ -66,7 +66,7 @@ newInstr
   -> m (Cofree m (Word16, Instruction'))
 newInstr conn =
   instructionsTrace
-    >>= coExtend (\(dt, tr) -> tickHardware conn dt $> tr)
+    >>= traverseCofree (\(dt, tr) -> tickHardware conn dt $> tr)
     >>= catMaybes
 
 waitFor :: Monad m => (a -> Bool) -> Cofree m a -> m (Cofree m a)
@@ -76,7 +76,7 @@ testWithMemory :: Rom -> Word8
 testWithMemory rom = unsafePerformIO $ runEmulatorT conf $ do
   storePC 0x100
   newInstr Nothing
-    >>= coExtend (const getMemoryTestValue)
+    >>= traverseCofree (const getMemoryTestValue)
     >>= findStart
     >>= catMaybes
     >>= findEnd
