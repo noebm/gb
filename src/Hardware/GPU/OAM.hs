@@ -138,7 +138,7 @@ dumpOAM = G.toList . view oamBytesInternal
 
 prettyOAM :: OAM -> String
 prettyOAM =
-  intercalate "\n"
+  unlines
     . fmap (intercalate ", " . fmap (printf "0x%02x"))
     . unfoldr (\xs -> guard (not (null xs)) *> Just (splitAt 16 xs))
     . G.toList
