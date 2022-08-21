@@ -22,14 +22,13 @@ emulate
   :: Maybe BootRom -> Rom -> EmulationConfig -> IO (Maybe CartridgeRAMSave)
 emulate brom rom conf = runEmulator (EmulatorConfig brom rom) $ do
   when (isNothing brom) $ storePC 0x100
-  update =<< stepper
+  genIterations >>= update
   saveEmulatorT
  where
-  stepper =
-    instructions >>= coExtend (tickHardware Nothing) >>= catMaybes >>= coExtend
-      (liftIO . frameUpdate conf)
-  update s = do
-    s'           <- unwrap s
+  genIterations = instructions >>= genFrames >>= drawFrames
+  genFrames     = coExtend (tickHardware Nothing) >=> catMaybes
+  drawFrames    = coExtend (liftIO . frameUpdate conf)
+  update iters = do
     (quit, keys) <- liftIO (keyUpdate conf)
     forM_ keys setJoypad
-    unless quit $ update s'
+    unless quit . update =<< unwrap iters
