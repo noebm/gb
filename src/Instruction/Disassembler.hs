@@ -26,7 +26,7 @@ step = do
   instr <- parseInstructionM =<< byte
   jp    <- case instr ^. expr of
     JP   addr -> Just <$> getAddress addr -- XXX: handle non immediate addresses
-    JR   addr -> fmap Just . addRelative <$> loadPC <*> pure addr
+    JR   addr -> Just . (`addRelative` addr) <$> loadPC
     CALL addr -> return (Just addr)
     RST  addr -> return $ Just (fromIntegral addr)
     _         -> return Nothing

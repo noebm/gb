@@ -5,6 +5,7 @@ module Emulate
 
 import           Control.Monad
 import           Control.Monad.IO.Class
+import           Data.Maybe                     ( isNothing )
 
 import           Hardware.HardwareMonad
 import           Instruction.Interpreter
@@ -20,7 +21,7 @@ data EmulationConfig = EmulationConfig
 emulate
   :: Maybe BootRom -> Rom -> EmulationConfig -> IO (Maybe CartridgeRAMSave)
 emulate brom rom conf = runEmulator (EmulatorConfig brom rom) $ do
-  maybe (storePC 0x100) (\_ -> return ()) brom
+  when (isNothing brom) $ storePC 0x100
   update =<< stepper
   saveEmulatorT
  where

@@ -64,9 +64,8 @@ loadCartridge addr s
   | otherwise = error "loadCartridge: address not in cartridge range"
 
 loadCartridgeRAM :: Word16 -> CartridgeState s -> ST s Word8
-loadCartridgeRAM addr s = do
-  mbc' <- readSTRef (mbc s)
-  return $ fromMaybe 0xff $ loadRam <$> ramBank mbc' <*> pure addr
+loadCartridgeRAM addr s =
+  maybe 0xff (`loadRam` addr) . ramBank <$> readSTRef (mbc s)
 
 storeCartridge :: Word16 -> Word8 -> CartridgeState s -> ST s ()
 storeCartridge addr b c =
