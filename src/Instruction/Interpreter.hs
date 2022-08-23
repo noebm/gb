@@ -38,7 +38,7 @@ makePrisms ''InterpretState
 interpretM
   :: (MonadEmulator m, Show a)
   => Instruction Bool a
-  -> m (InterpretState (m Instruction'))
+  -> m (InterpretState Instruction')
 interpretM instr = case instr ^. expr of
   NOP        -> prefetch
 
@@ -305,25 +305,25 @@ interpretM instr = case instr ^. expr of
 
   STOP -> error "STOP"
 
-haltBug :: MonadEmulator m => m (InterpretState (m Instruction'))
+haltBug :: MonadEmulator m => m (InterpretState Instruction')
 haltBug = do
   b <- loadPC >>= loadAddr
-  return $! Run $ parseInstructionM b
+  Run <$> parseInstructionM b
 
-prefetch :: MonadEmulator m => m (InterpretState (m Instruction'))
+prefetch :: MonadEmulator m => m (InterpretState Instruction')
 prefetch = do
   i   <- anyInterrupts
   ime <- getIME
   maybe (Run <$> fetch) (return . Interrupt') (guard ime *> i)
 
-fetch :: MonadEmulator m => m (m Instruction')
-fetch = parseInstructionM <$> byte
+fetch :: MonadEmulator m => m Instruction'
+fetch = parseInstructionM =<< byte
 
 {-# INLINE interpretStateM #-}
 interpretStateM
   :: MonadEmulator m
   => InterpretState Instruction'
-  -> m (Word, InterpretState (m Instruction'))
+  -> m (Word, InterpretState Instruction')
 interpretStateM (Run op) = do
   op' <- traverseOf flag evalFlag op
   (,) (op' ^. branch) <$> interpretM op'
@@ -339,7 +339,7 @@ interpretStateM Halt = (,) 4 <$> do
 instructions :: MonadEmulator m => m (Cofree m Word)
 instructions = go . Run =<< fetch where
   go s = do
-    (dt, s') <- interpretStateM =<< sequenceA s
+    (dt, s') <- interpretStateM s
     return $! dt :< go s'
 
 {-# SPECIALIZE instructionsTrace :: Emulator (Cofree Emulator (Word, Maybe (Word16, Instruction'))) #-}
@@ -347,8 +347,7 @@ instructionsTrace
   :: MonadEmulator m => m (Cofree m (Word, Maybe (Word16, Instruction')))
 instructionsTrace = go . Run =<< fetch where
   go s = do
-    pc    <- subtract 1 <$> loadPC
-    sEval <- sequenceA s
-    let instr = (pc, sEval) ^? aside _Run
-    (dt, s') <- interpretStateM sEval
+    pc <- subtract 1 <$> loadPC
+    let instr = (pc, s) ^? aside _Run
+    (dt, s') <- interpretStateM s
     return $! (dt, instr) :< go s'
