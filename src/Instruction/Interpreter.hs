@@ -6,6 +6,7 @@ module Instruction.Interpreter
   ) where
 
 import           Data.Bits
+import           Data.Maybe                     ( fromMaybe )
 import           Data.Word
 
 import           Control.Lens            hiding ( (:<)
@@ -332,11 +333,9 @@ interpretStateM (Interrupt' int) =
   (,) 20 . Run <$> (serviceInterrupt int *> fetch)
 interpretStateM Halt = (,) 4 <$> do
   i <- anyInterrupts
-  case i of
-    Just int -> do
-      ime <- getIME
-      if ime then return $! Interrupt' int else Run <$> fetch
-    _ -> return Halt
+  fmap (fromMaybe Halt) $ forM i $ \int -> do
+    ime <- getIME
+    if ime then return $! Interrupt' int else Run <$> fetch
 
 {-# SPECIALIZE instructions :: Emulator (Cofree Emulator Word) #-}
 instructions :: MonadEmulator m => m (Cofree m Word)
