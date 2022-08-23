@@ -121,6 +121,4 @@ ret :: MonadEmulator m => m ()
 ret = jump =<< pop
 
 restart :: MonadEmulator m => Word8 -> m ()
-restart b = do
-  push =<< loadPC
-  jump $ (0x00, b) ^. word16
+restart b = call $ (0x00, b) ^. word16
