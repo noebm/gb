@@ -283,9 +283,7 @@ interpretM instr = case instr ^. expr of
   DI  -> setIME False *> prefetch
   EI  -> prefetch <* setIME True
 
-  DAA -> do
-    daa
-    prefetch
+  DAA -> daa *> prefetch
 
   CPL -> do
     storeReg A . complement =<< loadReg A
