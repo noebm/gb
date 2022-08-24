@@ -162,17 +162,10 @@ getLineSprites :: Word8 -> Word8 -> OAM -> U.Vector Sprite
 getLineSprites line size (OAM oam) = G.backpermute collectedSprites spriteOrder
 
  where
-  collectedSprites = G.take 10 $ G.filter
-    (\obj ->
-      obj
-        ^. spritePositionY'
-        <= line
-        +  16
-        && line
-        +  16
-        <  (obj ^. spritePositionY' + size)
-    )
-    oam
+  collectedSprites =
+    G.take 10
+      $ G.filter (\obj -> obj ^. spritePositionY' <= line + 16)
+      $ G.filter (\obj -> line + 16 < obj ^. spritePositionY' + size) oam
 
   spriteOrder = G.fromList $ sortBy
     (\j i ->
