@@ -93,38 +93,49 @@ instance G.Vector U.Vector Sprite where
 
 makeLenses ''Sprite
 
+{-# INLINE spritePosition' #-}
 spritePosition' :: Lens' Sprite (V2 Word8)
 spritePosition' f (Sprite y x t attr) =
   (\(V2 x' y') -> Sprite y' x' t attr) <$> f (V2 x y)
 
+{-# INLINE spritePosition #-}
 spritePosition :: Lens' Sprite (V2 Word8)
-spritePosition = spritePosition' . iso (subtract (V2 8 16)) (+ V2 8 16)
+spritePosition =
+  fusing (spritePosition' . iso (subtract (V2 8 16)) (+ V2 8 16))
 
+{-# INLINE spritePositionX #-}
 spritePositionX :: Lens' Sprite Word8
-spritePositionX = spritePositionX' . iso (subtract 8) (+ 8)
+spritePositionX = fusing (spritePositionX' . iso (subtract 8) (+ 8))
 
+{-# INLINE spritePositionY #-}
 spritePositionY :: Lens' Sprite Word8
-spritePositionY = spritePositionY' . iso (subtract 16) (+ 16)
+spritePositionY = fusing (spritePositionY' . iso (subtract 16) (+ 16))
 
+{-# INLINE spriteFlippedX #-}
 spriteFlippedX :: Lens' Sprite Bool
-spriteFlippedX = spriteAttributes . bitAt 5
+spriteFlippedX = fusing (spriteAttributes . bitAt 5)
 
+{-# INLINE spriteFlippedY #-}
 spriteFlippedY :: Lens' Sprite Bool
-spriteFlippedY = spriteAttributes . bitAt 6
+spriteFlippedY = fusing (spriteAttributes . bitAt 6)
 
+{-# INLINE spriteFlipped #-}
 spriteFlipped :: Lens' Sprite (V2 Bool)
-spriteFlipped f sprite =
-  fmap (foldr ($) sprite . liftA2 set (V2 spriteFlippedX spriteFlippedY))
-    $ f
-    $ liftA2 view (V2 spriteFlippedX spriteFlippedY) (pure sprite)
+spriteFlipped = lens get set
+ where
+  get sprite = V2 (sprite ^. spriteFlippedX) (sprite ^. spriteFlippedY)
+  set sprite (V2 x y) = sprite & spriteFlippedX .~ x & spriteFlippedY .~ y
 
+{-# INLINE spriteBGPriority #-}
 spriteBGPriority :: Lens' Sprite Bool
-spriteBGPriority = spriteAttributes . bitAt 7
+spriteBGPriority = fusing (spriteAttributes . bitAt 7)
 
+{-# INLINE spriteDMGPalette #-}
 -- XXX GBC palette (at bit 0 + 1) missing
 spriteDMGPalette :: Lens' Sprite Bool
-spriteDMGPalette = spriteAttributes . bitAt 4
+spriteDMGPalette = fusing (spriteAttributes . bitAt 4)
 
+{-# INLINE spriteBytes #-}
 spriteBytes :: Traversal' Sprite Word8
 spriteBytes f (Sprite a b c d) = Sprite <$> f a <*> f b <*> f c <*> f d
 
